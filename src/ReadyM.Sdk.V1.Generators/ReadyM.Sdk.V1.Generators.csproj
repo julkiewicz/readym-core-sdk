@@ -1,6 +1,5 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <ReadyMLayer>Core</ReadyMLayer>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
@@ -8,7 +7,10 @@
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <Configurations>Debug;Release</Configurations>
         <Platforms>AnyCPU</Platforms>
+        <!-- v1 SDK layer: the generators that target the v1 RPC base classes (ClientRpcHandler,
+             ServerRpcClient, ServerRpcHandlersBase). Moved out of ReadyM.Api.Generators; the namespace is kept. -->
         <RootNamespace>ReadyM.Api.Generators</RootNamespace>
+        <ReadyMLayer>V1</ReadyMLayer>
         <TargetFramework>netstandard2.0</TargetFramework>
     </PropertyGroup>
 
@@ -21,12 +23,14 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
-        <PackageReference Include="System.Text.Json" Version="10.0.8" />
     </ItemGroup>
 
     <ItemGroup>
-        <CompilerVisibleProperty Include="GeneratedCppPath" />
-        <CompilerVisibleProperty Include="GeneratedCppEnabled" />
+        <!-- Helpers shared with the core generators, compiled into this assembly as linked sources: an
+             analyzer cannot take a project reference to another analyzer without shipping it alongside. -->
+        <Compile Include="..\ReadyM.Api.Generators\SerializationHelper.cs" Link="Shared\SerializationHelper.cs" />
+        <Compile Include="..\ReadyM.Api.Generators\ServerRpcModel.cs" Link="Shared\ServerRpcModel.cs" />
+        <Compile Include="..\ReadyM.Api.Generators\Compat\NotNullAttribute.cs" Link="Shared\Compat\NotNullAttribute.cs" />
+        <Compile Include="..\ReadyM.Api.Generators\Compat\NotNullWhenAttribute.cs" Link="Shared\Compat\NotNullWhenAttribute.cs" />
     </ItemGroup>
 </Project>

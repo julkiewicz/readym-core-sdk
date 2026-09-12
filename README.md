@@ -15,7 +15,7 @@ packages, distributed by which side of the wire needs them:
 ```
 ReadyM.SDK.Wukong.Common   ReadyM.Api, ReadyM.Api.Multiplayer, ReadyM.Api.Generators, Yooni.*
 ReadyM.SDK.Wukong.Client   ReadyM.Relay.Client
-ReadyM.SDK.Wukong.Server   ReadyM.Relay.Server.Sdk
+ReadyM.SDK.Wukong.Server   ReadyM.Sdk.Serverside + ReadyM.Sdk.V1.Serverside
 ```
 
 That is deliberate. The core SDK has no release cadence of its own, so pairing it with a game
@@ -29,7 +29,10 @@ SDK version that never shipped with it is not a state you can reach.
 | `ReadyM.Api.Multiplayer` | `netstandard2.0`, `net10.0` | replication, RPC, serialization, protocol |
 | `ReadyM.Api.Generators` | `netstandard2.0` | Roslyn generators for component registration and RPC handlers |
 | `ReadyM.Relay.Client` | `netstandard2.0`, `net10.0` | client half of the relay protocol |
-| `ReadyM.Relay.Server.Sdk` | `net10.0` | what a server-side mod derives from |
+| `ReadyM.Sdk.Serverside` | `net10.0` | the CoreCLR bridge a server-side mod runs on (shared by SDK v1 and v2) |
+| `ReadyM.Sdk.V1.Serverside` | `net10.0` | what a v1 server-side mod derives from |
+| `ReadyM.Sdk.V1.Generators` | `netstandard2.0` | source generators for the v1 RPC base classes |
+| `ReadyM.Sdk.Common` | `netstandard2.0` | common-half code shared by both SDK generations |
 | `Yooni.Native.*` | `netstandard2.0`, `net10.0` | native containers, low-level access, serialization |
 
 `netstandard2.0` is not a stylistic choice: anything a game process loads has to target what

@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <ReadyMLayer>Core</ReadyMLayer>
         <Nullable>enable</Nullable>
         <LangVersion>latest</LangVersion>
         <Configurations>Debug;Release;Testing</Configurations>

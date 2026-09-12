@@ -1,13 +1,15 @@
 ﻿using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("ReadyM.Sdk.Common")]
+[assembly: InternalsVisibleTo("ReadyM.Sdk.V1.Client")]
 [assembly: InternalsVisibleTo("ReadyM.Modloader")]
 [assembly: InternalsVisibleTo("ReadyM.Api.Tests")]
 [assembly: InternalsVisibleTo("ReadyM.Api.Multiplayer")]
 [assembly: InternalsVisibleTo("ReadyM.Relay.Client")]
 [assembly: InternalsVisibleTo("ReadyM.Relay.Server")]
 [assembly: InternalsVisibleTo("ReadyM.Relay.Server.PluginHost")]
-[assembly: InternalsVisibleTo("ReadyM.Relay.Server.Sdk")]
+[assembly: InternalsVisibleTo("ReadyM.Sdk.Serverside")]
+[assembly: InternalsVisibleTo("ReadyM.Sdk.V1.Serverside")]
 [assembly: InternalsVisibleTo("WukongMp.Sdk")]
 [assembly: InternalsVisibleTo("ReadyM.Relay.Server.Wukong")]
 [assembly: InternalsVisibleTo("ReadyM.Relay.Server.Oblivion")]
@@ -17,6 +19,7 @@
 [assembly: InternalsVisibleTo("WukongMp.Api")]
 [assembly: InternalsVisibleTo("OblivionMpCSharpMod")]
 [assembly: InternalsVisibleTo("WukongMp.Sdk")]
-[assembly: InternalsVisibleTo("OblivionMp.Sdk")]
+[assembly: InternalsVisibleTo("OblivionMp.Sdk.Client")]
+[assembly: InternalsVisibleTo("OblivionMp.Sdk.V1.Client")]
 [assembly: InternalsVisibleTo("WukongMp.Tests")]
 [assembly: InternalsVisibleTo("ReadyM.Relay.Common.Oblivion")] // TODO: Change name to ReadyM.Oblivion.Common

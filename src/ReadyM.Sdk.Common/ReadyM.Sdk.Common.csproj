@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <!-- Shared SDK layer (both generations), common half: code a mod of either generation may use on
+             either side. Until 2026-09 this assembly name belonged to the v1 client base, which now lives in
+             ReadyM.Sdk.V1.Client (readym-gameserver) and keeps the ReadyM.Sdk.Common namespace. -->
+        <RootNamespace>ReadyM.Sdk.Common</RootNamespace>
+        <ReadyMLayer>Sdk</ReadyMLayer>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\ReadyM.Api\ReadyM.Api.csproj" />
+    </ItemGroup>
+
+</Project>

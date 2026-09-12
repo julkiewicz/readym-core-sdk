@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <!-- v1 SDK layer: the base classes a v1 server mod derives from. Extracted from the server bridge
+             (ReadyM.Relay.Server.Sdk, now ReadyM.Sdk.Serverside); the namespace is kept so v1 mods stay
+             source-compatible. -->
+        <RootNamespace>ReadyM.Relay.Server.Sdk</RootNamespace>
+        <ReadyMLayer>V1</ReadyMLayer>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\ReadyM.Api\ReadyM.Api.csproj" />
+      <ProjectReference Include="..\ReadyM.Api.Multiplayer\ReadyM.Api.Multiplayer.csproj" />
+      <ProjectReference Include="..\ReadyM.Sdk.Serverside\ReadyM.Sdk.Serverside.csproj" />
+    </ItemGroup>
+
+</Project>
