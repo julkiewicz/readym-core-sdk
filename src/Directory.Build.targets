@@ -6,32 +6,5 @@
     </PropertyGroup>
     <Import Project="$(ParentBuildTargets)" Condition="'$(ParentBuildTargets)' != ''" />
 
-    <!--
-        SDK layering. Every SDK assembly is <Product>.Sdk[.V1|.V2].<Half>: the layer segment is absent for the
-        shared layer, and the half is .Common, .Client, .Serverside or .Generators. Core assemblies are outside
-        the scheme. A project declares its layer with ReadyMLayer (Core, Sdk, V1, V2); SDK projects that do not
-        get it from their name. Projects without a layer (relay binaries, hosts, tests, third party) are not
-        checked.
-
-        Rules: Core references Core only; Sdk references Core and Sdk; V1 and V2 reference Core and Sdk, never
-        each other. A .Common half never references a .Client or .Serverside half.
-    -->
-    <PropertyGroup Condition="'$(ReadyMLayer)' == ''">
-        <ReadyMLayer Condition="$(MSBuildProjectName.Contains('.Sdk.V1.'))">V1</ReadyMLayer>
-        <ReadyMLayer Condition="'$(ReadyMLayer)' == '' and $(MSBuildProjectName.Contains('.Sdk.V2.'))">V2</ReadyMLayer>
-        <ReadyMLayer Condition="'$(ReadyMLayer)' == '' and $(MSBuildProjectName.Contains('.Sdk.'))">Sdk</ReadyMLayer>
-    </PropertyGroup>
-
-    <Target Name="ReadyMCheckLayering" BeforeTargets="BeforeBuild" Condition="'$(ReadyMLayer)' != ''">
-        <Error Condition="'$(ReadyMLayer)' == 'V2' and $([System.String]::Copy('%(ProjectReference.Filename)').Contains('.Sdk.V1.'))"
-               Text="Layering: $(MSBuildProjectName) (V2) must not reference %(ProjectReference.Filename) (V1). A v2 project depends on core and shared SDK assemblies only." />
-        <Error Condition="'$(ReadyMLayer)' == 'V1' and $([System.String]::Copy('%(ProjectReference.Filename)').Contains('.Sdk.V2.'))"
-               Text="Layering: $(MSBuildProjectName) (V1) must not reference %(ProjectReference.Filename) (V2)." />
-        <Error Condition="'$(ReadyMLayer)' == 'Sdk' and ($([System.String]::Copy('%(ProjectReference.Filename)').Contains('.Sdk.V1.')) or $([System.String]::Copy('%(ProjectReference.Filename)').Contains('.Sdk.V2.')))"
-               Text="Layering: $(MSBuildProjectName) (shared Sdk) must not reference %(ProjectReference.Filename) (a versioned SDK layer)." />
-        <Error Condition="'$(ReadyMLayer)' == 'Core' and $([System.String]::Copy('%(ProjectReference.Filename)').Contains('.Sdk.'))"
-               Text="Layering: $(MSBuildProjectName) (Core) must not reference %(ProjectReference.Filename) (an SDK layer)." />
-        <Error Condition="$(MSBuildProjectName.EndsWith('.Common')) and ($([System.String]::Copy('%(ProjectReference.Filename)').EndsWith('.Client')) or $([System.String]::Copy('%(ProjectReference.Filename)').EndsWith('.Serverside')))"
-               Text="Layering: $(MSBuildProjectName) (.Common half) must not reference %(ProjectReference.Filename) (a side-specific half)." />
-    </Target>
+    <Import Project="$(MSBuildThisFileDirectory)ReadyM.Layering.targets" Condition="'$(ReadyMLayeringImported)' != 'true'" />
 </Project>
