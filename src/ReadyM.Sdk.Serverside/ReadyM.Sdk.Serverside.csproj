@@ -13,6 +13,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <!-- Emits the arity-based EcsApi query surface into this assembly. -->
+      <ProjectReference Include="..\ReadyM.Api.Generators\ReadyM.Api.Generators.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
       <ProjectReference Include="..\ReadyM.Api.Multiplayer\ReadyM.Api.Multiplayer.csproj" />
       <ProjectReference Include="..\YooniCSharp\Native\Container\Yooni.Native.Container.csproj" />
     </ItemGroup>
