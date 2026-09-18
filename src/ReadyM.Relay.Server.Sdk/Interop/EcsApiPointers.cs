@@ -29,6 +29,9 @@ public struct EcsApiPointers
 
     /// The entities a scope holds that carry a component set.
     public required IntPtr QueryInScope;
+
+    /// Creates an entity held by a scope.
+    public required IntPtr CreateLocalEntityInScope;
     public required IntPtr IsEntityAlive;
     public required IntPtr TryGetAreaScopeEntity;
     public required IntPtr CreateAreaScopeEntity;
