@@ -38,17 +38,32 @@ public class EventQueueTests
     }
 
     [Fact]
-    public void HandlersOfEveryArityRunOnceEachInRegistrationOrder()
+    public void EveryHandlerRunsOnceGroupedByItsKeyInTheOrderTheKeyFirstAppeared()
     {
         var queue = NewQueue();
         var order = new List<string>();
         queue.RegisterHandler<Ping, string>((_, name) => order.Add(name), "first, with an argument");
         queue.RegisterHandler<Ping>(_ => order.Add("second, without"));
         queue.RegisterHandler<Ping, string>((_, name) => order.Add(name), "third, with an argument");
+        queue.RegisterHandler<Ping>(_ => order.Add("fourth, without"));
 
         queue.Invoke(new Ping { Value = 1 });
 
-        Assert.Equal(["first, with an argument", "second, without", "third, with an argument"], order);
+        Assert.Equal(["first, with an argument", "third, with an argument", "second, without", "fourth, without"], order);
+    }
+
+    [Fact]
+    public void TheObjectPathRunsEveryHandlerOnceToo()
+    {
+        var queue = NewQueue();
+        var order = new List<string>();
+        queue.RegisterHandler<Ping, string>((_, name) => order.Add(name), "with an argument");
+        queue.RegisterHandler<Ping>(_ => order.Add("without"));
+        queue.RegisterHandler<Ping>(_ => order.Add("without, again"));
+
+        queue.Invoke(new Ping { Value = 1 }, typeof(Ping));
+
+        Assert.Equal(["with an argument", "without", "without, again"], order);
     }
 
     [Fact]

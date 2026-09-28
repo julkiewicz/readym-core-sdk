@@ -28,6 +28,27 @@ internal class EventQueue(ILogger logger)
         public abstract void Invoke(in TEvent ev);
     }
 
+    private class Entry<TEvent>(ILogger logger) : EntryBase<TEvent>
+    {
+        private Action<TEvent>? _handlers;
+
+        public void RegisterHandler(Action<TEvent> handler)
+        {
+            _handlers += handler;
+        }
+
+        public override void Invoke(in TEvent ev)
+        {
+            if (_handlers == null)
+            {
+                logger.LogWarning("Invoking event of type {EventType} with no handlers registered", typeof(TEvent).FullName);
+                return;
+            }
+
+            _handlers(ev);
+        }
+    }
+
     private class Entry<TEvent, TArg>(ILogger logger) : EntryBase<TEvent>
     {
         private readonly List<(Action<TEvent, TArg>, TArg)> _handlers = new();
@@ -120,7 +141,12 @@ internal class EventQueue(ILogger logger)
         }
     }
 
-    // NOTE: One entry per registration, in registration order, so every handler runs exactly once per event.
+    private readonly Dictionary<Type, EntryBase> _handlersArg0 = new();
+    private readonly Dictionary<(Type, Type), EntryBase> _handlersArg1 = new();
+    private readonly Dictionary<(Type, Type, Type), EntryBase> _handlersArg2 = new();
+    private readonly Dictionary<(Type, Type, Type, Type), EntryBase> _handlersArg3 = new();
+
+    // NOTE: Each entry appears once in its event's list: a handler runs once per event, whichever key it is under.
     private readonly Dictionary<Type, List<EntryBase>> _entriesByEventType = new();
 
     private void AddEntry(Type eventType, EntryBase entry)
@@ -136,37 +162,66 @@ internal class EventQueue(ILogger logger)
 
     public void RegisterHandler<TEvent>(Action<TEvent> handler)
     {
-        var entry = new Entry<TEvent, object?>(logger);
-        entry.RegisterHandler((ev, _) => handler(ev), null);
-        AddEntry(typeof(TEvent), entry);
+        if (!_handlersArg0.TryGetValue(typeof(TEvent), out var entry))
+        {
+            entry = new Entry<TEvent>(logger);
+            _handlersArg0[typeof(TEvent)] = entry;
+            AddEntry(typeof(TEvent), entry);
+        }
+
+        ((Entry<TEvent>)entry).RegisterHandler(handler);
     }
 
     public void RegisterHandler<TEvent, TArg>(Action<TEvent, TArg> handler, TArg arg)
     {
-        var entry = new Entry<TEvent, TArg>(logger);
-        entry.RegisterHandler(handler, arg);
-        AddEntry(typeof(TEvent), entry);
+        var key = (typeof(TEvent), typeof(TArg));
+        if (!_handlersArg1.TryGetValue(key, out var entry))
+        {
+            entry = new Entry<TEvent, TArg>(logger);
+            _handlersArg1[key] = entry;
+            AddEntry(typeof(TEvent), entry);
+        }
+
+        ((Entry<TEvent, TArg>)entry).RegisterHandler(handler, arg);
     }
 
     public void RegisterOpaqueHandler<TArg>(Type eventType, Action<object, TArg> handler, TArg arg)
     {
-        var entry = new OpaqueEntry<TArg>(logger);
-        entry.RegisterHandler(handler, arg);
-        AddEntry(eventType, entry);
+        var key = (eventType, typeof(TArg));
+        if (!_handlersArg1.TryGetValue(key, out var entry))
+        {
+            entry = new OpaqueEntry<TArg>(logger);
+            _handlersArg1[key] = entry;
+            AddEntry(eventType, entry);
+        }
+
+        ((OpaqueEntry<TArg>)entry).RegisterHandler(handler, arg);
     }
 
     public void RegisterHandler<TEvent, TArg0, TArg1>(Action<TEvent, TArg0, TArg1> handler, TArg0 arg0, TArg1 arg1)
     {
-        var entry = new Entry<TEvent, TArg0, TArg1>(logger);
-        entry.RegisterHandler(handler, arg0, arg1);
-        AddEntry(typeof(TEvent), entry);
+        var key = (typeof(TEvent), typeof(TArg0), typeof(TArg1));
+        if (!_handlersArg2.TryGetValue(key, out var entry))
+        {
+            entry = new Entry<TEvent, TArg0, TArg1>(logger);
+            _handlersArg2[key] = entry;
+            AddEntry(typeof(TEvent), entry);
+        }
+
+        ((Entry<TEvent, TArg0, TArg1>)entry).RegisterHandler(handler, arg0, arg1);
     }
 
     public void RegisterHandler<TEvent, TArg0, TArg1, TArg2>(Action<TEvent, TArg0, TArg1, TArg2> handler, TArg0 arg0, TArg1 arg1, TArg2 arg2)
     {
-        var entry = new Entry<TEvent, TArg0, TArg1, TArg2>(logger);
-        entry.RegisterHandler(handler, arg0, arg1, arg2);
-        AddEntry(typeof(TEvent), entry);
+        var key = (typeof(TEvent), typeof(TArg0), typeof(TArg1), typeof(TArg2));
+        if (!_handlersArg3.TryGetValue(key, out var entry))
+        {
+            entry = new Entry<TEvent, TArg0, TArg1, TArg2>(logger);
+            _handlersArg3[key] = entry;
+            AddEntry(typeof(TEvent), entry);
+        }
+
+        ((Entry<TEvent, TArg0, TArg1, TArg2>)entry).RegisterHandler(handler, arg0, arg1, arg2);
     }
 
     public void Invoke<TEvent>(in TEvent ev)
