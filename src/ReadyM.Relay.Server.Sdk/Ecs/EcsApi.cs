@@ -26,6 +26,10 @@ public partial class EcsApi
     private readonly GetParentDelegate _getParent;
     private readonly GetChildrenDelegate _getChildren;
     private readonly GetComponentSlotDelegate _getComponentSlot;
+    private readonly TryGetAreaScopeEntityDelegate _tryGetAreaScopeEntity;
+    private readonly CreateAreaScopeEntityDelegate _createAreaScopeEntity;
+    private readonly TryGetCellScopeEntityDelegate _tryGetCellScopeEntity;
+    private readonly CreateCellScopeEntityDelegate _createCellScopeEntity;
     private readonly ComponentRegistry _registry;
 
     internal EcsApi(EcsApiPointers pointers, ComponentRegistry registry)
@@ -43,6 +47,10 @@ public partial class EcsApi
         _getParent = Marshal.GetDelegateForFunctionPointer<GetParentDelegate>(pointers.GetParent);
         _getChildren = Marshal.GetDelegateForFunctionPointer<GetChildrenDelegate>(pointers.GetChildren);
         _getComponentSlot = Marshal.GetDelegateForFunctionPointer<GetComponentSlotDelegate>(pointers.GetComponentSlot);
+        _tryGetAreaScopeEntity = Marshal.GetDelegateForFunctionPointer<TryGetAreaScopeEntityDelegate>(pointers.TryGetAreaScopeEntity);
+        _createAreaScopeEntity = Marshal.GetDelegateForFunctionPointer<CreateAreaScopeEntityDelegate>(pointers.CreateAreaScopeEntity);
+        _tryGetCellScopeEntity = Marshal.GetDelegateForFunctionPointer<TryGetCellScopeEntityDelegate>(pointers.TryGetCellScopeEntity);
+        _createCellScopeEntity = Marshal.GetDelegateForFunctionPointer<CreateCellScopeEntityDelegate>(pointers.CreateCellScopeEntity);
     }
 
     /// <summary>
@@ -191,6 +199,134 @@ public partial class EcsApi
     public Entity CreateCellEntity(ArchetypeId archetypeId, AreaId areaId, CellId cellId, PlayerId ownerOverride)
     {
         return CreateCellEntity(archetypeId, new FullCellId(areaId, cellId), ownerOverride);
+    }
+
+    /// <summary>
+    /// Gets the scope entity of an area: the entity every entity created in that area's scope hangs off.
+    /// </summary>
+    /// <param name="areaId">The Area whose scope entity to get.</param>
+    /// <param name="entity">The area's scope entity, or default when it has none.</param>
+    /// <returns>Whether the area has a scope entity.</returns>
+    public unsafe bool TryGetAreaScopeEntity(AreaId areaId, out Entity entity)
+    {
+        int entityId;
+
+        if (_tryGetAreaScopeEntity(areaId, &entityId) == 0)
+        {
+            entity = default;
+            return false;
+        }
+
+        entity = EntityFrom(entityId);
+        return true;
+    }
+
+    /// <summary>
+    /// Gets the scope entity of an area.
+    /// </summary>
+    /// <param name="areaId">The Area whose scope entity to get.</param>
+    /// <returns>The area's scope entity.</returns>
+    /// <exception cref="InvalidOperationException">The area has no scope entity.</exception>
+    public Entity GetAreaScopeEntity(AreaId areaId)
+    {
+        if (!TryGetAreaScopeEntity(areaId, out var entity))
+            throw new InvalidOperationException($"Area entity for {areaId} does not exist. Create the area entity first.");
+
+        return entity;
+    }
+
+    /// <summary>
+    /// Creates the scope entity of an area, so entities can be created in its scope before any player joins it.
+    /// Otherwise the server creates it when the first player joins.
+    /// </summary>
+    /// <param name="areaId">The Area whose scope entity to create.</param>
+    /// <returns>The area's new scope entity.</returns>
+    /// <exception cref="InvalidOperationException">The area already has a scope entity.</exception>
+    public Entity CreateAreaScopeEntity(AreaId areaId)
+    {
+        var entityId = _createAreaScopeEntity(areaId);
+
+        if (entityId == 0)
+            throw new InvalidOperationException($"Area entity for {areaId} already exists. Cannot create a duplicate.");
+
+        return EntityFrom(entityId);
+    }
+
+    /// <summary>
+    /// Gets the scope entity of a cell: the entity every entity created in that cell's scope hangs off.
+    /// </summary>
+    /// <param name="cellId">The Cell whose scope entity to get.</param>
+    /// <param name="entity">The cell's scope entity, or default when it has none.</param>
+    /// <returns>Whether the cell has a scope entity.</returns>
+    public unsafe bool TryGetCellScopeEntity(FullCellId cellId, out Entity entity)
+    {
+        int entityId;
+
+        if (_tryGetCellScopeEntity(cellId, &entityId) == 0)
+        {
+            entity = default;
+            return false;
+        }
+
+        entity = EntityFrom(entityId);
+        return true;
+    }
+
+    /// <inheritdoc cref="TryGetCellScopeEntity(FullCellId, out Entity)"/>
+    /// <param name="areaId">The Cell's area.</param>
+    /// <param name="cellId">The Cell whose scope entity to get.</param>
+    /// <param name="entity">The cell's scope entity, or default when it has none.</param>
+    public bool TryGetCellScopeEntity(AreaId areaId, CellId cellId, out Entity entity)
+    {
+        return TryGetCellScopeEntity(new FullCellId(areaId, cellId), out entity);
+    }
+
+    /// <summary>
+    /// Gets the scope entity of a cell.
+    /// </summary>
+    /// <param name="cellId">The Cell whose scope entity to get.</param>
+    /// <returns>The cell's scope entity.</returns>
+    /// <exception cref="InvalidOperationException">The cell has no scope entity.</exception>
+    public Entity GetCellScopeEntity(FullCellId cellId)
+    {
+        if (!TryGetCellScopeEntity(cellId, out var entity))
+            throw new InvalidOperationException($"Cell entity for {cellId} does not exist. Create the cell entity first.");
+
+        return entity;
+    }
+
+    /// <inheritdoc cref="GetCellScopeEntity(FullCellId)"/>
+    /// <param name="areaId">The Cell's area.</param>
+    /// <param name="cellId">The Cell whose scope entity to get.</param>
+    public Entity GetCellScopeEntity(AreaId areaId, CellId cellId)
+    {
+        return GetCellScopeEntity(new FullCellId(areaId, cellId));
+    }
+
+    /// <summary>
+    /// Creates the scope entity of a cell, so entities can be created in its scope before any player activates it.
+    /// Otherwise the server creates it when the first player activates the cell. The cell's area needs a scope
+    /// entity already, see <see cref="CreateAreaScopeEntity"/>.
+    /// </summary>
+    /// <param name="cellId">The Cell whose scope entity to create.</param>
+    /// <returns>The cell's new scope entity.</returns>
+    /// <exception cref="InvalidOperationException">The cell already has a scope entity, or its area has none.</exception>
+    public Entity CreateCellScopeEntity(FullCellId cellId)
+    {
+        var entityId = _createCellScopeEntity(cellId);
+
+        if (entityId == 0)
+            throw new InvalidOperationException($"Cell entity for {cellId} already exists or parent area does not exist. Cannot create a duplicate.");
+
+        return EntityFrom(entityId);
+    }
+
+    /// <inheritdoc cref="CreateCellScopeEntity(FullCellId)"/>
+    /// <param name="areaId">The Cell's area.</param>
+    /// <param name="cellId">The Cell whose scope entity to create.</param>
+    public Entity CreateCellScopeEntity(AreaId areaId, CellId cellId)
+    {
+        return CreateCellScopeEntity(new FullCellId(areaId, cellId));
     }
 
     /// <summary>

@@ -20,4 +20,8 @@ public  struct EcsApiPointers
     public required IntPtr GetParent;
     public required IntPtr GetChildren;
     public required IntPtr GetComponentSlot;
+    public required IntPtr TryGetAreaScopeEntity;
+    public required IntPtr CreateAreaScopeEntity;
+    public required IntPtr TryGetCellScopeEntity;
+    public required IntPtr CreateCellScopeEntity;
 }
