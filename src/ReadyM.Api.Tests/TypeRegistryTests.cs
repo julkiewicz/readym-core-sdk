@@ -2,17 +2,18 @@ using System.Runtime.InteropServices;
 using Friflo.Engine.ECS;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.Interop.Registry;
+using ReadyM.Api.Mapping.Events;
 
 namespace ReadyM.Api.Tests;
 
-[InteropType]
+[InteropType, AlwaysPropagates]
 [StructLayout(LayoutKind.Sequential)]
 public partial struct FirstEvent
 {
     public int Value;
 }
 
-[InteropType]
+[InteropType, AlwaysPropagates]
 [StructLayout(LayoutKind.Sequential)]
 public partial struct SecondEvent
 {
@@ -38,7 +39,7 @@ public class TypeRegistryTests
         public void Register(INativeTypeRegistry registry) => register(registry);
     }
 
-    private sealed class RecordingCallback : ITypeRegistryCallbackBase<INativeTypeRegistry, ValueType, IInteropType>
+    private sealed class RecordingCallback : ITypeRegistryCallbackBase<INativeTypeRegistry, ValueType, IGameEvent>
     {
         public List<string> Visits { get; } = [];
 
@@ -48,7 +49,7 @@ public class TypeRegistryTests
         public void AcceptModComponent(INativeTypeRegistry registry, ModComponentInfo info, string typeFullName)
             => Visits.Add($"mod component {typeFullName}");
 
-        public void AcceptEvent<T>(INativeTypeRegistry registry) where T : struct, IInteropType
+        public void AcceptEvent<T>(INativeTypeRegistry registry) where T : struct, IGameEvent
             => Visits.Add($"event {typeof(T).Name}");
     }
 

@@ -1,13 +1,12 @@
-﻿using System;
+using System;
 using Microsoft.Extensions.Logging;
 using ReadyM.Api.Helpers;
-using ReadyM.Api.Mapping.Tags;
 
 namespace ReadyM.Api.Mapping.Events;
 
 internal class MappedEventManager(
     DataSideChannel sideChannel,
-    IMappingPolicyDirectory policyDir,
+    GameEventContextRegistry contexts,
     ILogger logger
 ) : IMappedEventManager
 {
@@ -25,7 +24,7 @@ internal class MappedEventManager(
     public void RegisterEcsEventHandler<TEvent, TArg0, TArg1>(Action<TEvent, TArg0, TArg1> handler, TArg0 arg0, TArg1 arg1)
         where TEvent : struct
         => incomingEcsEventQueue.RegisterHandler(handler, arg0, arg1);
-    
+
     public void RegisterEcsEventHandler<TEvent, TArg0, TArg1, TArg2>(Action<TEvent, TArg0, TArg1, TArg2> handler, TArg0 arg0, TArg1 arg1, TArg2 arg2)
         where TEvent : struct
         => incomingEcsEventQueue.RegisterHandler(handler, arg0, arg1, arg2);
@@ -42,40 +41,67 @@ internal class MappedEventManager(
         where TEvent : struct
         => incomingGameEventQueue.RegisterHandler(handler, arg0, arg1);
 
-    public void InvokeInGameAndNotifyEcs<TEvent, TContext>(in TEvent ev, TContext context)
-        where TEvent : struct, IMappingContext<TContext>
+    public void InvokeInGameAndNotifyEcs<TEvent>(in TEvent ev)
+        where TEvent : struct, IGameEvent
     {
-        NotifyEcsIfApplicable(ev, context);
-        InvokeInGameIfApplicable(ev, context);
+        NotifyEcsIfApplicable(ev);
+        InvokeInGameIfApplicable(ev);
     }
 
     /// <inheritdoc/>
-    public bool NotifyEcsIfApplicable<TEvent, TContext>(in TEvent ev, TContext context)
-        where TEvent : struct, IMappingContext<TContext>
+    public GameEventResult NotifyEcsIfApplicable<TEvent>(in TEvent ev)
+        where TEvent : struct, IGameEvent
     {
-        if (!policyDir.ForEvent<TEvent, TContext>().CanGameEventNotifyEcs(context))
-            return false;
+        // NOTE: The echo rule: the game code the ECS is playing is not sent back, and runs.
+        if (sideChannel.HasData<PropagatingToGameScope<TEvent>>())
+            return GameEventResult.RunAll;
 
-        using (sideChannel.PushScope<PropagatingToEcsScope<TEvent>>())
+        if (ev.CanGameEventNotifyEcs(contexts) == GameEventNotifyResult.Notify)
         {
-            incomingEcsEventQueue.Invoke(ev);
+            using (sideChannel.PushScope<PropagatingToEcsScope<TEvent>>())
+            {
+                incomingEcsEventQueue.Invoke(ev);
+            }
         }
 
-        return true;
+        return ev.CanGameEventRunLocally(contexts);
     }
 
     /// <inheritdoc/>
-    public bool InvokeInGameIfApplicable<TEvent, TContext>(in TEvent ev, TContext context)
-        where TEvent : struct, IMappingContext<TContext>
+    public GameEventResult InvokeInGameIfApplicable<TEvent>(in TEvent ev)
+        where TEvent : struct, IGameEvent
     {
-        if (!policyDir.ForEvent<TEvent, TContext>().CanEcsInvokeGameEvent(context))
-            return false;
+        // NOTE: The echo rule: what the game is sending is not played back to it.
+        if (sideChannel.HasData<PropagatingToEcsScope<TEvent>>())
+            return GameEventResult.DontRun;
 
-        using (sideChannel.PushScope<PropagatingToGameScope<TEvent>>())
+        var result = ev.CanEcsInvokeGameEvent(contexts);
+        if (result.Runs())
         {
-            incomingGameEventQueue.Invoke(ev);
+            using (sideChannel.PushScope<PropagatingToGameScope<TEvent>>())
+            {
+                incomingGameEventQueue.Invoke(ev);
+            }
         }
 
-        return true;
+        return result;
     }
+
+    public GameEventNotifyResult CanGameEventNotifyEcs<TEvent>(in TEvent ev)
+        where TEvent : struct, IGameEvent
+        => sideChannel.HasData<PropagatingToGameScope<TEvent>>()
+            ? GameEventNotifyResult.DontNotify
+            : ev.CanGameEventNotifyEcs(contexts);
+
+    public GameEventResult CanGameEventRunLocally<TEvent>(in TEvent ev)
+        where TEvent : struct, IGameEvent
+        => sideChannel.HasData<PropagatingToGameScope<TEvent>>()
+            ? GameEventResult.RunAll
+            : ev.CanGameEventRunLocally(contexts);
+
+    public GameEventResult CanEcsInvokeGameEvent<TEvent>(in TEvent ev)
+        where TEvent : struct, IGameEvent
+        => sideChannel.HasData<PropagatingToEcsScope<TEvent>>()
+            ? GameEventResult.DontRun
+            : ev.CanEcsInvokeGameEvent(contexts);
 }

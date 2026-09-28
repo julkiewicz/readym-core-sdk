@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.Helpers;
 using ReadyM.Api.Mapping.Policies.Data;
-using ReadyM.Api.Mapping.Policies.Event;
 using ReadyM.Api.Mapping.Tags;
 
 namespace ReadyM.Api.Mapping;
@@ -90,87 +89,5 @@ internal class NativeMappingPolicyDirectory(
         policy = ForData(type);
         entity = mapped.Value;
         return true;
-    }
-
-    public bool CanGameEventNotifyEcs(int eventId)
-    {
-        var type = registry.GetTypeById(eventId);
-
-        if (type == null)
-            throw new ArgumentException($"No component type found for event ID {eventId}");
-
-        var policy = ForEvent<EmptyContext>(type);
-        return policy.CanGameEventNotifyEcs(default);
-    }
-
-    // TODO: For now, we hard-code IntPtr as context, for IOwnershipBased events
-    public bool CanGameEventNotifyEcs(int eventId, IntPtr context)
-    {
-        var type = registry.GetTypeById(eventId);
-
-        if (type == null)
-            throw new ArgumentException($"No component type found for event ID {eventId}");
-
-        if (!entityMapper.IsMapped(context, out var entity))
-        {
-            logger.LogError("Failed to map entity context {Context} for native Game event with id {EventId} and type {eventType}", context, eventId, type.FullName);
-            return false;
-        }
-
-        return ForEvent<Entity>(type).CanGameEventNotifyEcs(entity.Value);
-    }
-
-    public bool CanEcsInvokeGameEvent(int eventId)
-    {
-        var type = registry.GetTypeById(eventId);
-
-        if (type == null)
-            throw new ArgumentException($"No component type found for event ID {eventId}");
-
-        var policy = ForEvent<EmptyContext>(type);
-        return policy.CanEcsInvokeGameEvent(default);
-    }
-
-    public bool CanEcsInvokeGameEvent(int eventId, IntPtr context)
-    {
-        var type = registry.GetTypeById(eventId);
-
-        if (type == null)
-            throw new ArgumentException($"No component type found for event ID {eventId}");
-
-        if (!entityMapper.IsMapped(context, out var entity))
-        {
-            logger.LogError("Failed to map entity context {Context} for native Game event with id {EventId} and type {eventType}", context, eventId, type.FullName);
-            return false;
-        }
-
-        return ForEvent<Entity>(type).CanEcsInvokeGameEvent(entity.Value);
-    }
-
-    public bool CanGameEventRunLocally(int eventId)
-    {
-        var type = registry.GetTypeById(eventId);
-
-        if (type == null)
-            throw new ArgumentException($"No component type found for event ID {eventId}");
-
-        var policy = ForEvent<EmptyContext>(type);
-        return policy.CanGameEventRunLocally(default);
-    }
-
-    public bool CanGameEventRunLocally(int eventId, IntPtr context)
-    {
-        var type = registry.GetTypeById(eventId);
-
-        if (type == null)
-            throw new ArgumentException($"No component type found for event ID {eventId}");
-
-        if (!entityMapper.IsMapped(context, out var entity))
-        {
-            logger.LogError("Failed to map entity context {Context} for native Game event with id {EventId} and type {eventType}", context, eventId, type.FullName);
-            return false;
-        }
-
-        return ForEvent<Entity>(type).CanGameEventRunLocally(entity.Value);
     }
 }
