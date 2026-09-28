@@ -33,4 +33,13 @@ internal static class NativeMappedEventManagerBindings
         var manager = (NativeMappedEventManager)GCHandle.FromIntPtr(managerPtr).Target!;
         return manager.InvokeInGameIfApplicable(eventId, data);
     }
+
+    /// <returns>The event's run-locally <see cref="GameEventResult"/>, as a byte, without notifying anyone.</returns>
+    public delegate byte CanGameEventRunLocallyDelegate(IntPtr managerPtr, int eventId, IntPtr data);
+
+    public static byte CanGameEventRunLocally(IntPtr managerPtr, int eventId, IntPtr data)
+    {
+        var manager = (NativeMappedEventManager)GCHandle.FromIntPtr(managerPtr).Target!;
+        return manager.CanGameEventRunLocally(eventId, data);
+    }
 }

@@ -169,12 +169,34 @@ public class MappedEventManagerTests
     }
 
     [Fact]
+    public void NativeCanRunLocallyAsksWithoutNotifying()
+    {
+        var manager = GetManager();
+        var ecsCalls = 0;
+        manager.RegisterEcsEventHandler<NativeEvent, object?>((_, _) => ecsCalls++, null);
+
+        var evPtr = Marshal.AllocHGlobal(Marshal.SizeOf<NativeEvent>());
+        try
+        {
+            Marshal.StructureToPtr(new NativeEvent { Actor = IntPtr.Zero, IntValue = 5 }, evPtr, false);
+            Assert.Equal((byte)GameEventResult.RunAll, manager.CanGameEventRunLocally(NativeEvent.Id, evPtr));
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(evPtr);
+        }
+
+        Assert.Equal(0, ecsCalls);
+    }
+
+    [Fact]
     public void AnUnknownNativeEventIdIsAnError()
     {
         var manager = GetManager();
 
         Assert.ThrowsAny<Exception>(() => manager.NotifyEcsIfApplicable(NativeEvent.Id + 100, IntPtr.Zero));
         Assert.ThrowsAny<Exception>(() => manager.InvokeInGameIfApplicable(NativeEvent.Id + 100, IntPtr.Zero));
+        Assert.ThrowsAny<Exception>(() => manager.CanGameEventRunLocally(NativeEvent.Id + 100, IntPtr.Zero));
     }
 
     [Theory]

@@ -74,6 +74,9 @@ internal class NativeMappedEventManager : MappedEventManager, ITypeRegistryCallb
     public byte InvokeInGameIfApplicable(int eventId, IntPtr data)
         => (byte)(TryGetEntry(eventId, out var entry) ? entry.InvokeInGameIfApplicable(this, data) : GameEventResult.Rejected);
 
+    public byte CanGameEventRunLocally(int eventId, IntPtr data)
+        => (byte)(TryGetEntry(eventId, out var entry) ? entry.CanGameEventRunLocally(this, data) : GameEventResult.Rejected);
+
     private bool TryGetEntry(int eventId, out NativeEventEntry entry)
     {
         if (_entries.TryGetValue(eventId, out entry!))
