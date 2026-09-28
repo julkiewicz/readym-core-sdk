@@ -75,12 +75,12 @@ public class TypeRegistryTests
 
         Assert.Equal([0, 1, 2, 3], mixedIds);
         Assert.Equal(componentIds, mixedIds);
-        Assert.Equal(asComponents.GetComponentTypes(), mixed.GetComponentTypes());
+        Assert.Equal(asComponents.GetTypes(), mixed.GetTypes());
         Assert.Equal([typeof(FirstComponent), typeof(FirstEvent), typeof(SecondComponent), typeof(SecondEvent)],
-            mixed.GetComponentTypes());
-        Assert.Equal(typeof(FirstEvent), mixed.GetComponentType(1));
-        Assert.Equal(typeof(SecondEvent), mixed.GetComponentType(3));
-        Assert.Null(mixed.GetComponentType(4));
+            mixed.GetTypes());
+        Assert.Equal(typeof(FirstEvent), mixed.GetTypeById(1));
+        Assert.Equal(typeof(SecondEvent), mixed.GetTypeById(3));
+        Assert.Null(mixed.GetTypeById(4));
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class TypeRegistryTests
 
         Assert.Equal(["component FirstComponent", "event FirstEvent", "event SecondEvent"], early.Visits);
         Assert.Equal(["component FirstComponent", "event FirstEvent", "event SecondEvent"], late.Visits);
-        Assert.Equal(3, registry.GetComponentTypes().Count);
+        Assert.Equal(3, registry.GetTypes().Count);
     }
 
     private interface ITestComponentRegistry : IComponentRegistryBase<ITestComponentRegistry, ValueType>

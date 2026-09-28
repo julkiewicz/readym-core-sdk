@@ -6,9 +6,9 @@ namespace ReadyM.Api.ECS.Registry;
 
 internal interface INativeTypeRegistry : ITypeRegistryBase<INativeTypeRegistry, ValueType, IInteropType>
 {
-    // NOTE: Lists events too, so the native size check covers them.
-    List<Type> GetComponentTypes();
-    INativeTypeRegistry RegisterComponent<T>(T defaultValue = default) where T : struct;
+    // NOTE: Components and events, in id order, so the native size check covers both.
+    List<Type> GetTypes();
+    INativeTypeRegistry RegisterComponent<T>() where T : struct;
     INativeTypeRegistry RegisterEvent<T>() where T : struct, IInteropType;
-    Type? GetComponentType(int componentId);
+    Type? GetTypeById(int typeId);
 }
