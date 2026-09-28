@@ -27,10 +27,8 @@ public partial class EcsApi
     private readonly GetChildrenDelegate _getChildren;
     private readonly GetComponentSlotDelegate _getComponentSlot;
     private readonly TryGetAreaScopeEntityDelegate _tryGetAreaScopeEntity;
-    private readonly GetAreaScopeEntityDelegate _getAreaScopeEntity;
     private readonly CreateAreaScopeEntityDelegate _createAreaScopeEntity;
     private readonly TryGetCellScopeEntityDelegate _tryGetCellScopeEntity;
-    private readonly GetCellScopeEntityDelegate _getCellScopeEntity;
     private readonly CreateCellScopeEntityDelegate _createCellScopeEntity;
     private readonly ComponentRegistry _registry;
 
@@ -50,10 +48,8 @@ public partial class EcsApi
         _getChildren = Marshal.GetDelegateForFunctionPointer<GetChildrenDelegate>(pointers.GetChildren);
         _getComponentSlot = Marshal.GetDelegateForFunctionPointer<GetComponentSlotDelegate>(pointers.GetComponentSlot);
         _tryGetAreaScopeEntity = Marshal.GetDelegateForFunctionPointer<TryGetAreaScopeEntityDelegate>(pointers.TryGetAreaScopeEntity);
-        _getAreaScopeEntity = Marshal.GetDelegateForFunctionPointer<GetAreaScopeEntityDelegate>(pointers.GetAreaScopeEntity);
         _createAreaScopeEntity = Marshal.GetDelegateForFunctionPointer<CreateAreaScopeEntityDelegate>(pointers.CreateAreaScopeEntity);
         _tryGetCellScopeEntity = Marshal.GetDelegateForFunctionPointer<TryGetCellScopeEntityDelegate>(pointers.TryGetCellScopeEntity);
-        _getCellScopeEntity = Marshal.GetDelegateForFunctionPointer<GetCellScopeEntityDelegate>(pointers.GetCellScopeEntity);
         _createCellScopeEntity = Marshal.GetDelegateForFunctionPointer<CreateCellScopeEntityDelegate>(pointers.CreateCellScopeEntity);
     }
 
@@ -233,12 +229,10 @@ public partial class EcsApi
     /// <exception cref="InvalidOperationException">The area has no scope entity.</exception>
     public Entity GetAreaScopeEntity(AreaId areaId)
     {
-        var entityId = _getAreaScopeEntity(areaId);
-
-        if (entityId == 0)
+        if (!TryGetAreaScopeEntity(areaId, out var entity))
             throw new InvalidOperationException($"Area entity for {areaId} does not exist. Create the area entity first.");
 
-        return EntityFrom(entityId);
+        return entity;
     }
 
     /// <summary>
@@ -295,12 +289,10 @@ public partial class EcsApi
     /// <exception cref="InvalidOperationException">The cell has no scope entity.</exception>
     public Entity GetCellScopeEntity(FullCellId cellId)
     {
-        var entityId = _getCellScopeEntity(cellId);
-
-        if (entityId == 0)
+        if (!TryGetCellScopeEntity(cellId, out var entity))
             throw new InvalidOperationException($"Cell entity for {cellId} does not exist. Create the cell entity first.");
 
-        return EntityFrom(entityId);
+        return entity;
     }
 
     /// <inheritdoc cref="GetCellScopeEntity(FullCellId)"/>
