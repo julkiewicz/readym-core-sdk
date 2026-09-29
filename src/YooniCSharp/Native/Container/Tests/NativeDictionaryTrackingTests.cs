@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Allocation tracking is compiled out in Release (see TrackedAllocator), so these tests only exist in Debug.
+#if DEBUG
+using System;
 using NUnit.Framework;
 using Yooni.Native.LowLevel;
 
@@ -214,3 +216,4 @@ public class NativeDictionaryTrackingTests
         });
     }
 }
+#endif
