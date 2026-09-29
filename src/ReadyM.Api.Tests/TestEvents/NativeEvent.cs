@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using ReadyM.Api.Interop.Registry;
 using ReadyM.Api.Mapping.Events;
 

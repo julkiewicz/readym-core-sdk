@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using DryIoc;
 using Friflo.Engine.ECS;
 using Microsoft.Extensions.Logging;

@@ -1,4 +1,4 @@
-namespace ReadyM.Api.Mapping;
+﻿namespace ReadyM.Api.Mapping;
 
 internal interface INativeMappingPolicyDirectory : IMappingPolicyDirectory
 {
