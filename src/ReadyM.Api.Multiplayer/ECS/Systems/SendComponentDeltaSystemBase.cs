@@ -50,6 +50,7 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
 
     /// When true, components touched by the API (ChangedFromApi) additionally have their delta
     /// sent to the entity's own owner, so the server can authoritatively override the owner's state.
+    /// An entity the server owns itself has no remote owner to override, so it never gets that copy.
     /// Defaults to false; the server overrides it.
     protected virtual bool SendApiDeltasToOwner => false;
 
@@ -101,6 +102,7 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
 
         // "owner" packet: API-authored deltas sent back to the owner. Lazily headered only if used,
         // so it costs nothing on the common path where no component is ChangedFromApi.
+        var sendApiDeltasToOwner = SendApiDeltasToOwner && owner != PlayerId.Server;
         NetDataWriter? owned = null;
         var ownedHeaderSize = 0;
 
@@ -121,7 +123,7 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
                     continue;
 
                 // API-authored deltas additionally go back to the owner (single scan, no second pass).
-                if (SendApiDeltasToOwner && comp.ChangedFromApi)
+                if (sendApiDeltasToOwner && comp.ChangedFromApi)
                 {
                     if (owned == null)
                     {
