@@ -68,11 +68,11 @@ internal class NativeMappedEventManager : MappedEventManager, ITypeRegistryCallb
     }
 
     // NOTE: These are called from native code, so they must not throw: an unknown id is logged and never runs.
-    public byte NotifyEcsIfApplicable(int eventId, IntPtr data)
-        => (byte)(TryGetEntry(eventId, out var entry) ? entry.NotifyEcsIfApplicable(this, data) : GameEventResult.Rejected);
+    public bool NotifyEcsIfApplicable(int eventId, IntPtr data)
+        => TryGetEntry(eventId, out var entry) && entry.NotifyEcsIfApplicable(this, data);
 
-    public byte InvokeInGameIfApplicable(int eventId, IntPtr data)
-        => (byte)(TryGetEntry(eventId, out var entry) ? entry.InvokeInGameIfApplicable(this, data) : GameEventResult.Rejected);
+    public bool InvokeInGameIfApplicable(int eventId, IntPtr data)
+        => TryGetEntry(eventId, out var entry) && entry.InvokeInGameIfApplicable(this, data);
 
     public byte CanGameEventRunLocally(int eventId, IntPtr data)
         => (byte)(TryGetEntry(eventId, out var entry) ? entry.CanGameEventRunLocally(this, data) : GameEventResult.Rejected);

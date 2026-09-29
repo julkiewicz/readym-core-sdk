@@ -49,42 +49,33 @@ internal class MappedEventManager(
     }
 
     /// <inheritdoc/>
-    public GameEventResult NotifyEcsIfApplicable<TEvent>(in TEvent ev)
+    public bool NotifyEcsIfApplicable<TEvent>(in TEvent ev)
         where TEvent : struct, IGameEvent
     {
-        // NOTE: The echo rule: the game code the ECS is playing is not sent back, and runs.
-        if (sideChannel.HasData<PropagatingToGameScope<TEvent>>())
-            return GameEventResult.RunAll;
+        if (CanGameEventNotifyEcs(ev) != GameEventNotifyResult.Notify)
+            return false;
 
-        if (ev.CanGameEventNotifyEcs(contexts) == GameEventNotifyResult.Notify)
+        using (sideChannel.PushScope<PropagatingToEcsScope<TEvent>>())
         {
-            using (sideChannel.PushScope<PropagatingToEcsScope<TEvent>>())
-            {
-                incomingEcsEventQueue.Invoke(ev);
-            }
+            incomingEcsEventQueue.Invoke(ev);
         }
 
-        return ev.CanGameEventRunLocally(contexts);
+        return true;
     }
 
     /// <inheritdoc/>
-    public GameEventResult InvokeInGameIfApplicable<TEvent>(in TEvent ev)
+    public bool InvokeInGameIfApplicable<TEvent>(in TEvent ev)
         where TEvent : struct, IGameEvent
     {
-        // NOTE: The echo rule: what the game is sending is not played back to it.
-        if (sideChannel.HasData<PropagatingToEcsScope<TEvent>>())
-            return GameEventResult.DontRun;
+        if (!CanEcsInvokeGameEvent(ev).Runs())
+            return false;
 
-        var result = ev.CanEcsInvokeGameEvent(contexts);
-        if (result.Runs())
+        using (sideChannel.PushScope<PropagatingToGameScope<TEvent>>())
         {
-            using (sideChannel.PushScope<PropagatingToGameScope<TEvent>>())
-            {
-                incomingGameEventQueue.Invoke(ev);
-            }
+            incomingGameEventQueue.Invoke(ev);
         }
 
-        return result;
+        return true;
     }
 
     public GameEventNotifyResult CanGameEventNotifyEcs<TEvent>(in TEvent ev)

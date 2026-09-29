@@ -29,14 +29,12 @@ internal interface IMappedEventManager
     void InvokeInGameAndNotifyEcs<TEvent>(in TEvent ev)
         where TEvent : struct, IGameEvent;
 
-    /// Notify the ECS of the event if its policy allows it.
-    /// <returns>Whether and how the game code behind the event runs here.</returns>
-    GameEventResult NotifyEcsIfApplicable<TEvent>(in TEvent ev)
+    /// <returns>Whether the event was propagated.</returns>
+    bool NotifyEcsIfApplicable<TEvent>(in TEvent ev)
         where TEvent : struct, IGameEvent;
 
-    /// Invoke the event in game if its policy allows it.
-    /// <returns>What the policy prescribed; the game handlers ran if it <see cref="GameEventResultExtensions.Runs"/>.</returns>
-    GameEventResult InvokeInGameIfApplicable<TEvent>(in TEvent ev)
+    /// <returns>Whether the event was propagated.</returns>
+    bool InvokeInGameIfApplicable<TEvent>(in TEvent ev)
         where TEvent : struct, IGameEvent;
 
     /// The event's own answers, for call sites that ask without acting.

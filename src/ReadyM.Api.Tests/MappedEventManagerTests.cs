@@ -62,6 +62,7 @@ public class MappedEventManagerTests
     [Fact]
     public void ReactsToEcsEvents()
     {
+        // Arrange
         var manager = GetManager();
         var ecsHandled = false;
 
@@ -70,17 +71,24 @@ public class MappedEventManagerTests
             Assert.Equal(5, ev.IntValue);
             ecsHandled = true;
         });
-        manager.RegisterGameEventHandler<ManagedEvent>(_ => Assert.Fail());
 
-        var result = manager.NotifyEcsIfApplicable(new ManagedEvent { IntValue = 5, FloatValue = 0.0f });
+        manager.RegisterGameEventHandler<ManagedEvent>(ev => { Assert.Fail(); });
 
+        // Act
+        manager.NotifyEcsIfApplicable(new ManagedEvent
+        {
+            IntValue = 5,
+            FloatValue = 0.0f
+        });
+
+        // Assert
         Assert.True(ecsHandled);
-        Assert.Equal(GameEventResult.RunAll, result);
     }
 
     [Fact]
     public void ReactsToGameEvents()
     {
+        // Arrange
         var manager = GetManager();
         var handled = false;
 
@@ -89,17 +97,24 @@ public class MappedEventManagerTests
             Assert.Equal(5, ev.IntValue);
             handled = true;
         });
-        manager.RegisterEcsEventHandler<ManagedEvent>(_ => Assert.Fail());
 
-        var result = manager.InvokeInGameIfApplicable(new ManagedEvent { IntValue = 5, FloatValue = 0.0f });
+        manager.RegisterEcsEventHandler<ManagedEvent>(ev => { Assert.Fail(); });
 
+        // Act
+        manager.InvokeInGameIfApplicable(new ManagedEvent
+        {
+            IntValue = 5,
+            FloatValue = 0.0f
+        });
+
+        // Assert
         Assert.True(handled);
-        Assert.Equal(GameEventResult.RunAll, result);
     }
 
     [Fact]
     public void ReactsToBothEvents()
     {
+        // Arrange
         var manager = GetManager();
         var ecsHandled = false;
         var gameHandled = false;
@@ -109,14 +124,21 @@ public class MappedEventManagerTests
             Assert.Equal(5, ev.IntValue);
             ecsHandled = true;
         });
+
         manager.RegisterGameEventHandler<ManagedEvent>(ev =>
         {
             Assert.Equal(5, ev.IntValue);
             gameHandled = true;
         });
 
-        manager.InvokeInGameAndNotifyEcs(new ManagedEvent { IntValue = 5, FloatValue = 0.0f });
+        // Act
+        manager.InvokeInGameAndNotifyEcs(new ManagedEvent
+        {
+            IntValue = 5,
+            FloatValue = 0.0f
+        });
 
+        // Assert
         Assert.True(ecsHandled);
         Assert.True(gameHandled);
     }
@@ -124,6 +146,7 @@ public class MappedEventManagerTests
     [Fact]
     public void ReactsToNativeEcsEvents()
     {
+        // Arrange
         var manager = GetManager();
         var ecsHandled = false;
 
@@ -133,26 +156,34 @@ public class MappedEventManagerTests
             Assert.Equal(5, ev.IntValue);
             ecsHandled = true;
         });
-        manager.RegisterGameEventHandler<NativeEvent>(_ => Assert.Fail());
+
+        manager.RegisterGameEventHandler<NativeEvent>(ev => { Assert.Fail(); });
+
+        var ev = new NativeEvent
+        {
+            Actor = IntPtr.Zero,
+            IntValue = 5,
+        };
 
         var evPtr = Marshal.AllocHGlobal(Marshal.SizeOf<NativeEvent>());
         try
         {
-            Marshal.StructureToPtr(new NativeEvent { Actor = IntPtr.Zero, IntValue = 5 }, evPtr, false);
-            var result = manager.NotifyEcsIfApplicable(NativeEvent.Id, evPtr);
-            Assert.Equal((byte)GameEventResult.RunAll, result);
+            Marshal.StructureToPtr(ev, evPtr, false);
+            manager.NotifyEcsIfApplicable(NativeEvent.Id, evPtr);
         }
         finally
         {
             Marshal.FreeHGlobal(evPtr);
         }
 
+        // Assert
         Assert.True(ecsHandled);
     }
 
     [Fact]
     public void ReactsToNativeEcsEventsAsManaged()
     {
+        // Arrange
         var manager = GetManager();
         var ecsHandled = false;
 
@@ -161,10 +192,17 @@ public class MappedEventManagerTests
             Assert.Equal(5, ev.IntValue);
             ecsHandled = true;
         });
-        manager.RegisterGameEventHandler<NativeEvent>(_ => Assert.Fail());
 
-        manager.NotifyEcsIfApplicable(new NativeEvent { Actor = IntPtr.Zero, IntValue = 5 });
+        manager.RegisterGameEventHandler<NativeEvent>(ev => { Assert.Fail(); });
 
+        // Act
+        manager.NotifyEcsIfApplicable(new NativeEvent
+        {
+            Actor = IntPtr.Zero,
+            IntValue = 5,
+        });
+
+        // Assert
         Assert.True(ecsHandled);
     }
 
@@ -200,20 +238,18 @@ public class MappedEventManagerTests
     }
 
     [Theory]
-    [InlineData(GameEventNotifyResult.Notify, GameEventResult.RunAll, true)]
-    [InlineData(GameEventNotifyResult.Notify, GameEventResult.Rejected, true)]
-    [InlineData(GameEventNotifyResult.DontNotify, GameEventResult.RunAll, false)]
-    [InlineData(GameEventNotifyResult.DontNotify, GameEventResult.Rejected, false)]
-    public void NotifyAsksTheEventThenReturnsItsRunLocallyAnswer(GameEventNotifyResult notify, GameEventResult runLocally, bool notified)
+    [InlineData(GameEventNotifyResult.Notify, true)]
+    [InlineData(GameEventNotifyResult.DontNotify, false)]
+    public void NotifyAsksTheEventAndSaysWhetherItNotified(GameEventNotifyResult notify, bool notified)
     {
         var manager = GetManager();
         var ecsCalls = 0;
         manager.RegisterEcsEventHandler<ProbeEvent, object?>((_, _) => ecsCalls++, null);
 
-        var result = manager.NotifyEcsIfApplicable(new ProbeEvent { Notify = notify, RunLocally = runLocally });
+        var result = manager.NotifyEcsIfApplicable(new ProbeEvent { Notify = notify, RunLocally = GameEventResult.Rejected });
 
         Assert.Equal(notified ? 1 : 0, ecsCalls);
-        Assert.Equal(runLocally, result);
+        Assert.Equal(notified, result);
     }
 
     [Theory]
@@ -230,7 +266,7 @@ public class MappedEventManagerTests
         var result = manager.InvokeInGameIfApplicable(new ProbeEvent { Invoke = invoke });
 
         Assert.Equal(expectedCalls, gameCalls);
-        Assert.Equal(invoke, result);
+        Assert.Equal(expectedCalls == 1, result);
     }
 
     [Fact]
@@ -239,7 +275,7 @@ public class MappedEventManagerTests
         var manager = GetManager();
         var echo = new ProbeEvent { Notify = GameEventNotifyResult.Notify, RunLocally = GameEventResult.Rejected, Invoke = GameEventResult.RunAll };
         var ecsCalls = 0;
-        GameEventResult? notifyResult = null;
+        bool? notifyResult = null;
         GameEventNotifyResult? canNotify = null;
         GameEventResult? canRun = null;
 
@@ -254,7 +290,7 @@ public class MappedEventManagerTests
         manager.InvokeInGameIfApplicable(echo);
 
         Assert.Equal(0, ecsCalls);
-        Assert.Equal(GameEventResult.RunAll, notifyResult);
+        Assert.False(notifyResult);
         Assert.Equal(GameEventNotifyResult.DontNotify, canNotify);
         Assert.Equal(GameEventResult.RunAll, canRun);
 
@@ -268,7 +304,7 @@ public class MappedEventManagerTests
         var manager = GetManager();
         var echo = new ProbeEvent { Notify = GameEventNotifyResult.Notify, RunLocally = GameEventResult.RunAll, Invoke = GameEventResult.RunAll };
         var gameCalls = 0;
-        GameEventResult? invokeResult = null;
+        bool? invokeResult = null;
         GameEventResult? canInvoke = null;
 
         manager.RegisterGameEventHandler<ProbeEvent, object?>((_, _) => gameCalls++, null);
@@ -281,7 +317,7 @@ public class MappedEventManagerTests
         manager.NotifyEcsIfApplicable(echo);
 
         Assert.Equal(0, gameCalls);
-        Assert.Equal(GameEventResult.DontRun, invokeResult);
+        Assert.False(invokeResult);
         Assert.Equal(GameEventResult.DontRun, canInvoke);
         Assert.Equal(GameEventResult.RunAll, manager.CanEcsInvokeGameEvent(echo));
     }
@@ -298,11 +334,11 @@ public class MappedEventManagerTests
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 1000; i++)
         {
-            sum += (int)manager.NotifyEcsIfApplicable(ev);
+            sum += manager.NotifyEcsIfApplicable(ev) ? 1 : 0;
         }
         var after = GC.GetAllocatedBytesForCurrentThread();
 
         Assert.Equal(0, after - before);
-        Assert.Equal(3 * 1000, sum);
+        Assert.Equal(1000, sum);
     }
 }

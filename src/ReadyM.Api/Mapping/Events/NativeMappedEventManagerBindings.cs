@@ -16,22 +16,20 @@ internal static class NativeMappedEventManagerBindings
         manager.RegisterNativeGameEventHandler(eventId, callback);
     }
 
-    /// <returns>The event's run-locally <see cref="GameEventResult"/>, as a byte.</returns>
     public delegate byte NotifyEcsIfApplicableDelegate(IntPtr managerPtr, int eventId, IntPtr data);
 
     public static byte NotifyEcsIfApplicable(IntPtr managerPtr, int eventId, IntPtr data)
     {
         var manager = (NativeMappedEventManager)GCHandle.FromIntPtr(managerPtr).Target!;
-        return manager.NotifyEcsIfApplicable(eventId, data);
+        return manager.NotifyEcsIfApplicable(eventId, data) ? (byte)1 : (byte)0;
     }
 
-    /// <returns>The event's invoke-in-game <see cref="GameEventResult"/>, as a byte.</returns>
     public delegate byte InvokeInGameIfApplicableDelegate(IntPtr managerPtr, int eventId, IntPtr data);
 
     public static byte InvokeInGameIfApplicable(IntPtr managerPtr, int eventId, IntPtr data)
     {
         var manager = (NativeMappedEventManager)GCHandle.FromIntPtr(managerPtr).Target!;
-        return manager.InvokeInGameIfApplicable(eventId, data);
+        return manager.InvokeInGameIfApplicable(eventId, data) ? (byte)1 : (byte)0;
     }
 
     /// <returns>The event's run-locally <see cref="GameEventResult"/>, as a byte, without notifying anyone.</returns>
