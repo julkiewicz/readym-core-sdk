@@ -30,11 +30,11 @@ public partial class EcsApi
     private readonly CreateAreaScopeEntityDelegate _createAreaScopeEntity;
     private readonly TryGetCellScopeEntityDelegate _tryGetCellScopeEntity;
     private readonly CreateCellScopeEntityDelegate _createCellScopeEntity;
-    private readonly ComponentRegistry _registry;
+    private readonly ModComponentIds _componentIds;
 
-    internal EcsApi(EcsApiPointers pointers, ComponentRegistry registry)
+    internal EcsApi(EcsApiPointers pointers, ModComponentIds componentIds)
     {
-        _registry = registry;
+        _componentIds = componentIds;
         _query = Marshal.GetDelegateForFunctionPointer<QueryDelegate>(pointers.Query);
         _createNetworkedEntity = Marshal.GetDelegateForFunctionPointer<CreateNetworkedEntityDelegate>(pointers.CreateNetworkedEntity);
         _createNetworkedPlayerEntity = Marshal.GetDelegateForFunctionPointer<CreateNetworkedPlayerEntityDelegate>(pointers.CreateNetworkedPlayerEntity);
@@ -60,7 +60,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateEntity(ArchetypeId archetypeId)
     {
-        return new Entity(_createNetworkedEntity(archetypeId, 0, default), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedEntity(archetypeId, 0, default), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateEntity(ArchetypeId archetypeId, PlayerId owner)
     {
-        return new Entity(_createNetworkedEntity(archetypeId, 1, owner), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedEntity(archetypeId, 1, owner), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateGlobalEntity(ArchetypeId archetypeId)
     {
-        return new Entity(_createNetworkedEntity(archetypeId, 0, default), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedEntity(archetypeId, 0, default), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateGlobalEntity(ArchetypeId archetypeId, PlayerId owner)
     {
-        return new Entity(_createNetworkedEntity(archetypeId, 1, owner), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedEntity(archetypeId, 1, owner), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -106,7 +106,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreatePlayerEntity(ArchetypeId archetypeId, PlayerId playerId)
     {
-        return new Entity(_createNetworkedPlayerEntity(archetypeId, playerId, 0, default), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedPlayerEntity(archetypeId, playerId, 0, default), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -119,7 +119,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreatePlayerEntity(ArchetypeId archetypeId, PlayerId playerId, PlayerId owner)
     {
-        return new Entity(_createNetworkedPlayerEntity(archetypeId, playerId, 1, owner), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedPlayerEntity(archetypeId, playerId, 1, owner), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -132,7 +132,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateAreaEntity(ArchetypeId archetypeId, AreaId areaId)
     {
-        return new Entity(_createNetworkedAreaEntity(archetypeId, areaId, 0, default), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedAreaEntity(archetypeId, areaId, 0, default), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -145,7 +145,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateAreaEntity(ArchetypeId archetypeId, AreaId areaId, PlayerId owner)
     {
-        return new Entity(_createNetworkedAreaEntity(archetypeId, areaId, 1, owner), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedAreaEntity(archetypeId, areaId, 1, owner), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -157,7 +157,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateCellEntity(ArchetypeId archetypeId, FullCellId cellId)
     {
-        return new Entity(_createNetworkedCellEntity(archetypeId, cellId, 0, default), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedCellEntity(archetypeId, cellId, 0, default), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -170,7 +170,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateCellEntity(ArchetypeId archetypeId, FullCellId cellId, PlayerId owner)
     {
-        return new Entity(_createNetworkedCellEntity(archetypeId, cellId, 1, owner), _getComponentSlot, _registry);
+        return new Entity(_createNetworkedCellEntity(archetypeId, cellId, 1, owner), _getComponentSlot, _componentIds);
     }
 
     /// <summary>
@@ -336,7 +336,7 @@ public partial class EcsApi
     /// <returns>The created entity.</returns>
     public Entity CreateLocalEntity(ArchetypeId archetypeId)
     {
-        return new Entity(_createLocalEntity(archetypeId), _getComponentSlot, _registry);
+        return new Entity(_createLocalEntity(archetypeId), _getComponentSlot, _componentIds);
     }
 
     /// <inheritdoc cref="CreateLocalEntity(ArchetypeId)"/>
@@ -448,7 +448,7 @@ public partial class EcsApi
     private unsafe ComponentSlot Locate<T>(int entityId) where T : struct
     {
         ComponentSlot slot;
-        _getComponentSlot(entityId, _registry.ResolveComponentId<T>(), &slot);
+        _getComponentSlot(entityId, _componentIds.Resolve<T>(), &slot);
         return slot;
     }
 
@@ -511,6 +511,6 @@ public partial class EcsApi
 
     internal Entity EntityFrom(int entityId)
     {
-        return new Entity(entityId, _getComponentSlot, _registry);
+        return new Entity(entityId, _getComponentSlot, _componentIds);
     }
 }
