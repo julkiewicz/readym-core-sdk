@@ -9,13 +9,15 @@ using ReadyM.Api.Generators.Derive.GameEvents;
 namespace ReadyM.Api.Generators;
 
 /// <summary>
-/// Generates a game event's <c>IGameEvent</c> methods from its discriminator attribute (<c>[OwnershipBased]</c> and
-/// the rest of <see cref="GameEventSupportRegistry"/>). An event without one writes the methods by hand.
+/// Generates the <c>IGameEvent</c> methods of an event marked <c>[DeriveIGameEvent]</c>, with the policy its
+/// discriminator attribute chooses (<c>[OwnershipBased]</c> and the rest of <see cref="GameEventSupportRegistry"/>).
+/// An event without <c>[DeriveIGameEvent]</c> writes the methods by hand.
 /// </summary>
 [Generator]
-internal sealed class GameEventGenerator : IIncrementalGenerator
+internal sealed class DeriveIGameEventGenerator : IIncrementalGenerator
 {
     private const string AttributeNamespace = "ReadyM.Api.Mapping.Events";
+    private const string DeriveAttributeName = "DeriveIGameEventAttribute";
     private const string EntityType = "Friflo.Engine.ECS.Entity";
     private const string RawEntityType = "Friflo.Engine.ECS.RawEntity";
 
@@ -35,6 +37,11 @@ internal sealed class GameEventGenerator : IIncrementalGenerator
     private static bool Predicate(SyntaxNode node, CancellationToken _)
         => node is StructDeclarationSyntax { AttributeLists.Count: > 0 };
 
+    private static bool IsDerive(AttributeData attribute)
+        => attribute.AttributeClass is { } type
+           && type.ContainingNamespace.ToDisplayString() == AttributeNamespace
+           && type.Name == DeriveAttributeName;
+
     private static bool IsDiscriminator(AttributeData attribute)
         => attribute.AttributeClass is { } type
            && type.ContainingNamespace.ToDisplayString() == AttributeNamespace
@@ -46,22 +53,34 @@ internal sealed class GameEventGenerator : IIncrementalGenerator
         if (context.SemanticModel.GetDeclaredSymbol(node, ct) is not INamedTypeSymbol symbol)
             return null;
 
-        var discriminators = symbol.GetAttributes().Where(IsDiscriminator).ToArray();
-        if (discriminators.Length == 0)
+        var attributes = symbol.GetAttributes();
+        var derive = attributes.FirstOrDefault(IsDerive);
+        var discriminators = attributes.Where(IsDiscriminator).ToArray();
+        if (derive == null && discriminators.Length == 0)
             return null;
 
-        // NOTE: A partial struct has one syntax node per part; only the part carrying the discriminator emits.
-        var attributeSyntax = discriminators[0].ApplicationSyntaxReference?.GetSyntax(ct);
+        // NOTE: A partial struct has one syntax node per part; only the part carrying [DeriveIGameEvent] emits, or,
+        // without it, the part carrying the discriminator, to report the missing attribute once.
+        var attributeSyntax = (derive ?? discriminators[0]).ApplicationSyntaxReference?.GetSyntax(ct);
         if (attributeSyntax == null || !attributeSyntax.Ancestors().Contains(node))
             return null;
 
         var errors = new List<string>();
         var display = symbol.ToDisplayString();
 
-        if (discriminators.Length > 1)
+        if (derive == null)
         {
-            var names = string.Join(", ", discriminators.Select(d => d.AttributeClass!.Name));
-            errors.Add($"{display} has more than one discriminator ({names}); a game event takes exactly one discriminator.");
+            var name = discriminators[0].AttributeClass!.Name;
+            errors.Add($"{display} has a discriminator ({name}) but no [DeriveIGameEvent]; a discriminator only chooses the policy [DeriveIGameEvent] generates.");
+            return new GameEventModel(symbol, discriminators[0], null, errors);
+        }
+
+        if (discriminators.Length != 1)
+        {
+            var names = discriminators.Length == 0 ? "none" : string.Join(", ", discriminators.Select(d => d.AttributeClass!.Name));
+            errors.Add($"{display} has [DeriveIGameEvent] and {discriminators.Length} discriminators ({names}); a generated game event takes exactly one discriminator.");
+            if (discriminators.Length == 0)
+                return new GameEventModel(symbol, derive, null, errors);
         }
 
         if (symbol.ContainingType != null)

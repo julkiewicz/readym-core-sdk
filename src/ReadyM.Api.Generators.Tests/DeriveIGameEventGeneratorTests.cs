@@ -5,7 +5,7 @@ using Xunit;
 
 namespace ReadyM.Api.Generators.Tests;
 
-public sealed class GameEventGeneratorTests(ITestOutputHelper output)
+public sealed class DeriveIGameEventGeneratorTests(ITestOutputHelper output)
 {
     // Stand-ins for the real contexts, under their real names, so a test decides who owns what and who is master.
     private const string ContextStubs = """
@@ -34,25 +34,25 @@ using ReadyM.Api.Mapping.Events;
 
 namespace GameEventTests;
 
-[OwnershipBased(nameof(Attacker))]
+[DeriveIGameEvent, OwnershipBased(nameof(Attacker))]
 public partial struct OwnershipRaw { public RawEntity Attacker; public int Damage; }
 
-[OwnershipBased(nameof(Subject))]
+[DeriveIGameEvent, OwnershipBased(nameof(Subject))]
 public readonly partial struct OwnershipEntity(Entity subject) { public readonly Entity Subject = subject; }
 
-[AlwaysPropagates]
+[DeriveIGameEvent, AlwaysPropagates]
 public partial struct Always { public int Value; }
 
-[AlwaysPropagatesToEcsOnly]
+[DeriveIGameEvent, AlwaysPropagatesToEcsOnly]
 public partial struct ToEcsOnly { public int Value; }
 
-[AlwaysPropagatesToGameOnly]
+[DeriveIGameEvent, AlwaysPropagatesToGameOnly]
 public partial struct ToGameOnly { public int Value; }
 
-[MasterClientManaged]
+[DeriveIGameEvent, MasterClientManaged]
 public readonly partial struct Master { public readonly int Value; }
 
-[RunOnMasterClientOnly(nameof(Owner))]
+[DeriveIGameEvent, RunOnMasterClientOnly(nameof(Owner))]
 public partial struct RunOnMaster { public RawEntity Owner; }
 
 public static class Probe
@@ -88,7 +88,7 @@ public static class Probe
 
     private Func<string, bool, bool, string> CompileProbe()
     {
-        var result = SourceGeneratorTestHelper.RunGenerator<GameEventGenerator>(
+        var result = SourceGeneratorTestHelper.RunGenerator<DeriveIGameEventGenerator>(
             [("Stubs.cs", ContextStubs), ("Events.cs", Events)], output);
 
         var errors = result.OutputDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
@@ -141,7 +141,7 @@ public static class Probe
     [Fact]
     public void GeneratedPartOfAReadonlyStructIsReadonly()
     {
-        var result = SourceGeneratorTestHelper.RunGenerator<GameEventGenerator>(
+        var result = SourceGeneratorTestHelper.RunGenerator<DeriveIGameEventGenerator>(
             [("Stubs.cs", ContextStubs), ("Events.cs", Events)], output);
 
         var master = result.GeneratedSyntaxTrees.Single(t => t.FilePath.Contains("GameEventTests.Master."));
@@ -152,7 +152,7 @@ public static class Probe
 
     private string[] GeneratorErrors(string eventSource)
     {
-        var result = SourceGeneratorTestHelper.RunGenerator<GameEventGenerator>(
+        var result = SourceGeneratorTestHelper.RunGenerator<DeriveIGameEventGenerator>(
             [("Stubs.cs", ContextStubs), ("Event.cs", eventSource)], output);
         return result.OutputDiagnostics
             .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -167,7 +167,7 @@ public static class Probe
 using Friflo.Engine.ECS;
 using ReadyM.Api.Mapping.Events;
 namespace GameEventTests;
-[OwnershipBased("Attacker")]
+[DeriveIGameEvent, OwnershipBased("Attacker")]
 public partial struct Broken { public RawEntity Target; }
 """);
         Assert.Contains(errors, e => e.Contains("#error") && e.Contains("Broken") && e.Contains("'Attacker'"));
@@ -180,7 +180,7 @@ public partial struct Broken { public RawEntity Target; }
 using System;
 using ReadyM.Api.Mapping.Events;
 namespace GameEventTests;
-[RunOnMasterClientOnly(nameof(Actor))]
+[DeriveIGameEvent, RunOnMasterClientOnly(nameof(Actor))]
 public partial struct Broken { public IntPtr Actor; }
 """);
         Assert.Contains(errors, e => e.Contains("#error") && e.Contains("Broken") && e.Contains("Entity or RawEntity"));
@@ -192,7 +192,31 @@ public partial struct Broken { public IntPtr Actor; }
         var errors = GeneratorErrors("""
 using ReadyM.Api.Mapping.Events;
 namespace GameEventTests;
-[AlwaysPropagates, MasterClientManaged]
+[DeriveIGameEvent, AlwaysPropagates, MasterClientManaged]
+public partial struct Broken { public int Value; }
+""");
+        Assert.Contains(errors, e => e.Contains("#error") && e.Contains("Broken") && e.Contains("one discriminator"));
+    }
+
+    [Fact]
+    public void ADiscriminatorWithoutDeriveIGameEventIsAnError()
+    {
+        var errors = GeneratorErrors("""
+using ReadyM.Api.Mapping.Events;
+namespace GameEventTests;
+[AlwaysPropagates]
+public partial struct Broken { public int Value; }
+""");
+        Assert.Contains(errors, e => e.Contains("#error") && e.Contains("Broken") && e.Contains("[DeriveIGameEvent]"));
+    }
+
+    [Fact]
+    public void DeriveIGameEventWithoutADiscriminatorIsAnError()
+    {
+        var errors = GeneratorErrors("""
+using ReadyM.Api.Mapping.Events;
+namespace GameEventTests;
+[DeriveIGameEvent]
 public partial struct Broken { public int Value; }
 """);
         Assert.Contains(errors, e => e.Contains("#error") && e.Contains("Broken") && e.Contains("one discriminator"));

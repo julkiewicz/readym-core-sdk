@@ -6,14 +6,14 @@ using ReadyM.Api.Mapping.Events;
 
 namespace ReadyM.Api.Tests;
 
-[InteropType, AlwaysPropagates]
+[InteropType, DeriveIGameEvent, AlwaysPropagates]
 [StructLayout(LayoutKind.Sequential)]
 public partial struct FirstEvent
 {
     public int Value;
 }
 
-[InteropType, AlwaysPropagates]
+[InteropType, DeriveIGameEvent, AlwaysPropagates]
 [StructLayout(LayoutKind.Sequential)]
 public partial struct SecondEvent
 {
