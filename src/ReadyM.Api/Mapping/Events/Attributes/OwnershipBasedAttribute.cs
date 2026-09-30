@@ -3,8 +3,8 @@ using System;
 namespace ReadyM.Api.Mapping.Events;
 
 /// <summary>
-/// The event runs where the subject entity is owned: the owner sends it, everyone else plays it.
-/// Chooses the policy <see cref="DeriveIGameEventAttribute"/> generates.
+/// The owner of the subject entity sends the event and runs it; every other machine plays it when it arrives.
+/// Picks the policy that <see cref="DeriveIGameEventAttribute"/> generates for the event.
 /// </summary>
 /// <param name="subject">The field holding the subject entity, written with <c>nameof</c>: an <c>Entity</c> or a
 /// <c>RawEntity</c>.</param>

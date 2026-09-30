@@ -59,8 +59,8 @@ internal sealed class DeriveIGameEventGenerator : IIncrementalGenerator
         if (derive == null && discriminators.Length == 0)
             return null;
 
-        // NOTE: A partial struct has one syntax node per part; only the part carrying [DeriveIGameEvent] emits, or,
-        // without it, the part carrying the discriminator, to report the missing attribute once.
+        // NOTE: Each part of a partial struct is its own syntax node, and each would emit. Only the part carrying
+        // [DeriveIGameEvent] emits; without it, the part carrying the discriminator does, so the error appears once.
         var attributeSyntax = (derive ?? discriminators[0]).ApplicationSyntaxReference?.GetSyntax(ct);
         if (attributeSyntax == null || !attributeSyntax.Ancestors().Contains(node))
             return null;

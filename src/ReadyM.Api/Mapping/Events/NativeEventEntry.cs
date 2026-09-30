@@ -4,7 +4,7 @@ using ReadyM.Api.Interop;
 
 namespace ReadyM.Api.Mapping.Events;
 
-/// <summary>One native event's typed way into the manager, found by the event's native id.</summary>
+/// <summary>Reads one native event type from a pointer and calls the manager with it; looked up by event id.</summary>
 internal abstract class NativeEventEntry
 {
     public abstract bool NotifyEcsIfApplicable(IMappedEventManager manager, IntPtr data);

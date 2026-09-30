@@ -7,7 +7,7 @@ namespace ReadyM.Api.Generators.Tests;
 
 public sealed class DeriveIGameEventGeneratorTests(ITestOutputHelper output)
 {
-    // Stand-ins for the real contexts, under their real names, so a test decides who owns what and who is master.
+    // Fakes of the real contexts, with the same names, so each test sets who owns the subject and who is master.
     private const string ContextStubs = """
 #pragma warning disable CS0436
 namespace ReadyM.Api.Multiplayer.GameEvents

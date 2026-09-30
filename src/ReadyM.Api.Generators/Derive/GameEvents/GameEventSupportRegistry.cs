@@ -3,7 +3,8 @@ using System.Linq;
 
 namespace ReadyM.Api.Generators.Derive.GameEvents;
 
-/// <summary>The closed catalog of discriminators. An event outside it writes its <c>IGameEvent</c> by hand.</summary>
+/// <summary>Every discriminator the generator knows; the list is closed. An event whose policy fits none of them
+/// writes its <c>IGameEvent</c> by hand.</summary>
 internal static class GameEventSupportRegistry
 {
     private sealed class Visitor(IReadOnlyList<IGameEventSupportImpl> impls)

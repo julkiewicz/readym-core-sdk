@@ -37,7 +37,7 @@ internal interface IMappedEventManager
     bool InvokeInGameIfApplicable<TEvent>(in TEvent ev)
         where TEvent : struct, IGameEvent;
 
-    /// The event's own answers, for call sites that ask without acting.
+    /// The event policy's answers, for call sites that need one without notifying or invoking anything.
     GameEventNotifyResult CanGameEventNotifyEcs<TEvent>(in TEvent ev)
         where TEvent : struct, IGameEvent;
 

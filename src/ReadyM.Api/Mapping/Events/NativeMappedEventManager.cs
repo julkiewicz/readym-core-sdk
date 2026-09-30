@@ -54,7 +54,7 @@ internal class NativeMappedEventManager : MappedEventManager, ITypeRegistryCallb
     public void AcceptEvent<T>(INativeTypeRegistry registry)
         where T : struct, IGameEvent
     {
-        // NOTE: The native registry sets each event's interop id before accepting it; boxed once, at start-up.
+        // NOTE: The native registry has set the event's interop id by now; reading it boxes once per type, at start-up.
         if ((object)default(T) is not IInteropType interop)
             throw new InvalidOperationException($"Native game event {typeof(T).FullName} is not an interop type");
 

@@ -2,7 +2,7 @@ using System.Text;
 
 namespace ReadyM.Api.Generators.Derive.GameEvents;
 
-/// <summary>What emitted policy code may touch: the result values, the contexts, and the event's subject.</summary>
+/// <summary>The expressions emitted policy code is built from: result values, context lookups, the subject.</summary>
 internal sealed class CSharpEmitGameEventContext(StringBuilder sb, GameEventModel model)
 {
     private const string EventsNamespace = "global::ReadyM.Api.Mapping.Events";
