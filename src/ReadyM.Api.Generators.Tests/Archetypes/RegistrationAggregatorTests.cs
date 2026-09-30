@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using ReadyM.Api.Generators.Archetypes;
 using ReadyM.Api.Generators.Services;
 using Xunit;
@@ -51,6 +51,12 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
             [CreateHandler(typeof(Parcel))]
             private void Track(Parcel parcel) { }
         }
+
+        [ModEntry]
+        public sealed partial class Entry
+        {
+            private void Start() { }
+        }
         """;
 
     [Fact]
@@ -61,6 +67,38 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
     [Fact]
     public void It_names_what_a_shape_handles_for_itself()
         => Assert.Contains("global::Mod.Stamped.OnCreatedRegistration.Register();", Generated(Source));
+
+    /// <summary>
+    /// The entry point most of all: it is what builds the mod, so leaving it out starts nothing.
+    /// </summary>
+    /// <remarks>
+    /// Its module initializer only fires once something in the assembly is touched, and the entry
+    /// point is the first thing that would touch it, so nothing else would ever run it.
+    /// </remarks>
+    [Fact]
+    public void It_names_the_mods_entry_point()
+        => Assert.Contains("global::Mod.Entry.Registration.Register();", Generated(Source));
+
+    /// Nothing is written for an entry point the analyzer refuses, so naming it would not compile.
+    [Fact]
+    public void It_leaves_out_an_entry_point_that_was_refused()
+        => Assert.DoesNotContain("Unsealed", Generated("""
+            using ReadyM.SDK.Attributes;
+
+            namespace Mod;
+
+            [Archetype]
+            public readonly partial struct Subject
+            {
+                public partial int Mark { get; set; }
+            }
+
+            [ModEntry]
+            public partial class Unsealed
+            {
+                private void Start() { }
+            }
+            """));
 
     /// Nothing is written for a service the analyzer refuses, so naming it would not compile.
     [Fact]

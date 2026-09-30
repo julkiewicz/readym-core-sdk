@@ -19,14 +19,25 @@ public static class DependencyInjectionExtensions
 {
     /// Register data mappings declared in all loaded mods.
     /// A game calls this once its mods are loaded and before anything reaches a sync point.
-    public static void ApplyShapeMappings(this IDependencyContainer container)
+    /// <returns>How many sets of mappings were collected, which a game can log.</returns>
+    /// <remarks>
+    /// Collected once, so every mod has to have registered its own by the time this runs. A mod
+    /// entered through [ModEntry] registers them in Start, which is later than it used to be.
+    /// </remarks>
+    public static int ApplyShapeMappings(this IDependencyContainer container)
     {
         var mappings = new ShapeMappingRegistry();
+        var collected = 0;
 
         foreach (var declared in container.ResolveAll<IShapeMappings>())
+        {
             declared.Register(mappings);
+            collected++;
+        }
 
         SyncExtensions.Use(mappings);
+
+        return collected;
     }
 
     public static void ApplyArchetypeExtensions(this IDependencyContainer container)

@@ -38,11 +38,18 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
             static (node, _) => node is ClassDeclarationSyntax,
             ReadService);
 
-        var all = archetypes.Collect().Combine(mixins.Collect()).Combine(services.Collect());
+        var entries = context.SyntaxProvider.ForAttributeWithMetadataName(
+            ArchetypeNames.ModEntryAttribute,
+            static (node, _) => node is ClassDeclarationSyntax,
+            ReadModEntry);
+
+        var all = archetypes.Collect().Combine(mixins.Collect())
+            .Combine(services.Collect()).Combine(entries.Collect());
 
         context.RegisterSourceOutput(all, static (spc, found) =>
         {
-            var names = found.Left.Left.Concat(found.Left.Right).Concat(found.Right)
+            var names = found.Left.Left.Left.Concat(found.Left.Left.Right)
+                .Concat(found.Left.Right).Concat(found.Right)
                 .SelectMany(entry => entry)
                 .Distinct()
                 .OrderBy(name => name, System.StringComparer.Ordinal)
@@ -88,6 +95,21 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
                 found.Add($"{prefix}{symbol.Name}.{handler.Name}DeleteRegistration");
 
         return found.ToImmutable();
+    }
+
+    /// The registration a mod's entry point produces, unless the analyzer refuses the class.
+    private static ImmutableArray<string> ReadModEntry(GeneratorAttributeSyntaxContext context, CancellationToken ct)
+    {
+        if (context.TargetSymbol is not INamedTypeSymbol { ContainingType: null } symbol)
+            return [];
+
+        if (Mods.ModEntryShape.Read(symbol).Problems.Any(problem => problem.Severity == DiagnosticSeverity.Error))
+            return [];
+
+        var ns = ArchetypeNames.NamespaceOf(symbol);
+        var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
+
+        return [$"{prefix}{symbol.Name}.Registration"];
     }
 
     /// <summary>The registration a service produces, unless the analyzer refuses the class.</summary>

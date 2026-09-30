@@ -37,6 +37,7 @@ public static class ModEntryRegistry
     public static int StartAll(
         IEnumerable<(Assembly Assembly, string Directory)> loaded,
         IDependencyContainer container,
+        Action<Assembly>? onStarted = null,
         Action<Assembly, Exception>? onFailed = null)
     {
         var started = 0;
@@ -45,8 +46,11 @@ public static class ModEntryRegistry
         {
             try
             {
-                if (Start(assembly, container, directory) is not null)
-                    started++;
+                if (Start(assembly, container, directory) is null)
+                    continue;
+
+                started++;
+                onStarted?.Invoke(assembly);
             }
             catch (Exception ex)
             {
