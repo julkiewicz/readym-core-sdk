@@ -179,3 +179,14 @@ Analogous to CreateHandler, but runs immediately before a component of a given s
 Client-side handlers run for everyone, regardless of ownership.
 
 A delete queued inside a query is held until the loop ends, and the handlers run when it is applied.
+
+### ModEntry
+
+A `sealed partial class` annotated with `[ModEntry]` is the entry point of a mod.
+
+It may accept constructor parameters filled from DI. 
+
+An optional `void Start()` method is called when the mod is loaded, 
+after DI registers types from the current assembly, so we can inject config classes or services.
+
+A `public string ModDirectory { get; }` property is available, which points to the mod's root directory on disk.

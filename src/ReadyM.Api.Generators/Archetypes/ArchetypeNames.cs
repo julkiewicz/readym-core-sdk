@@ -58,6 +58,8 @@ internal static class ArchetypeNames
 
     public const string ServiceAttribute = Namespace + ".ServiceAttribute";
 
+    public const string ModEntryAttribute = Namespace + ".ModEntryAttribute";
+
     public const string UpdatingService = "global::ReadyM.SDK.Services.IUpdatingService";
 
     public const string ServiceRegistry = "global::ReadyM.SDK.Services.ServiceRegistry";
@@ -67,6 +69,10 @@ internal static class ArchetypeNames
     public const string HostedService = "global::ReadyM.Api.DI.IHostedService";
 
     public const string Disposable = "global::System.IDisposable";
+
+    public const string ModEntry = "global::ReadyM.SDK.Mods.IModEntry";
+
+    public const string ModEntryRegistry = "global::ReadyM.SDK.Mods.ModEntryRegistry";
 
     public const string CreateHandlers = "global::ReadyM.SDK.Archetypes.CreateHandlerRegistry";
 
