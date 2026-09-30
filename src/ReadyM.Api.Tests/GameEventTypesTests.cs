@@ -1,4 +1,6 @@
+using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.Mapping.Events;
+using ReadyM.Api.Tests.TestEvents;
 
 namespace ReadyM.Api.Tests;
 
@@ -39,67 +41,83 @@ public class GameEventTypesTests
         Assert.Equal(rejected, result.IsRejected());
     }
 
-    private readonly struct FirstContext(int value)
+    private sealed class Registration(Action<IAllTypeRegistry> register) : IAllTypeRegistration
     {
-        public int Value { get; } = value;
+        public void Register(IAllTypeRegistry registry) => register(registry);
     }
 
-    private readonly struct SecondContext(string name)
+    private sealed class Source(params object[] contexts) : IGameEventContextSource
     {
-        public string Name { get; } = name;
+        public List<Type> Asked { get; } = [];
+
+        public T Get<T>() where T : class
+        {
+            Asked.Add(typeof(T));
+            return contexts.OfType<T>().FirstOrDefault()
+                   ?? throw new InvalidOperationException($"No {typeof(T).Name} in the test source");
+        }
     }
 
-    private sealed class Registration(Action<GameEventContextRegistry> register) : IGameEventContextRegistration
+    private static GameEventContextRegistry Build(Source source, Action<IAllTypeRegistry> register)
+        => new(new AllTypeRegistry([new Registration(register)]), source);
+
+    [Fact]
+    public void ContextRegistryHoldsWhatTheEventsRequireEachGotOnce()
     {
-        public void Register(GameEventContextRegistry registry) => register(registry);
+        var first = new FirstContext(7);
+        var second = new SecondContext("second");
+        var source = new Source(first, second);
+
+        var registry = Build(source, r =>
+        {
+            r.RegisterEvent<NeedsFirstEvent>();
+            r.RegisterEvent<NeedsBothEvent>();
+        });
+
+        Assert.Same(first, registry.GetContext<FirstContext>());
+        Assert.Same(second, registry.GetContext<SecondContext>());
+        Assert.Equal([typeof(FirstContext), typeof(SecondContext)], source.Asked);
     }
 
     [Fact]
-    public void ContextRegistryHandsBackEachRegisteredContext()
+    public void ContextRegistryIgnoresComponentsAndEventsThatRequireNothing()
     {
-        var registry = new GameEventContextRegistry([
-            new Registration(r => r.Register(new FirstContext(7))),
-            new Registration(r => r.Register(new SecondContext("second"))),
-        ]);
+        var source = new Source();
 
-        Assert.Equal(7, registry.GetContext<FirstContext>().Value);
-        Assert.Equal("second", registry.GetContext<SecondContext>().Name);
+        var registry = Build(source, r => r.RegisterEvent<ManagedEvent>());
+
+        Assert.Empty(source.Asked);
+        var error = Assert.Throws<InvalidOperationException>(() => registry.GetContext<FirstContext>());
+        Assert.Contains(nameof(FirstContext), error.Message);
+    }
+
+    [Fact]
+    public void ContextRegistryFailsNamingTheEventWhenATypeCannotBeProvided()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Build(new Source(new FirstContext(1)), r =>
+        {
+            r.RegisterEvent<NeedsFirstEvent>();
+            r.RegisterEvent<NeedsBothEvent>();
+        }));
+
+        Assert.Contains(nameof(NeedsBothEvent), error.Message);
+        Assert.Contains(nameof(SecondContext), error.Message);
     }
 
     [Fact]
     public void ContextRegistriesAreIndependent()
     {
-        var one = new GameEventContextRegistry([new Registration(r => r.Register(new FirstContext(1)))]);
-        var two = new GameEventContextRegistry([new Registration(r => r.Register(new FirstContext(2)))]);
+        var one = Build(new Source(new FirstContext(1)), r => r.RegisterEvent<NeedsFirstEvent>());
+        var two = Build(new Source(new FirstContext(2)), r => r.RegisterEvent<NeedsFirstEvent>());
 
         Assert.Equal(1, one.GetContext<FirstContext>().Value);
         Assert.Equal(2, two.GetContext<FirstContext>().Value);
-        Assert.Throws<InvalidOperationException>(() => two.GetContext<SecondContext>());
-    }
-
-    [Fact]
-    public void ContextRegistryRefusesAMissingContext()
-    {
-        var registry = new GameEventContextRegistry([new Registration(r => r.Register(new FirstContext(1)))]);
-
-        var error = Assert.Throws<InvalidOperationException>(() => registry.GetContext<SecondContext>());
-        Assert.Contains(nameof(SecondContext), error.Message);
-    }
-
-    [Fact]
-    public void ContextRegistryRefusesTheSameContextTwice()
-    {
-        var error = Assert.Throws<InvalidOperationException>(() => new GameEventContextRegistry([
-            new Registration(r => r.Register(new FirstContext(1))),
-            new Registration(r => r.Register(new FirstContext(2))),
-        ]));
-        Assert.Contains(nameof(FirstContext), error.Message);
     }
 
     [Fact]
     public void GettingAContextDoesNotAllocate()
     {
-        var registry = new GameEventContextRegistry([new Registration(r => r.Register(new FirstContext(3)))]);
+        var registry = Build(new Source(new FirstContext(3)), r => r.RegisterEvent<NeedsFirstEvent>());
         var sum = registry.GetContext<FirstContext>().Value;
 
         var before = GC.GetAllocatedBytesForCurrentThread();
@@ -112,4 +130,29 @@ public class GameEventTypesTests
         Assert.Equal(0, after - before);
         Assert.Equal(3 * 1001, sum);
     }
+}
+
+internal sealed class FirstContext(int value)
+{
+    public int Value { get; } = value;
+}
+
+internal sealed class SecondContext(string name)
+{
+    public string Name { get; } = name;
+}
+
+/// Hand-written events naming what they read; the generator writes their AcceptContexts.
+internal partial struct NeedsFirstEvent : IGameEvent, IGameEventRequiresContext<FirstContext>
+{
+    public GameEventNotifyResult CanGameEventNotifyEcs(GameEventContextRegistry contexts) => GameEventNotifyResult.Notify;
+    public GameEventResult CanGameEventRunLocally(GameEventContextRegistry contexts) => GameEventResult.RunAll;
+    public GameEventResult CanEcsInvokeGameEvent(GameEventContextRegistry contexts) => GameEventResult.RunAll;
+}
+
+internal partial struct NeedsBothEvent : IGameEvent, IGameEventRequiresContext<FirstContext>, IGameEventRequiresContext<SecondContext>
+{
+    public GameEventNotifyResult CanGameEventNotifyEcs(GameEventContextRegistry contexts) => GameEventNotifyResult.Notify;
+    public GameEventResult CanGameEventRunLocally(GameEventContextRegistry contexts) => GameEventResult.RunAll;
+    public GameEventResult CanEcsInvokeGameEvent(GameEventContextRegistry contexts) => GameEventResult.RunAll;
 }

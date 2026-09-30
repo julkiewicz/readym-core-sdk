@@ -2,6 +2,7 @@
 using DryIoc;
 using Friflo.Engine.ECS;
 using Microsoft.Extensions.Logging;
+using ReadyM.Api.DI;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Helpers;
@@ -42,7 +43,7 @@ public class MappedEventManagerTests
         );
 
         container.Register<DataSideChannel>();
-        container.Register<GameEventContextRegistry>();
+        container.RegisterInstance(new GameEventContextRegistry(new AllTypeRegistry([]), new ResolverGameEventContextSource(container)));
 
         var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(new FailOnErrorLoggerProvider()));
         container.RegisterInstance(loggerFactory);

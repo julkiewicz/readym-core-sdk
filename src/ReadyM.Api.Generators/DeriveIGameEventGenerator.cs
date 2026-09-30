@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -10,32 +11,58 @@ namespace ReadyM.Api.Generators;
 
 /// <summary>
 /// Generates the <c>IGameEvent</c> methods of an event marked <c>[DeriveIGameEvent]</c>, with the policy its
-/// discriminator attribute chooses (<c>[OwnershipBased]</c> and the rest of <see cref="GameEventSupportRegistry"/>).
-/// An event without <c>[DeriveIGameEvent]</c> writes the methods by hand.
+/// discriminator attribute chooses (<c>[OwnershipBased]</c> and the rest of <see cref="GameEventSupportRegistry"/>),
+/// and the <c>IGameEventRequiresContext</c> markers for what those methods read. An event without
+/// <c>[DeriveIGameEvent]</c> writes the methods and the markers by hand. Every event with markers gets its
+/// <c>AcceptContexts</c>, and every assembly with events gets one <c>GameEventRegistration</c> listing them.
 /// </summary>
 [Generator]
 internal sealed class DeriveIGameEventGenerator : IIncrementalGenerator
 {
     private const string AttributeNamespace = "ReadyM.Api.Mapping.Events";
     private const string DeriveAttributeName = "DeriveIGameEventAttribute";
+    private const string RequiresContextName = "IGameEventRequiresContext";
+    private const string GameEventName = "IGameEvent";
+    private const string RegistrationMetadataName = "ReadyM.Api.ECS.Registry.IAllTypeRegistration";
     private const string EntityType = "Friflo.Engine.ECS.Entity";
     private const string RawEntityType = "Friflo.Engine.ECS.RawEntity";
+    private const string Events = "global::ReadyM.Api.Mapping.Events";
+
+    /// <summary>What one struct contributes: the part that emits, and whether the assembly's registration lists it.</summary>
+    private sealed class EventInfo(string fullName, GameEventModel? derived, IReadOnlyList<string> declaredRequirements, bool emits, bool registered, string? error)
+    {
+        public string FullName { get; } = fullName;
+        public GameEventModel? Derived { get; } = derived;
+        public IReadOnlyList<string> DeclaredRequirements { get; } = declaredRequirements;
+        public bool Emits { get; } = emits;
+        public bool Registered { get; } = registered;
+        public string? Error { get; } = error;
+    }
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var models = context.SyntaxProvider
+        var infos = context.SyntaxProvider
             .CreateSyntaxProvider(Predicate, Transform)
-            .Where(m => m is not null);
+            .Where(i => i is not null);
 
-        context.RegisterSourceOutput(models, (spc, model) =>
+        context.RegisterSourceOutput(infos.Where(i => i!.Emits), (spc, info) =>
         {
-            var name = model!.Event.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", "");
-            spc.AddSource($"{name}.GameEvent.g.cs", Emit(model));
+            var name = info!.FullName.Replace("global::", "");
+            spc.AddSource($"{name}.GameEvent.g.cs", Emit(info));
+        });
+
+        var registration = infos.Where(i => i!.Registered).Select((i, _) => i!.FullName).Collect()
+            .Combine(context.CompilationProvider);
+        context.RegisterSourceOutput(registration, (spc, pair) =>
+        {
+            var source = EmitRegistration(pair.Left, pair.Right);
+            if (source != null)
+                spc.AddSource("GameEventRegistration.g.cs", source);
         });
     }
 
     private static bool Predicate(SyntaxNode node, CancellationToken _)
-        => node is StructDeclarationSyntax { AttributeLists.Count: > 0 };
+        => node is StructDeclarationSyntax { AttributeLists.Count: > 0 } or StructDeclarationSyntax { BaseList: not null };
 
     private static bool IsDerive(AttributeData attribute)
         => attribute.AttributeClass is { } type
@@ -47,24 +74,52 @@ internal sealed class DeriveIGameEventGenerator : IIncrementalGenerator
            && type.ContainingNamespace.ToDisplayString() == AttributeNamespace
            && GameEventSupportRegistry.DiscriminatorNames.Contains(type.Name);
 
-    private static GameEventModel? Transform(GeneratorSyntaxContext context, CancellationToken ct)
+    private static bool IsEventsInterface(INamedTypeSymbol type, string name)
+        => type.Name == name && type.ContainingNamespace.ToDisplayString() == AttributeNamespace;
+
+    private static EventInfo? Transform(GeneratorSyntaxContext context, CancellationToken ct)
     {
         var node = (StructDeclarationSyntax)context.Node;
         if (context.SemanticModel.GetDeclaredSymbol(node, ct) is not INamedTypeSymbol symbol)
             return null;
 
+        // NOTE: Each part of a partial struct is its own syntax node, and each would emit. Only the first part in
+        // declaration order emits and registers, so the output and any error appear once.
+        if (symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax(ct) != node)
+            return null;
+
+        var fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var declared = symbol.Interfaces
+            .Where(i => i.IsGenericType && IsEventsInterface(i, RequiresContextName))
+            .Select(i => i.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            .ToArray();
+
         var attributes = symbol.GetAttributes();
         var derive = attributes.FirstOrDefault(IsDerive);
         var discriminators = attributes.Where(IsDiscriminator).ToArray();
+        var topLevel = symbol.ContainingType == null;
+
         if (derive == null && discriminators.Length == 0)
-            return null;
+        {
+            var handWritten = symbol.AllInterfaces.Any(i => IsEventsInterface(i, GameEventName));
+            if (!handWritten && declared.Length == 0)
+                return null;
 
-        // NOTE: Each part of a partial struct is its own syntax node, and each would emit. Only the part carrying
-        // [DeriveIGameEvent] emits; without it, the part carrying the discriminator does, so the error appears once.
-        var attributeSyntax = (derive ?? discriminators[0]).ApplicationSyntaxReference?.GetSyntax(ct);
-        if (attributeSyntax == null || !attributeSyntax.Ancestors().Contains(node))
-            return null;
+            string? error = null;
+            if (declared.Length > 0 && !topLevel)
+                error = $"{symbol.ToDisplayString()} is nested in {symbol.ContainingType!.ToDisplayString()}; an event that requires contexts must be a top-level struct.";
+            else if (declared.Length > 0 && !node.Modifiers.Any(m => m.Text == "partial"))
+                error = $"{symbol.ToDisplayString()} requires contexts but is not partial; its AcceptContexts is generated.";
 
+            return new EventInfo(fullName, null, declared, emits: declared.Length > 0, registered: handWritten && topLevel, error);
+        }
+
+        var model = TransformDerived(symbol, derive, discriminators, ct);
+        return new EventInfo(fullName, model, declared, emits: true, registered: topLevel && model.Errors.Count == 0, null);
+    }
+
+    private static GameEventModel TransformDerived(INamedTypeSymbol symbol, AttributeData? derive, AttributeData[] discriminators, CancellationToken ct)
+    {
         var errors = new List<string>();
         var display = symbol.ToDisplayString();
 
@@ -120,48 +175,110 @@ internal sealed class DeriveIGameEventGenerator : IIncrementalGenerator
         return field;
     }
 
-    private static string Emit(GameEventModel model)
+    private static string Emit(EventInfo info)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
         sb.AppendLine("#nullable enable");
 
-        if (model.Errors.Count > 0)
+        var errors = new List<string>(info.Derived?.Errors ?? System.Array.Empty<string>());
+        if (info.Error != null)
+            errors.Add(info.Error);
+        if (errors.Count > 0)
         {
-            foreach (var error in model.Errors)
+            foreach (var error in errors)
                 sb.AppendLine($"#error Game event {error}");
             return sb.ToString();
         }
 
-        var impl = GameEventSupportRegistry.SupportVisitor.GetImpl(model, fallback: false);
-        var context = new CSharpEmitGameEventContext(sb, model);
-        var ns = model.Event.ContainingNamespace;
-        if (!ns.IsGlobalNamespace)
-            sb.AppendLine($"namespace {ns.ToDisplayString()};").AppendLine();
+        var model = info.Derived;
+        var symbol = model?.Event;
+        var impl = model != null ? GameEventSupportRegistry.SupportVisitor.GetImpl(model, fallback: false) : null;
+        var generated = impl?.RequiredContexts ?? System.Array.Empty<string>();
+        var requirements = generated.Concat(info.DeclaredRequirements).Distinct().ToArray();
 
-        var readOnly = model.Event.IsReadOnly ? "readonly " : "";
-        const string events = "global::ReadyM.Api.Mapping.Events";
-        const string parameter = $"{events}.GameEventContextRegistry {CSharpEmitGameEventContext.ContextsParameter}";
+        var ns = info.FullName.Replace("global::", "");
+        var dot = ns.LastIndexOf('.');
+        var typeName = dot < 0 ? ns : ns.Substring(dot + 1);
+        if (dot >= 0)
+            sb.AppendLine($"namespace {ns.Substring(0, dot)};").AppendLine();
 
-        sb.AppendLine($"{readOnly}partial struct {model.Event.Name} : {events}.IGameEvent");
+        var readOnly = symbol?.IsReadOnly == true ? "readonly " : "";
+        var bases = new List<string>();
+        if (impl != null)
+            bases.Add($"{Events}.IGameEvent");
+        bases.AddRange(generated.Select(r => $"{Events}.IGameEventRequiresContext<{r}>"));
+
+        sb.AppendLine(bases.Count > 0 ? $"{readOnly}partial struct {typeName} : {string.Join(", ", bases)}" : $"{readOnly}partial struct {typeName}");
         sb.AppendLine("{");
 
-        sb.AppendLine($"    public {events}.GameEventNotifyResult CanGameEventNotifyEcs({parameter})");
-        sb.Append("        => ");
-        impl.EmitCanGameEventNotifyEcsBody(context);
-        sb.AppendLine(";").AppendLine();
+        if (impl != null)
+        {
+            var context = new CSharpEmitGameEventContext(sb, model!);
+            const string parameter = $"{Events}.GameEventContextRegistry {CSharpEmitGameEventContext.ContextsParameter}";
 
-        sb.AppendLine($"    public {events}.GameEventResult CanGameEventRunLocally({parameter})");
-        sb.Append("        => ");
-        impl.EmitCanGameEventRunLocallyBody(context);
-        sb.AppendLine(";").AppendLine();
+            sb.AppendLine($"    public {Events}.GameEventNotifyResult CanGameEventNotifyEcs({parameter})");
+            sb.Append("        => ");
+            impl.EmitCanGameEventNotifyEcsBody(context);
+            sb.AppendLine(";").AppendLine();
 
-        sb.AppendLine($"    public {events}.GameEventResult CanEcsInvokeGameEvent({parameter})");
-        sb.Append("        => ");
-        impl.EmitCanEcsInvokeGameEventBody(context);
-        sb.AppendLine(";");
+            sb.AppendLine($"    public {Events}.GameEventResult CanGameEventRunLocally({parameter})");
+            sb.Append("        => ");
+            impl.EmitCanGameEventRunLocallyBody(context);
+            sb.AppendLine(";").AppendLine();
+
+            sb.AppendLine($"    public {Events}.GameEventResult CanEcsInvokeGameEvent({parameter})");
+            sb.Append("        => ");
+            impl.EmitCanEcsInvokeGameEventBody(context);
+            sb.AppendLine(";");
+        }
+
+        if (requirements.Length > 0)
+        {
+            if (impl != null)
+                sb.AppendLine();
+            sb.AppendLine($"    void {Events}.IGameEventRequiresContextBase.AcceptContexts({Events}.IGameEventContextVisitor visitor)");
+            sb.AppendLine("    {");
+            foreach (var requirement in requirements)
+                sb.AppendLine($"        visitor.Accept<{requirement}>();");
+            sb.AppendLine("    }");
+        }
 
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    private static string? EmitRegistration(ImmutableArray<string> events, Compilation compilation)
+    {
+        if (events.IsEmpty)
+            return null;
+
+        // NOTE: The registration interface is internal to ReadyM.Api; an assembly that cannot see it registers nothing.
+        var registration = compilation.GetTypeByMetadataName(RegistrationMetadataName);
+        if (registration == null || !compilation.IsSymbolAccessibleWithin(registration, compilation.Assembly))
+            return null;
+
+        var ns = string.Join(".", (compilation.AssemblyName ?? "Events").Split('.').Select(Identifier));
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine($"namespace {ns};").AppendLine();
+        sb.AppendLine("/// <summary>Registers every game event this assembly compiles.</summary>");
+        sb.AppendLine("internal sealed class GameEventRegistration : global::ReadyM.Api.ECS.Registry.IAllTypeRegistration");
+        sb.AppendLine("{");
+        sb.AppendLine("    public void Register(global::ReadyM.Api.ECS.Registry.IAllTypeRegistry registry)");
+        sb.AppendLine("    {");
+        foreach (var name in events.Distinct().OrderBy(n => n, System.StringComparer.Ordinal))
+            sb.AppendLine($"        registry.RegisterEvent<{name}>();");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    private static string Identifier(string part)
+    {
+        var chars = part.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray();
+        var id = new string(chars);
+        return id.Length == 0 || char.IsDigit(id[0]) ? "_" + id : id;
     }
 }

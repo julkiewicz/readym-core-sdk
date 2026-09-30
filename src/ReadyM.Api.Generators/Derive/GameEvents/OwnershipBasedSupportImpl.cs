@@ -1,6 +1,7 @@
 namespace ReadyM.Api.Generators.Derive.GameEvents;
 
-internal sealed class OwnershipBasedSupportImpl() : GameEventSupportImplBase("OwnershipBasedAttribute", needsSubject: true)
+internal sealed class OwnershipBasedSupportImpl() : GameEventSupportImplBase(
+    "OwnershipBasedAttribute", needsSubject: true, CSharpEmitGameEventContext.OwnershipManager)
 {
     public override void EmitCanGameEventNotifyEcsBody(CSharpEmitGameEventContext context)
         => context.Append(context.OwnsSubject + " ? " + Notify("Notify") + " : " + Notify("DontNotify"));

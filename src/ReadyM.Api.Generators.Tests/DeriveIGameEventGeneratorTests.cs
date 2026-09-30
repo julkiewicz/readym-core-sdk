@@ -7,21 +7,19 @@ namespace ReadyM.Api.Generators.Tests;
 
 public sealed class DeriveIGameEventGeneratorTests(ITestOutputHelper output)
 {
-    // Fakes of the real contexts, with the same names, so each test sets who owns the subject and who is master.
+    // Fakes of what the generated methods read, with the real names, so each test sets who owns the subject and
+    // who is master.
     private const string ContextStubs = """
 #pragma warning disable CS0436
-namespace ReadyM.Api.Multiplayer.GameEvents
+namespace ReadyM.Relay.Client.State
 {
-    public readonly struct OwnershipContext(bool owns)
+    public sealed class ClientOwnershipManager(bool owns)
     {
         public bool OwnsEntity(global::Friflo.Engine.ECS.Entity entity) => owns;
         public bool OwnsEntity(global::Friflo.Engine.ECS.RawEntity entity) => owns;
     }
-}
 
-namespace ReadyM.Relay.Client.GameEvents
-{
-    public readonly struct MasterClientContext(bool master)
+    public sealed class ClientState(bool master)
     {
         public bool IsMasterClient => master;
     }
@@ -57,18 +55,24 @@ public partial struct RunOnMaster { public RawEntity Owner; }
 
 public static class Probe
 {
-    private sealed class Registration(bool owns, bool master) : IGameEventContextRegistration
+    private sealed class Registration(System.Action<ReadyM.Api.ECS.Registry.IAllTypeRegistry> register)
+        : ReadyM.Api.ECS.Registry.IAllTypeRegistration
     {
-        public void Register(GameEventContextRegistry registry)
-        {
-            registry.Register(new ReadyM.Api.Multiplayer.GameEvents.OwnershipContext(owns));
-            registry.Register(new ReadyM.Relay.Client.GameEvents.MasterClientContext(master));
-        }
+        public void Register(ReadyM.Api.ECS.Registry.IAllTypeRegistry registry) => register(registry);
+    }
+
+    private sealed class Source(bool owns, bool master) : IGameEventContextSource
+    {
+        public T Get<T>() where T : class
+            => typeof(T) == typeof(ReadyM.Relay.Client.State.ClientOwnershipManager)
+                ? (T)(object)new ReadyM.Relay.Client.State.ClientOwnershipManager(owns)
+                : (T)(object)new ReadyM.Relay.Client.State.ClientState(master);
     }
 
     public static string Ask<TEvent>(TEvent ev, bool owns, bool master) where TEvent : struct, IGameEvent
     {
-        var contexts = new GameEventContextRegistry([new Registration(owns, master)]);
+        var types = new ReadyM.Api.ECS.Registry.AllTypeRegistry([new Registration(r => r.RegisterEvent<TEvent>())]);
+        var contexts = new GameEventContextRegistry(types, new Source(owns, master));
         return $"{ev.CanGameEventNotifyEcs(contexts)} {ev.CanGameEventRunLocally(contexts)} {ev.CanEcsInvokeGameEvent(contexts)}";
     }
 
@@ -88,7 +92,7 @@ public static class Probe
 
     private Func<string, bool, bool, string> CompileProbe()
     {
-        var result = SourceGeneratorTestHelper.RunGenerator<DeriveIGameEventGenerator>(
+        var result = SourceGeneratorTestHelper.RunGeneratorSeeingInternals<DeriveIGameEventGenerator>(
             [("Stubs.cs", ContextStubs), ("Events.cs", Events)], output);
 
         var errors = result.OutputDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
@@ -141,7 +145,7 @@ public static class Probe
     [Fact]
     public void GeneratedPartOfAReadonlyStructIsReadonly()
     {
-        var result = SourceGeneratorTestHelper.RunGenerator<DeriveIGameEventGenerator>(
+        var result = SourceGeneratorTestHelper.RunGeneratorSeeingInternals<DeriveIGameEventGenerator>(
             [("Stubs.cs", ContextStubs), ("Events.cs", Events)], output);
 
         var master = result.GeneratedSyntaxTrees.Single(t => t.FilePath.Contains("GameEventTests.Master."));
@@ -152,7 +156,7 @@ public static class Probe
 
     private string[] GeneratorErrors(string eventSource)
     {
-        var result = SourceGeneratorTestHelper.RunGenerator<DeriveIGameEventGenerator>(
+        var result = SourceGeneratorTestHelper.RunGeneratorSeeingInternals<DeriveIGameEventGenerator>(
             [("Stubs.cs", ContextStubs), ("Event.cs", eventSource)], output);
         return result.OutputDiagnostics
             .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -236,6 +240,88 @@ public static class Use
 }
 """);
         Assert.Contains(errors, e => e.Contains("Plain") && e.Contains("IGameEvent"));
+    }
+
+    private static string Generated(SourceGeneratorTestHelper.GeneratorRunResult result, string name)
+        => result.GeneratedSyntaxTrees.Single(t => t.FilePath.Contains(name)).ToString();
+
+    [Fact]
+    public void EachDiscriminatorAddsTheMarkersOfWhatItsMethodsRead()
+    {
+        var result = SourceGeneratorTestHelper.RunGeneratorSeeingInternals<DeriveIGameEventGenerator>(
+            [("Stubs.cs", ContextStubs), ("Events.cs", Events)], output);
+
+        const string owner = "global::ReadyM.Relay.Client.State.ClientOwnershipManager";
+        const string state = "global::ReadyM.Relay.Client.State.ClientState";
+        var expected = new (string Event, string[] Requires)[]
+        {
+            ("OwnershipRaw", [owner]), ("OwnershipEntity", [owner]), ("Master", [state]), ("RunOnMaster", [owner, state]),
+            ("Always", []), ("ToEcsOnly", []), ("ToGameOnly", []),
+        };
+
+        foreach (var (name, requires) in expected)
+        {
+            var code = Generated(result, $"GameEventTests.{name}.");
+            var markers = System.Text.RegularExpressions.Regex.Matches(code, @"IGameEventRequiresContext<([^>]+)>")
+                .Select(m => m.Groups[1].Value).ToArray();
+            var accepted = System.Text.RegularExpressions.Regex.Matches(code, @"visitor\.Accept<([^>]+)>\(\)")
+                .Select(m => m.Groups[1].Value).ToArray();
+            Assert.True(requires.SequenceEqual(markers), $"{name}: markers {string.Join(", ", markers)}");
+            Assert.True(requires.SequenceEqual(accepted), $"{name}: accepted {string.Join(", ", accepted)}");
+            Assert.Equal(requires.Length > 0, code.Contains("AcceptContexts"));
+        }
+    }
+
+    [Fact]
+    public void TheRegistrationListsEveryGameEventOfTheAssembly()
+    {
+        var result = SourceGeneratorTestHelper.RunGeneratorSeeingInternals<DeriveIGameEventGenerator>(
+            [("Stubs.cs", ContextStubs), ("Events.cs", Events), ("HandWritten.cs", HandWrittenWithMarkers)], output);
+
+        var registered = System.Text.RegularExpressions.Regex.Matches(Generated(result, "GameEventRegistration"), @"RegisterEvent<global::GameEventTests\.(\w+)>")
+            .Select(m => m.Groups[1].Value).ToArray();
+        Assert.Equal(["Always", "HandWrittenWithMarkers", "Master", "OwnershipEntity", "OwnershipRaw", "RunOnMaster", "ToEcsOnly", "ToGameOnly"], registered);
+    }
+
+    private const string HandWrittenWithMarkers = """
+using ReadyM.Api.Mapping.Events;
+namespace GameEventTests;
+public sealed class Needed { }
+public partial struct HandWrittenWithMarkers : IGameEvent, IGameEventRequiresContext<Needed>
+{
+    public GameEventNotifyResult CanGameEventNotifyEcs(GameEventContextRegistry contexts) => GameEventNotifyResult.Notify;
+    public GameEventResult CanGameEventRunLocally(GameEventContextRegistry contexts) => GameEventResult.RunAll;
+    public GameEventResult CanEcsInvokeGameEvent(GameEventContextRegistry contexts) => GameEventResult.RunAll;
+}
+""";
+
+    [Fact]
+    public void AHandWrittenEventWithMarkersGetsOnlyItsAcceptContexts()
+    {
+        var result = SourceGeneratorTestHelper.RunGeneratorSeeingInternals<DeriveIGameEventGenerator>(
+            [("Stubs.cs", ContextStubs), ("HandWritten.cs", HandWrittenWithMarkers)], output);
+
+        Assert.Empty(result.OutputDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
+        var code = Generated(result, "GameEventTests.HandWrittenWithMarkers.");
+        Assert.Contains("visitor.Accept<global::GameEventTests.Needed>();", code);
+        Assert.DoesNotContain("CanGameEventNotifyEcs", code);
+    }
+
+    [Fact]
+    public void AHandWrittenEventWithMarkersMustBePartial()
+    {
+        var errors = GeneratorErrors("""
+using ReadyM.Api.Mapping.Events;
+namespace GameEventTests;
+public sealed class Needed { }
+public struct Broken : IGameEvent, IGameEventRequiresContext<Needed>
+{
+    public GameEventNotifyResult CanGameEventNotifyEcs(GameEventContextRegistry contexts) => GameEventNotifyResult.Notify;
+    public GameEventResult CanGameEventRunLocally(GameEventContextRegistry contexts) => GameEventResult.RunAll;
+    public GameEventResult CanEcsInvokeGameEvent(GameEventContextRegistry contexts) => GameEventResult.RunAll;
+}
+""");
+        Assert.Contains(errors, e => e.Contains("Broken") && e.Contains("not partial"));
     }
 
     [Fact]

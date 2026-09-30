@@ -1,6 +1,7 @@
 namespace ReadyM.Api.Generators.Derive.GameEvents;
 
-internal sealed class MasterClientManagedSupportImpl() : GameEventSupportImplBase("MasterClientManagedAttribute", needsSubject: false)
+internal sealed class MasterClientManagedSupportImpl() : GameEventSupportImplBase(
+    "MasterClientManagedAttribute", needsSubject: false, CSharpEmitGameEventContext.ClientState)
 {
     public override void EmitCanGameEventNotifyEcsBody(CSharpEmitGameEventContext context)
         => context.Append(context.IsMasterClient + " ? " + Notify("Notify") + " : " + Notify("DontNotify"));

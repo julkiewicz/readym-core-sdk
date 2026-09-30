@@ -1,6 +1,7 @@
 namespace ReadyM.Api.Generators.Derive.GameEvents;
 
-internal sealed class RunOnMasterClientOnlySupportImpl() : GameEventSupportImplBase("RunOnMasterClientOnlyAttribute", needsSubject: true)
+internal sealed class RunOnMasterClientOnlySupportImpl() : GameEventSupportImplBase(
+    "RunOnMasterClientOnlyAttribute", needsSubject: true, CSharpEmitGameEventContext.OwnershipManager, CSharpEmitGameEventContext.ClientState)
 {
     public override void EmitCanGameEventNotifyEcsBody(CSharpEmitGameEventContext context)
         => context.Append("!" + context.IsMasterClient + " && " + context.OwnsSubject + " ? " + Notify("Notify") + " : " + Notify("DontNotify"));
