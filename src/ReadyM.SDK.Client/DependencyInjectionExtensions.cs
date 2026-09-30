@@ -1,5 +1,9 @@
 ﻿using ReadyM.Api.DI;
+using Microsoft.Extensions.Logging;
+using ReadyM.Api.ECS.Worlds;
+using ReadyM.Api.Multiplayer.ECS.Archetypes;
 using ReadyM.SDK.Archetypes;
+using ReadyM.SDK.Client.Archetypes;
 using ReadyM.SDK.Services;
 using ReadyM.SDK.Client.Mapping;
 using ReadyM.SDK.Client.Entities;
@@ -24,6 +28,16 @@ public static class DependencyInjectionExtensions
 
         SyncExtensions.Use(mappings);
     }
+
+    public static void ApplyArchetypeExtensions(this IDependencyContainer container)
+        => new ArchetypeExtensionRegistration(
+            container.Resolve<DefaultWorldArchetypeRegistration>(),
+            container.Resolve<DefaultAreaArchetypeRegistration>(),
+            container.Resolve<DefaultPlayerArchetypeRegistration>(),
+            container.Resolve<DefaultCellArchetypeRegistration>(),
+            container.ResolveAll<IArchetypeShapeBindings>(),
+            container.Resolve<ILogger>()
+        ).Register(container.Resolve<Store>());
 
     public static void RegisterReadyMSdk(this IDependencyContainer container)
     {
