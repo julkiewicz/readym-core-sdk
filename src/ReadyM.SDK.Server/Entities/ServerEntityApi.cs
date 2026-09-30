@@ -31,6 +31,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
     private readonly CreateNetworkedEntityInScopeDelegate _createNetworkedEntityInScope;
     private readonly DeleteNetworkedEntityDelegate _deleteEntity;
     private readonly RegisterArchetypeDelegate _registerArchetype;
+    private readonly ResolveArchetypeDelegate _resolveArchetype;
     private readonly ConcurrentDictionary<ComponentSet, ArchetypeId> _archetypeIds = new();
     private readonly ComponentRegistry _registry;
     private readonly ConcurrentDictionary<ComponentSet, int[]> _componentIds = new();
@@ -52,6 +53,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         _createNetworkedEntityInScope = Marshal.GetDelegateForFunctionPointer<CreateNetworkedEntityInScopeDelegate>(pointers.CreateNetworkedEntityInScope);
         _deleteEntity = Marshal.GetDelegateForFunctionPointer<DeleteNetworkedEntityDelegate>(pointers.DeleteNetworkedEntity);
         _registerArchetype = Marshal.GetDelegateForFunctionPointer<RegisterArchetypeDelegate>(archetypes.RegisterArchetype);
+        _resolveArchetype = Marshal.GetDelegateForFunctionPointer<ResolveArchetypeDelegate>(archetypes.ResolveArchetype);
     }
 
     /// Whether the entity is networked follows from the shape: it is, if any of its components are.
@@ -80,7 +82,27 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
     }
 
     private ArchetypeId ArchetypeOf(ComponentSet components)
-        => _archetypeIds.GetOrAdd(components, static (set, self) => self.Register(set), this);
+        => _archetypeIds.GetOrAdd(components, static (set, self) => self.Bound(set) ?? self.Register(set), this);
+
+    /// The archetype this game registered for the shape, or null when it registers none.
+    private ArchetypeId? Bound(ComponentSet components)
+    {
+        if (SDK.Archetypes.ArchetypeRegistry.ShapeOf(components)?.FullName is not { } shape)
+            return null;
+
+        var id = _resolveArchetype(new NativeString256(shape, useWide: false));
+
+        if (id >= 0)
+            return new ArchetypeId((byte)id);
+        
+        if (components.Replicates)
+            throw new InvalidOperationException(
+                $"{shape} replicates, but this game registers no archetype for it. Bind it with "
+                + "IArchetypeShapeBindings on both the client and the server, or the entity would "
+                + "reach the other side under an id only this one knows.");
+
+        return null;
+    }
 
     // A component holding a native collection has no memory until this runs, so it happens as the
     // entity is created rather than being left to whoever writes the shape first. What a shape asked

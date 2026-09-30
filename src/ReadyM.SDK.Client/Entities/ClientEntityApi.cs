@@ -10,6 +10,7 @@ using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.ECS.Managers;
 using ReadyM.SDK.Archetypes;
+using ReadyM.SDK.Client.Archetypes;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Exceptions;
 
@@ -50,7 +51,7 @@ internal sealed class ClientEntityApi : IEntityApi
 
         store.OnEntityDelete += OnEntityDelete;
     }
-    
+
     private void OnEntityDelete(EntityDelete going)
     {
         if (!DeleteHandlerRegistry.Any)
@@ -171,7 +172,7 @@ internal sealed class ClientEntityApi : IEntityApi
 
         return Created(entity, components);
     }
-    
+
     private INetworkedEntityManager? Networked(ComponentSet components)
     {
         if (!components.Replicates)
@@ -193,7 +194,21 @@ internal sealed class ClientEntityApi : IEntityApi
     }
 
     private ArchetypeId Archetype(ComponentSet components)
-        => _archetypes.GetOrAdd(components, set => _world!.RegisterArchetype(Builder(set)));
+        => _archetypes.GetOrAdd(components, Bound);
+
+    /// The archetype this game registered for the shape. Only reached for one that replicates.
+    private ArchetypeId Bound(ComponentSet components)
+    {
+        var shape = ArchetypeRegistry.ShapeOf(components);
+
+        if (shape is not null && ArchetypeBindings.Of(shape) is { } id)
+            return id;
+
+        throw new InvalidOperationException(
+            $"{shape?.FullName ?? components.ToString()} replicates, but this game registers no "
+            + "archetype for it. Bind it with IArchetypeShapeBindings on both the client and the "
+            + "server, or the entity would reach the other side under an id only this one knows.");
+    }
 
     private static ArchetypeBuilder Builder(ComponentSet components)
     {
@@ -296,7 +311,8 @@ internal sealed class ClientEntityApi : IEntityApi
         _scope.Clear();
     }
 
-    /// A networked entity goes through the networked half: we must notify others of deletion.
+    /// A networked entity goes through the networked half: the other side is holding a copy and
+    /// nothing else would tell it to let go.
     private void DeleteNow(RawEntity rawEntity)
     {
         var entity = _store.GetEntityByRawEntity(rawEntity);

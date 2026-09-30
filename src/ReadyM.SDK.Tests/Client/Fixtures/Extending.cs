@@ -174,3 +174,8 @@ public readonly partial struct Ledgered
 [Archetype]
 [Include(typeof(Perishable))]
 public readonly partial struct Borrowed;
+
+/// A replicating shape no game registers an archetype for, which is the case a create has to refuse.
+[Archetype]
+[Include(typeof(Telemetry))]
+public readonly partial struct Unbound;

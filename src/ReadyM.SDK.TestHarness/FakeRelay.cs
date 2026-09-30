@@ -40,6 +40,7 @@ internal sealed class FakeRelay
     private readonly GetComponentIdByNameDelegate _getComponentIdByName;
     private readonly RegisterModComponentDelegate _registerModComponent;
     private readonly RegisterArchetypeDelegate _registerArchetype;
+    private readonly ResolveArchetypeDelegate _resolveArchetype;
     private readonly CreateLocalEntityDelegate _createLocalEntity;
     private readonly DeleteNetworkedEntityDelegate _deleteEntity;
 
@@ -73,6 +74,7 @@ internal sealed class FakeRelay
         _getComponentIdByName = GetComponentIdByNameImpl;
         _registerModComponent = static (_, _) => -1;
         _registerArchetype = RegisterArchetypeImpl;
+        _resolveArchetype = ResolveArchetypeImpl;
         _createLocalEntity = CreateLocalEntityImpl;
         _deleteEntity = DeleteEntityImpl;
     }
@@ -114,8 +116,12 @@ internal sealed class FakeRelay
     internal ArchetypePointers Archetypes => new()
     {
         RegisterArchetype = Marshal.GetFunctionPointerForDelegate(_registerArchetype),
-        ModifyArchetype = IntPtr.Zero
+        ModifyArchetype = IntPtr.Zero,
+        ResolveArchetype = Marshal.GetFunctionPointerForDelegate(_resolveArchetype)
     };
+
+    /// Says this game registers an archetype for the shape, the way a game's own bindings do.
+    internal void Bind(Type shape, ArchetypeId archetype) => _boundShapes[shape.FullName!] = archetype;
 
     internal AotPointers Aot => new()
     {
@@ -338,6 +344,12 @@ internal sealed class FakeRelay
     }
 
     // -- the entry points the v1 server SDK binds ----------------------------------------------
+
+    // Keyed by name, as the real one is: the mod host has only the shape's name to ask with.
+    private readonly Dictionary<string, ArchetypeId> _boundShapes = [];
+
+    private int ResolveArchetypeImpl(NativeString256 shape)
+        => _boundShapes.TryGetValue(shape.ToString(), out var id) ? id.Raw : -1;
 
     private ArchetypeId RegisterArchetypeImpl(NativeList<int> componentIds)
     {

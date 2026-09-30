@@ -1,4 +1,4 @@
-using Friflo.Engine.ECS;
+﻿using Friflo.Engine.ECS;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReadyM.Api.DI;
@@ -9,6 +9,7 @@ using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.ECS.Managers;
 using ReadyM.Api.Multiplayer.ECS.Values;
 using ReadyM.SDK.Archetypes;
+using ReadyM.SDK.Client.Archetypes;
 using ReadyM.SDK.Client.Entities;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Tests.Client.Fixtures;
@@ -51,6 +52,13 @@ public class NetworkedEntityTests : IDisposable
         World = _container.Resolve<Store>();
         World.SetThread(Thread.CurrentThread);
 
+        Bind<Core.Area>();
+        Bind<Prop>();
+        Bind<Rig>();
+        Bind<Borrowed>();
+
+        ArchetypeBindings.Use(_bound);
+
         Entities = _container.Resolve<IEntities>();
         Networked = _container.Resolve<INetworkedEntityManager>();
     }
@@ -62,6 +70,20 @@ public class NetworkedEntityTests : IDisposable
     private INetworkedEntityManager Networked { get; }
 
     public void Dispose() => _container.Dispose();
+
+    /// What a game does for each of its shapes, so a create lands on an archetype both sides name.
+    private void Bind<T>() where T : struct, IArchetype
+    {
+        var components = ArchetypeRegistry.SetFor(typeof(T), default(T).Components);
+        var builder = new ArchetypeBuilder();
+
+        foreach (var type in components.Types)
+            builder.Add(type);
+
+        _bound[typeof(T).FullName!] = World.RegisterArchetype(builder);
+    }
+
+    private readonly Dictionary<string, ArchetypeId> _bound = [];
 
     // -- what decides it ---------------------------------------------------------------------------
 
@@ -172,6 +194,30 @@ public class NetworkedEntityTests : IDisposable
         Assert.False(EntityHandle.Of(prop).IsAlive());
     }
 
+    // -- landing on the archetype the other side knows ---------------------------------------------
+
+    /// <summary>
+    /// Archetype ids travel on the wire and are positional, so a create has to land on the one the
+    /// game registered rather than mint a fresh one only this side can name.
+    /// </summary>
+    [Fact]
+    public void A_networked_entity_is_made_of_the_archetype_the_game_bound()
+    {
+        var rig = Entities.Create<Rig>();
+
+        Assert.Equal(_bound[typeof(Rig).FullName!], Archetype(rig));
+    }
+
+    /// Minting one here would reach the server under a name only this side knows, so it is refused
+    /// at the create rather than at the entity's first hop.
+    [Fact]
+    public void A_replicating_shape_the_game_never_bound_cannot_be_created()
+    {
+        var refused = Assert.Throws<InvalidOperationException>(() => Entities.Create<Unbound>());
+
+        Assert.Contains(typeof(Unbound).FullName!, refused.Message);
+    }
+
     // -- reading what the SDK does not name --------------------------------------------------------
 
     private bool Has<TComponent>(object shape) where TComponent : struct, IComponent
@@ -179,6 +225,9 @@ public class NetworkedEntityTests : IDisposable
 
     private PlayerId Owner(object shape)
         => World.GetEntityByRawEntity(RawOf(shape)).GetComponent<MetadataComponent>().Owner;
+
+    private ArchetypeId Archetype(object shape)
+        => World.GetEntityByRawEntity(RawOf(shape)).GetComponent<MetadataComponent>().Archetype;
 
     private NetworkId NetIdOf(object shape)
         => World.GetEntityByRawEntity(RawOf(shape)).GetComponent<MetadataComponent>().NetId;
@@ -189,6 +238,7 @@ public class NetworkedEntityTests : IDisposable
             Rig rig => EntityHandle.Of(rig).RawEntity,
             Prop prop => EntityHandle.Of(prop).RawEntity,
             Borrowed borrowed => EntityHandle.Of(borrowed).RawEntity,
+            Unbound unbound => EntityHandle.Of(unbound).RawEntity,
             _ => throw new ArgumentException($"No handle for {shape.GetType().Name}.", nameof(shape))
         };
 

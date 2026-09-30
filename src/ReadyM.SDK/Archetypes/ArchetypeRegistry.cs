@@ -9,6 +9,8 @@ public static class ArchetypeRegistry
     private static readonly Dictionary<Type, List<(Type Shape, ComponentSet Components)>> Added = [];
     private static readonly Dictionary<Type, ComponentSet> Resolved = [];
 
+    private static readonly Dictionary<ComponentSet, Type> Shapes = new(ByReference.Instance);
+
 #if NET
     private static readonly Lock Gate = new();
 #else
@@ -72,7 +74,7 @@ public static class ArchetypeRegistry
                 return cached;
 
             if (!Added.TryGetValue(archetype, out var sets))
-                return Resolved[archetype] = own;
+                return Named(archetype, own);
 
             var all = new ComponentSet[sets.Count + 1];
 
@@ -81,7 +83,30 @@ public static class ArchetypeRegistry
             for (var i = 0; i < sets.Count; i++)
                 all[i + 1] = sets[i].Components;
 
-            return Resolved[archetype] = ComponentSet.Combine(all);
+            return Named(archetype, ComponentSet.Combine(all));
         }
+    }
+
+    /// The shape a set belongs to, or null for one nothing declared.
+    internal static Type? ShapeOf(ComponentSet components)
+    {
+        lock (Gate)
+            return Shapes.TryGetValue(components, out var shape) ? shape : null;
+    }
+
+    private static ComponentSet Named(Type archetype, ComponentSet components)
+    {
+        Shapes[components] = archetype;
+        return Resolved[archetype] = components;
+    }
+
+    // Not ReferenceEqualityComparer, which netstandard2.0 does not have.
+    private sealed class ByReference : IEqualityComparer<ComponentSet>
+    {
+        internal static readonly ByReference Instance = new();
+
+        public bool Equals(ComponentSet? left, ComponentSet? right) => ReferenceEquals(left, right);
+
+        public int GetHashCode(ComponentSet set) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(set);
     }
 }

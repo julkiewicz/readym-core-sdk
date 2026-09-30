@@ -21,6 +21,9 @@ internal sealed class ArchetypeExtensionRegistration(
     public void Register(IArchetypeRegistry registry)
     {
         var bound = MapArchetypeIds();
+        
+        ArchetypeBindings.Use(bound);
+
         var applied = ClientArchetypes.ApplyExtensions(
             registry,
             shape => bound.TryGetValue(shape.FullName!, out var id) ? id : null

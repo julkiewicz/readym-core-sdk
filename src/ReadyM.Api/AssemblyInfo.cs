@@ -19,6 +19,7 @@
 [assembly: InternalsVisibleTo("ReadyM.SDK.Tests")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Client")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Server")]
+[assembly: InternalsVisibleTo("ReadyM.SDK.TestHarness")]
 [assembly: InternalsVisibleTo("OblivionMpCSharpMod")]
 [assembly: InternalsVisibleTo("WukongMp.Sdk")]
 [assembly: InternalsVisibleTo("OblivionMp.Sdk")]

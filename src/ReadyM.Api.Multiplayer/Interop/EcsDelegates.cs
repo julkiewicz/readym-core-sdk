@@ -12,6 +12,9 @@ internal delegate ArchetypeId RegisterArchetypeDelegate(NativeList<int> componen
 
 internal delegate void ModifyArchetypeDelegate(ArchetypeId archetype, NativeList<int> componentsSerialized);
 
+/// The id this game already gave the shape, or -1 when it registers no archetype for it.
+internal delegate int ResolveArchetypeDelegate(NativeString256 shape);
+
 /// Adds components to an archetype the server owns.
 internal delegate void AddArchetypeExtensionsDelegate(NativeString256 shape, NativeList<int> componentsSerialized);
 
