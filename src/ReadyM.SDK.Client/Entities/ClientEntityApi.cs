@@ -5,7 +5,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ReadyM.Api.Mapping;
 using ReadyM.Api.Mapping.Data;
 using ReadyM.Api.Mapping.Policies.Data;
+using ReadyM.Api.ECS.Worlds;
+using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.ECS.Components;
+using ReadyM.Api.Multiplayer.ECS.Managers;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Exceptions;
@@ -20,17 +23,30 @@ internal sealed class ClientEntityApi : IEntityApi
     // Lazy because this is built early and the mapping policy directory is not.
     private readonly Lazy<IMappingPolicyDirectory>? _policies;
 
+    /// The world an archetype is registered with.
+    private readonly Store? _world;
+
+    /// Null in a game with no networking, which is every local-only session and most tests.
+    private readonly INetworkedEntityManager? _networked;
+
+    /// One archetype per set, worked out on first use the way the server's half does it.
+    private readonly ConcurrentDictionary<ComponentSet, ArchetypeId> _archetypes = new();
+
     private readonly ConcurrentDictionary<Type, IMappingDataPolicy<Entity>?> _policyOf = new();
     private QueryScope _scope = new();
 
     public ClientEntityApi(
         EntityStore store,
         ILogger<ClientEntityApi> logger,
-        Lazy<IMappingPolicyDirectory>? policies = null)
+        Lazy<IMappingPolicyDirectory>? policies = null,
+        Store? world = null,
+        INetworkedEntityManager? networked = null)
     {
         _store = store;
         _logger = logger;
         _policies = policies;
+        _world = world;
+        _networked = networked;
 
         store.OnEntityDelete += OnEntityDelete;
     }
@@ -138,18 +154,56 @@ internal sealed class ClientEntityApi : IEntityApi
         return heap is null ? default : new ComponentRef(heap.ComponentArray!, node.compIndex);
     }
 
-    public RawEntity Create(ComponentSet components, RawEntity scope)
+    /// <param name="owner">Ignored. A client only ever makes entities of its own.</param>
+    public RawEntity Create(ComponentSet components, RawEntity? scope = null, PlayerId? owner = null)
     {
-        var holder = Resolve(scope);
-        var entity = _store.GetEntityByRawEntity(Made(components));
+        // Ahead of anything being made, so a scope that is already gone takes nothing with it.
+        var holder = scope is { } asked ? Resolve(asked) : (Entity?)null;
+
+        if (Networked(components) is { } manager)
+            return Created(manager.CreateNetworkedEntity(Archetype(components), holder).Entity.RawEntity, components);
+
+        var entity = Made(components);
 
         // Before what the shape asked runs, so a handler finds the entity where it will live.
-        entity.AddComponent(new InScopeComponent(holder));
+        if (holder is { } placed)
+            _store.GetEntityByRawEntity(entity).AddComponent(new InScopeComponent(placed));
 
-        return Created(entity.RawEntity, components);
+        return Created(entity, components);
+    }
+    
+    private INetworkedEntityManager? Networked(ComponentSet components)
+    {
+        if (!components.Replicates)
+            return null;
+
+        if (_networked is null || _world is null)
+        {
+            // A shape that sends, in a session with nothing to send it over. Local is the only
+            // thing left to do, and silence would look like the network dropping it.
+            _logger.LogWarning(
+                "{Components} replicates, but this game registered no networked entity manager, "
+                + "so the entity is local and no other side will hear about it.", components);
+
+            return null;
+        }
+
+        _scope.RefuseIfInQuery("Creating an entity");
+        return _networked;
     }
 
-    public RawEntity Create(ComponentSet components) => Created(Made(components), components);
+    private ArchetypeId Archetype(ComponentSet components)
+        => _archetypes.GetOrAdd(components, set => _world!.RegisterArchetype(Builder(set)));
+
+    private static ArchetypeBuilder Builder(ComponentSet components)
+    {
+        var builder = new ArchetypeBuilder();
+
+        foreach (var component in components.Types)
+            builder.Add(component);
+
+        return builder;
+    }
 
     private RawEntity Made(ComponentSet components)
     {
@@ -242,12 +296,21 @@ internal sealed class ClientEntityApi : IEntityApi
         _scope.Clear();
     }
 
+    /// A networked entity goes through the networked half: we must notify others of deletion.
     private void DeleteNow(RawEntity rawEntity)
     {
         var entity = _store.GetEntityByRawEntity(rawEntity);
 
-        if (!entity.IsNull)
-            entity.DeleteEntity();
+        if (entity.IsNull)
+            return;
+
+        if (_networked is not null && entity.HasComponent<MetadataComponent>())
+        {
+            _networked.TryDeleteEntity(entity.Id);
+            return;
+        }
+
+        entity.DeleteEntity();
     }
 
     private Entity Resolve(RawEntity rawEntity)

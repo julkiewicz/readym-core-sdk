@@ -1,10 +1,14 @@
-﻿using ReadyM.SDK.Archetypes;
+﻿using ReadyM.Api.Idents;
+using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Entities;
 
 namespace ReadyM.SDK.Server.Entities;
 
 public interface IEntities : IEntitiesBase
 {
+    /// Create a new entity of the given archetype, in a given scope, owned by the given player.
+    T Create<T>(Scope scope, PlayerId owner) where T : struct, IArchetype;
+
     /// Iterate over every entity of a given archetype or containting a given mixin.
     /// <typeparam name="T">Archetype or Mixin</typeparam>
     EntityQuery<T> Query<T>() where T : struct, IArchetypeQueryable;

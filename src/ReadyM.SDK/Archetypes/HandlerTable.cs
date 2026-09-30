@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using ReadyM.SDK.Entities;
 
 namespace ReadyM.SDK.Archetypes;
@@ -33,7 +33,7 @@ internal sealed class HandlerTable
     {
         foreach (var declaration in _declarations.Values)
         {
-            if (!handle.Has(declaration.Shape))
+            if (!declaration.Matches(handle))
                 continue;
 
             if (own)
@@ -57,6 +57,9 @@ internal sealed class HandlerTable
         private EntityHandler[] _watching = [];
 
         public ComponentSet Shape { get; } = shape;
+        
+        public bool Matches(in EntityHandle handle)
+            => handle.Has(Shape.Head) && (Shape.Rest is null || handle.Has(Shape.Rest));
 
         public EntityHandler? Own { get; set; }
 

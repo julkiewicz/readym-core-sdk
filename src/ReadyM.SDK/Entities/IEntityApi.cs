@@ -1,4 +1,5 @@
 ﻿using Friflo.Engine.ECS;
+using ReadyM.Api.Idents;
 using ReadyM.Api.Mapping.Data;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Exceptions;
@@ -60,11 +61,11 @@ internal interface IEntityApi
     /// Whether the entity carries every component of the set. An empty set matches anything.
     bool HasComponents(RawEntity rawEntity, ComponentSet components);
 
+    /// <param name="owner">
+    /// Who this entity belongs to. Null is the default: the server for a server, the local player for a client.
+    /// </param>
     /// <exception cref="StructuralChangeInQueryException">A query is running.</exception>
-    RawEntity Create(ComponentSet components);
-
-    /// <summary>The same, held by a scope, so the entity goes when the scope does.</summary>
-    RawEntity Create(ComponentSet components, RawEntity scope);
+    RawEntity Create(ComponentSet components, RawEntity? scope = null, PlayerId? owner = null);
 
     /// <summary>
     /// Removes the entity, or, inside a query, records that it is to be removed once the loop ends.

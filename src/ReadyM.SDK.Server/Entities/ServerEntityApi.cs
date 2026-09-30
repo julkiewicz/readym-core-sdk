@@ -27,6 +27,8 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
     private readonly IsEntityAliveDelegate _isEntityAlive;
     private readonly CreateLocalEntityDelegate _createLocalEntity;
     private readonly CreateLocalEntityInScopeDelegate _createLocalEntityInScope;
+    private readonly CreateNetworkedEntityDelegate _createNetworkedEntity;
+    private readonly CreateNetworkedEntityInScopeDelegate _createNetworkedEntityInScope;
     private readonly DeleteNetworkedEntityDelegate _deleteEntity;
     private readonly RegisterArchetypeDelegate _registerArchetype;
     private readonly ConcurrentDictionary<ComponentSet, ArchetypeId> _archetypeIds = new();
@@ -46,29 +48,39 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         _isEntityAlive = Marshal.GetDelegateForFunctionPointer<IsEntityAliveDelegate>(pointers.IsEntityAlive);
         _createLocalEntity = Marshal.GetDelegateForFunctionPointer<CreateLocalEntityDelegate>(pointers.CreateLocalEntity);
         _createLocalEntityInScope = Marshal.GetDelegateForFunctionPointer<CreateLocalEntityInScopeDelegate>(pointers.CreateLocalEntityInScope);
+        _createNetworkedEntity = Marshal.GetDelegateForFunctionPointer<CreateNetworkedEntityDelegate>(pointers.CreateNetworkedEntity);
+        _createNetworkedEntityInScope = Marshal.GetDelegateForFunctionPointer<CreateNetworkedEntityInScopeDelegate>(pointers.CreateNetworkedEntityInScope);
         _deleteEntity = Marshal.GetDelegateForFunctionPointer<DeleteNetworkedEntityDelegate>(pointers.DeleteNetworkedEntity);
         _registerArchetype = Marshal.GetDelegateForFunctionPointer<RegisterArchetypeDelegate>(archetypes.RegisterArchetype);
     }
 
-    public RawEntity Create(ComponentSet components, RawEntity scope)
+    /// Whether the entity is networked follows from the shape: it is, if any of its components are.
+    /// <param name="owner">Null leaves it the server's.</param>
+    public RawEntity Create(ComponentSet components, RawEntity? scope = null, PlayerId? owner = null)
     {
         _scope.RefuseIfInQuery("Creating an entity");
 
-        var created = _createLocalEntityInScope(_archetypeIds.GetOrAdd(components, static (set, self) => self.Register(set), this), scope);
+        var archetype = ArchetypeOf(components);
+        var named = owner.HasValue ? (byte)1 : (byte)0;
 
-        if (created.Id == 0)
-            throw new InvalidEntityException($"Scope {scope.Id} is gone.");
+        var created = scope switch
+        {
+            { } holder when components.Replicates
+                => _createNetworkedEntityInScope(archetype, holder, named, owner ?? default),
+            { } holder => _createLocalEntityInScope(archetype, holder),
+            _ when components.Replicates => _createNetworkedEntity(archetype, named, owner ?? default),
+            _ => _createLocalEntity(archetype)
+        };
+
+        // Only a scoped create can come back empty, and that is the scope having gone.
+        if (scope is { } asked && created.Id == 0)
+            throw new InvalidEntityException($"Scope {asked.Id} is gone.");
 
         return Created(created, components);
     }
 
-    public RawEntity Create(ComponentSet components)
-    {
-        _scope.RefuseIfInQuery("Creating an entity");
-        return Created(
-            _createLocalEntity(_archetypeIds.GetOrAdd(components, static (set, self) => self.Register(set), this)),
-            components);
-    }
+    private ArchetypeId ArchetypeOf(ComponentSet components)
+        => _archetypeIds.GetOrAdd(components, static (set, self) => self.Register(set), this);
 
     // A component holding a native collection has no memory until this runs, so it happens as the
     // entity is created rather than being left to whoever writes the shape first. What a shape asked

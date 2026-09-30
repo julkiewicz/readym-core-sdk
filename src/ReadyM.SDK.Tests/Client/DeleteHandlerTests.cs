@@ -85,6 +85,23 @@ public class DeleteHandlerTests : ClientSdkTest
         Assert.Equal(0, turnstile.Inside);
     }
 
+    /// <summary>
+    /// Recognising a shape asks about one component first and only confirms the rest when it is
+    /// there. This entity carries that first one and none of the rest, so it has to be ruled out.
+    /// </summary>
+    [Fact]
+    public void An_entity_carrying_only_part_of_a_shape_is_not_one()
+    {
+        var turnstile = Container.Resolve<Turnstile>();
+        var half = Entities.Create<HalfTicketed>();
+
+        Assert.Equal(0, turnstile.Inside);
+
+        Entities.Delete(half);
+
+        Assert.Equal(0, turnstile.Inside);
+    }
+
     /// Deleting inside a query is held until the loop ends, and the handlers run when it does.
     [Fact]
     public void One_deleted_inside_a_query_runs_them_when_the_loop_ends()

@@ -140,4 +140,25 @@ public class ReplicatedComponentTests : ClientSdkTest
         Assert.Equal(1, rig.MembersCount);
         Assert.Equal(3, rig.GetMembers(0));
     }
+
+    /// <summary>
+    /// The same under an include's prefix. A collection's members are named after the collection, so
+    /// the prefix goes where that name is rather than in front of the whole thing.
+    /// </summary>
+    [Fact]
+    public void A_prefixed_include_names_a_collection_where_the_collection_is_named()
+    {
+        var barge = Entities.Create<Barge>();
+
+        barge.AddCrewMembers(4);
+        barge.AddCrewMembers(6);
+
+        Assert.Equal(2, barge.CrewMembersCount);
+        Assert.Equal(4, barge.GetCrewMembers(0));
+        Assert.True(barge.ContainsCrewMembers(6));
+
+        barge.ClearCrewMembers();
+
+        Assert.Equal(0, barge.CrewMembersCount);
+    }
 }

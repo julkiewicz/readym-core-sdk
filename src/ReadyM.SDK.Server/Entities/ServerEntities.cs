@@ -1,4 +1,5 @@
-﻿using ReadyM.SDK.Archetypes;
+﻿using ReadyM.Api.Idents;
+using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Core;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Exceptions;
@@ -81,4 +82,12 @@ internal class ServerEntities(ServerEntityApi api) : IEntities
 
     public T Create<T>(Scope scope) where T : struct, IArchetype
         => new() { Handle = new EntityHandle(api.Create(ArchetypeRegistry.SetFor(typeof(T), default(T).Components), scope.Handle.RawEntity), api) };
+    
+    public T Create<T>(Scope scope, PlayerId owner) where T : struct, IArchetype
+        => new()
+        {
+            Handle = new EntityHandle(
+                api.Create(ArchetypeRegistry.SetFor(typeof(T), default(T).Components), scope.Handle.RawEntity, owner),
+                api)
+        };
 }

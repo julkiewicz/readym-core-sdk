@@ -32,6 +32,7 @@ public struct EcsApiPointers
 
     /// Creates an entity held by a scope.
     public required IntPtr CreateLocalEntityInScope;
+    public required IntPtr CreateNetworkedEntityInScope;
     public required IntPtr IsEntityAlive;
     public required IntPtr TryGetAreaScopeEntity;
     public required IntPtr CreateAreaScopeEntity;

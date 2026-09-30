@@ -1,4 +1,5 @@
 ﻿using Friflo.Engine.ECS;
+using ReadyM.Api.Idents;
 using ReadyM.Api.Mapping.Data;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Client;
@@ -409,9 +410,8 @@ public class ShapeMappingTests : ClientSdkTest
         public bool HasComponents(RawEntity rawEntity, ComponentSet components)
             => inner.HasComponents(rawEntity, components);
 
-        public RawEntity Create(ComponentSet components) => inner.Create(components);
-
-        public RawEntity Create(ComponentSet components, RawEntity scope) => inner.Create(components, scope);
+        public RawEntity Create(ComponentSet components, RawEntity? scope = null, PlayerId? owner = null)
+            => inner.Create(components, scope, owner);
 
         public bool Delete(RawEntity rawEntity) => inner.Delete(rawEntity);
 

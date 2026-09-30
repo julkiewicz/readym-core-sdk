@@ -143,3 +143,34 @@ public readonly partial struct Roster
 
     private partial global::Yooni.Native.Container.NativeList<int> Members { get; set; }
 }
+
+/// An archetype taking the same mixin twice over is not possible, so the prefix earns its place on
+/// a single include: the collection's members have to land under it too.
+[Archetype]
+[Include(typeof(Roster), "Crew")]
+public readonly partial struct Barge
+{
+    public partial int Berth { get; set; }
+}
+
+/// A mixin carrying a collection and extending an archetype under a prefix, which is the pair the
+/// prefix has to reach: the values it declares and the members its collection forwards.
+[ArchetypeMixin]
+[Replicated]
+[Propagates(Propagation.OwnershipBased)]
+[Extends(typeof(CoreArea), "Guest")]
+public readonly partial struct Ledgered
+{
+    public partial int Size { get; set; }
+
+    private partial global::Yooni.Native.Container.NativeList<int> Names { get; set; }
+}
+
+/// <summary>
+/// The shape of a mod's own thing built entirely from storage the game owns and already sends: no
+/// component of its own, nothing declared [Replicated], and still an entity the other side has to
+/// hear about. Oblivion's Furniture is this shape.
+/// </summary>
+[Archetype]
+[Include(typeof(Perishable))]
+public readonly partial struct Borrowed;

@@ -30,11 +30,14 @@ internal delegate RawEntity CreateNetworkedCellEntityDelegate(ArchetypeId archet
 /// Creates a server-only entity: no metadata, never replicated to clients.
 internal delegate RawEntity CreateLocalEntityDelegate(ArchetypeId archetype);
 
-/// <summary>
-/// The same, held by a scope: the entity is removed when the scope is.
-/// </summary>
+/// Creates a server-only entity in a scope: the entity is removed when the scope is.
 /// <remarks>Returns a default identity when the scope is gone.</remarks>
 internal delegate RawEntity CreateLocalEntityInScopeDelegate(ArchetypeId archetype, RawEntity scope);
+
+/// Creates a replicated server-only entity in a scope.
+/// Its owner is the server unless an override is passed.
+internal delegate RawEntity CreateNetworkedEntityInScopeDelegate(
+    ArchetypeId archetype, RawEntity scope, byte hasOwnerOverride, PlayerId ownerOverride);
 
 /// 1 if the entity existed and was deleted, else 0.
 internal delegate int DeleteNetworkedEntityDelegate(RawEntity entity, byte matchRevision);

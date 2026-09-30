@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Friflo.Engine.ECS;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Client.Entities;
@@ -23,6 +23,37 @@ public class ComponentSetTests : ClientSdkTest
     public void An_empty_set_carries_no_types()
     {
         Assert.Empty(ComponentSet.Empty.Types);
+    }
+
+    /// Recognising a shape asks about the head first and confirms the rest only when it is there.
+    [Fact]
+    public void A_set_splits_into_the_first_component_and_the_others()
+    {
+        var set = ComponentSet.Of<LootComponent, PlacementComponent, HealthComponent>();
+
+        Assert.Equal([typeof(LootComponent)], set.Head.Types);
+        Assert.Equal([typeof(PlacementComponent), typeof(HealthComponent)], set.Rest!.Types);
+    }
+
+    /// Nothing is gained by asking the same question twice.
+    [Fact]
+    public void A_set_of_one_is_its_own_head_and_has_no_rest()
+    {
+        var set = ComponentSet.Of<LootComponent>();
+
+        Assert.Same(set, set.Head);
+        Assert.Null(set.Rest);
+    }
+
+    /// The split is fixed when the set is built, so the memo that resolves it stays keyed on one
+    /// instance per shape.
+    [Fact]
+    public void The_split_is_the_same_every_time_it_is_asked_for()
+    {
+        var set = ComponentSet.Of<LootComponent, HealthComponent>();
+
+        Assert.Same(set.Head, set.Head);
+        Assert.Same(set.Rest, set.Rest);
     }
 
     [Fact]

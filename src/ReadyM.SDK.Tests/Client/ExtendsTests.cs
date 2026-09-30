@@ -156,6 +156,35 @@ public class ExtendsTests : ClientSdkTest
         Assert.Equal(0, area.Temperature);
     }
 
+    /// <summary>
+    /// A collection's members are named after the collection, so the prefix goes where that name is
+    /// rather than in front of the whole thing: GetGuestNames, not GuestGetNames.
+    /// </summary>
+    [Fact]
+    public void A_prefixed_extension_names_a_collection_where_the_collection_is_named()
+    {
+        var area = Entities.Create<CoreArea>();
+
+        area.AddGuestNames(3);
+        area.AddGuestNames(5);
+
+        Assert.Equal(2, area.GuestNamesCount);
+        Assert.Equal(3, area.GetGuestNames(0));
+
+        area.SetGuestNames(0, 9);
+
+        Assert.Equal(9, area.GetGuestNames(0));
+        Assert.True(area.ContainsGuestNames(5));
+
+        area.RemoveAtGuestNames(0);
+
+        Assert.Equal(1, area.GuestNamesCount);
+
+        area.ClearGuestNames();
+
+        Assert.Equal(0, area.GuestNamesCount);
+    }
+
     /// A member declared without a setter gains neither, so nothing can write it by accident.
     [Fact]
     public void A_get_only_extension_has_no_way_to_write_it()

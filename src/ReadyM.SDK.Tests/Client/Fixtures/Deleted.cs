@@ -61,3 +61,9 @@ public sealed partial class Turnstile
     [DeleteHandler(typeof(Ticketed))]
     private void Left(Ticketed ticketed) => Inside--;
 }
+
+/// Carries the one component Ticketed is recognised by first, and nothing else it is made of. What
+/// rules a shape out cheaply must not let this through.
+[Archetype]
+[Include(typeof(Registered))]
+public readonly partial struct HalfTicketed;

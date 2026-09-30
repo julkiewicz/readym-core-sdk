@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 
 namespace ReadyM.SDK.Archetypes;
 
@@ -11,9 +11,33 @@ public sealed class ComponentSet
 {
     public static readonly ComponentSet Empty = new([]);
 
-    private ComponentSet(Type[] types) => Types = types;
+    private ComponentSet(Type[] types, bool split = true)
+    {
+        Types = types;
+
+        if (!split || types.Length <= 1)
+        {
+            Head = this;
+            return;
+        }
+
+        Head = new ComponentSet([types[0]], split: false);
+        Rest = new ComponentSet(types.Skip(1).ToArray(), split: false);
+    }
+
+    /// Is any of the components in the set a networked component?
+    internal bool Replicates 
+        => _replicates ??= Types.Any(static type => typeof(Api.Multiplayer.ECS.Components.INetworkedComponent).IsAssignableFrom(type));
+
+    private bool? _replicates;
 
     internal Type[] Types { get; }
+
+    /// The component that is most likely to be unique in an archetype, to make lookup faster.
+    internal ComponentSet Head { get; }
+
+    /// <summary>Everything after it, so confirming a match does not ask about the head twice.</summary>
+    internal ComponentSet? Rest { get; }
 
     /// <summary>How many components the set holds, which is how many chunk slots it occupies.</summary>
     public int Count => Types.Length;

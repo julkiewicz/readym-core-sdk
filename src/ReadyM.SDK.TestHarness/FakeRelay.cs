@@ -49,6 +49,7 @@ internal sealed class FakeRelay
     private readonly CreateNetworkedPlayerEntityDelegate _createNetworkedPlayer = static (_, _, _, _) => throw NotModelled();
     private readonly CreateNetworkedAreaEntityDelegate _createNetworkedArea = static (_, _, _, _) => throw NotModelled();
     private readonly CreateNetworkedCellEntityDelegate _createNetworkedCell = static (_, _, _, _) => throw NotModelled();
+    private readonly CreateNetworkedEntityInScopeDelegate _createNetworkedInScope = static (_, _, _, _) => throw NotModelled();
     private readonly DeleteEntityTreeDelegate _deleteTree = static (_, _) => throw NotModelled();
     private readonly SetParentDelegate _setParent = static (_, _) => throw NotModelled();
     private readonly GetParentDelegate _getParent = static _ => throw NotModelled();
@@ -103,6 +104,7 @@ internal sealed class FakeRelay
         CreateNetworkedPlayerEntity = Marshal.GetFunctionPointerForDelegate(_createNetworkedPlayer),
         CreateNetworkedAreaEntity = Marshal.GetFunctionPointerForDelegate(_createNetworkedArea),
         CreateNetworkedCellEntity = Marshal.GetFunctionPointerForDelegate(_createNetworkedCell),
+        CreateNetworkedEntityInScope = Marshal.GetFunctionPointerForDelegate(_createNetworkedInScope),
         DeleteEntityTree = Marshal.GetFunctionPointerForDelegate(_deleteTree),
         SetParent = Marshal.GetFunctionPointerForDelegate(_setParent),
         GetParent = Marshal.GetFunctionPointerForDelegate(_getParent),
