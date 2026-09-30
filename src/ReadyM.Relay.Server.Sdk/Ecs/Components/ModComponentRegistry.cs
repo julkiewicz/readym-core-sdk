@@ -12,7 +12,7 @@ namespace ReadyM.Relay.Server.Sdk.Ecs.Components;
 internal sealed class ModComponentRegistry(
     AotPointers aotPointers,
     ModComponentManager heapManager,
-    ILogger logger) : IModComponentRegistry
+    ILogger logger) : IComponentRegistry
 {
     private readonly RegisterModComponentDelegate _registerModComponent =
         Marshal.GetDelegateForFunctionPointer<RegisterModComponentDelegate>(aotPointers.RegisterModComponent);
