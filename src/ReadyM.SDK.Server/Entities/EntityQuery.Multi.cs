@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel;
-using JetBrains.Annotations;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Chunks;
 using ReadyM.SDK.Entities;
@@ -19,13 +18,11 @@ public readonly ref struct EntityQuery<T1, T2>
     internal EntityQuery(ServerEntityApi api) => _api = api;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public ChunkQuery<TView>.Enumerator Chunks<TView>()
         where TView : IArchetypeChunkView<TView>, allows ref struct
         => new ChunkQuery<TView>(_api).GetEnumerator();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public IdentityEnumerator Identities() => new(_api, Components);
 
     /// Narrows the query to the entities one scope holds.
@@ -98,13 +95,11 @@ public readonly ref struct EntityQuery<T1, T2, T3>
     internal EntityQuery(ServerEntityApi api) => _api = api;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public ChunkQuery<TView>.Enumerator Chunks<TView>()
         where TView : IArchetypeChunkView<TView>, allows ref struct
         => new ChunkQuery<TView>(_api).GetEnumerator();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public IdentityEnumerator Identities() => new(_api, Components);
 
     /// Narrows the query to the entities one scope holds.
@@ -179,13 +174,11 @@ public readonly ref struct EntityQuery<T1, T2, T3, T4>
     internal EntityQuery(ServerEntityApi api) => _api = api;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public ChunkQuery<TView>.Enumerator Chunks<TView>()
         where TView : IArchetypeChunkView<TView>, allows ref struct
         => new ChunkQuery<TView>(_api).GetEnumerator();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public IdentityEnumerator Identities() => new(_api, Components);
 
     /// Narrows the query to the entities one scope holds.
@@ -262,13 +255,11 @@ public readonly ref struct EntityQuery<T1, T2, T3, T4, T5>
     internal EntityQuery(ServerEntityApi api) => _api = api;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public ChunkQuery<TView>.Enumerator Chunks<TView>()
         where TView : IArchetypeChunkView<TView>, allows ref struct
         => new ChunkQuery<TView>(_api).GetEnumerator();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public IdentityEnumerator Identities() => new(_api, Components);
 
     /// Narrows the query to the entities one scope holds.
@@ -347,13 +338,11 @@ public readonly ref struct EntityQuery<T1, T2, T3, T4, T5, T6>
     internal EntityQuery(ServerEntityApi api) => _api = api;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public ChunkQuery<TView>.Enumerator Chunks<TView>()
         where TView : IArchetypeChunkView<TView>, allows ref struct
         => new ChunkQuery<TView>(_api).GetEnumerator();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public IdentityEnumerator Identities() => new(_api, Components);
 
     /// Narrows the query to the entities one scope holds.

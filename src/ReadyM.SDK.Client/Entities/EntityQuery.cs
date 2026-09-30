@@ -1,6 +1,5 @@
 ﻿using System.ComponentModel;
 using Friflo.Engine.ECS;
-using JetBrains.Annotations;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Entities;
 #if NET
@@ -24,7 +23,6 @@ public readonly struct EntityQuery<T>
     internal EntityQuery(ClientEntityContext context) => _context = context;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public IdentityEnumerator Identities() => new(_context, Components);
 
     /// Narrows the query to the entities one scope holds.
@@ -32,7 +30,6 @@ public readonly struct EntityQuery<T>
 
 #if NET
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public ChunkQuery<TView>.Enumerator Chunks<TView>()
         where TView : IArchetypeChunkView<TView>, allows ref struct
         => new ChunkQuery<TView>(_context?.ChunkSource).GetEnumerator();

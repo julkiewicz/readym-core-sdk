@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel;
-using JetBrains.Annotations;
 using ReadyM.SDK.Archetypes;
 
 namespace ReadyM.SDK.Client.Entities;
@@ -9,20 +8,17 @@ namespace ReadyM.SDK.Client.Entities;
 public static class EntityQueryExtensions
 {
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public static EntityQuery<T>.IdentityEnumerator GetEnumerator<T>(this EntityQuery<T> query)
         where T : struct, IArchetypeQueryable
         => query.Identities();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public static EntityQuery<T1, T2>.IdentityEnumerator GetEnumerator<T1, T2>(this EntityQuery<T1, T2> query)
         where T1 : struct, IArchetypeQueryable
         where T2 : struct, IArchetypeMixin
         => query.Identities();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public static EntityQuery<T1, T2, T3>.IdentityEnumerator GetEnumerator<T1, T2, T3>(this EntityQuery<T1, T2, T3> query)
         where T1 : struct, IArchetypeQueryable
         where T2 : struct, IArchetypeMixin
@@ -30,7 +26,6 @@ public static class EntityQueryExtensions
         => query.Identities();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public static EntityQuery<T1, T2, T3, T4>.IdentityEnumerator GetEnumerator<T1, T2, T3, T4>(this EntityQuery<T1, T2, T3, T4> query)
         where T1 : struct, IArchetypeQueryable
         where T2 : struct, IArchetypeMixin
@@ -39,7 +34,6 @@ public static class EntityQueryExtensions
         => query.Identities();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public static EntityQuery<T1, T2, T3, T4, T5>.IdentityEnumerator GetEnumerator<T1, T2, T3, T4, T5>(this EntityQuery<T1, T2, T3, T4, T5> query)
         where T1 : struct, IArchetypeQueryable
         where T2 : struct, IArchetypeMixin
@@ -49,7 +43,6 @@ public static class EntityQueryExtensions
         => query.Identities();
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [MustDisposeResource]
     public static EntityQuery<T1, T2, T3, T4, T5, T6>.IdentityEnumerator GetEnumerator<T1, T2, T3, T4, T5, T6>(this EntityQuery<T1, T2, T3, T4, T5, T6> query)
         where T1 : struct, IArchetypeQueryable
         where T2 : struct, IArchetypeMixin

@@ -1,5 +1,4 @@
-﻿using JetBrains.Annotations;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Loader;
@@ -16,13 +15,11 @@ public abstract class ServerModBase
     /// </summary>
     protected string ModDirectory { get; private set; } = null!;
 
-    [UsedImplicitly]
     public void InitializeAot(IComponentRegistry registry)
     {
         RegisterComponents(registry);
     }
 
-    [UsedImplicitly]
     public void Initialize(IServerDependencyContainer services, string modDirectory)
     {
         Services = services;
