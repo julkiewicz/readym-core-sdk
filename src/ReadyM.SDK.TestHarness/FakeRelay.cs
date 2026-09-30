@@ -46,11 +46,11 @@ internal sealed class FakeRelay
 
     // The v0 api binds every pointer in the bundle at construction, so none may be zero. These
     // stand in for the parts of the relay this harness does not model; calling one says so.
-    private readonly CreateNetworkedEntityDelegate _createNetworked = static (_, _, _) => throw NotModelled();
+    private readonly CreateNetworkedEntityDelegate _createNetworked;
     private readonly CreateNetworkedPlayerEntityDelegate _createNetworkedPlayer = static (_, _, _, _) => throw NotModelled();
     private readonly CreateNetworkedAreaEntityDelegate _createNetworkedArea = static (_, _, _, _) => throw NotModelled();
     private readonly CreateNetworkedCellEntityDelegate _createNetworkedCell = static (_, _, _, _) => throw NotModelled();
-    private readonly CreateNetworkedEntityInScopeDelegate _createNetworkedInScope = static (_, _, _, _) => throw NotModelled();
+    private readonly CreateNetworkedEntityInScopeDelegate _createNetworkedInScope;
     private readonly DeleteEntityTreeDelegate _deleteTree = static (_, _) => throw NotModelled();
     private readonly SetParentDelegate _setParent = static (_, _) => throw NotModelled();
     private readonly GetParentDelegate _getParent = static _ => throw NotModelled();
@@ -76,6 +76,8 @@ internal sealed class FakeRelay
         _registerArchetype = RegisterArchetypeImpl;
         _resolveArchetype = ResolveArchetypeImpl;
         _createLocalEntity = CreateLocalEntityImpl;
+        _createNetworked = CreateNetworkedEntityImpl;
+        _createNetworkedInScope = CreateNetworkedEntityInScopeImpl;
         _deleteEntity = DeleteEntityImpl;
     }
 
@@ -358,15 +360,24 @@ internal sealed class FakeRelay
         for (var i = 0; i < ids.Length; i++)
             ids[i] = componentIds[i];
 
-        Array.Sort(ids);
+        return RegisterArchetype(ids);
+    }
+
+    /// The id this game gives a shape, the way its own archetype registration would.
+    internal ArchetypeId RegisterArchetype(params Type[] componentTypes)
+        => RegisterArchetype(componentTypes.Select(IdOf).ToArray());
+
+    private ArchetypeId RegisterArchetype(int[] componentIds)
+    {
+        Array.Sort(componentIds);
 
         foreach (var (id, shape) in _archetypeShapes)
-            if (shape.AsSpan().SequenceEqual(ids))
+            if (shape.AsSpan().SequenceEqual(componentIds))
                 return id;
 
         var assigned = new ArchetypeId((byte)(_archetypeShapes.Count + 1));
 
-        _archetypeShapes[assigned] = ids;
+        _archetypeShapes[assigned] = componentIds;
         return assigned;
     }
 
@@ -374,6 +385,38 @@ internal sealed class FakeRelay
     {
         CreateCalls++;
         return Create(_archetypeShapes[archetype]);
+    }
+
+    /// What the relay knows about an entity it made over the network, which a local one has none of.
+    internal readonly record struct Networked(ArchetypeId Archetype, PlayerId? Owner, RawEntity? Scope);
+
+    private readonly Dictionary<int, Networked> _networked = new();
+
+    /// Null for an entity the relay made locally, which is what nothing else can ask.
+    internal Networked? NetworkedOf(RawEntity entity)
+        => _networked.TryGetValue(entity.Id, out var made) ? made : null;
+
+    private RawEntity CreateNetworkedEntityImpl(ArchetypeId archetype, byte hasOwnerOverride, PlayerId ownerOverride)
+    {
+        var entity = CreateLocalEntityImpl(archetype);
+
+        _networked[entity.Id] = new Networked(archetype, hasOwnerOverride != 0 ? ownerOverride : null, null);
+        return entity;
+    }
+
+    private RawEntity CreateNetworkedEntityInScopeImpl(
+        ArchetypeId archetype, RawEntity scope, byte hasOwnerOverride, PlayerId ownerOverride)
+    {
+        CreateInScopeCalls++;
+
+        if (!Resolve(scope, 1, out _))
+            return default;
+
+        var entity = CreateNetworkedEntityImpl(archetype, hasOwnerOverride, ownerOverride);
+
+        PutInScope(entity, scope);
+        _networked[entity.Id] = _networked[entity.Id] with { Scope = scope };
+        return entity;
     }
 
     private int DeleteEntityImpl(RawEntity entity, byte matchRevision)

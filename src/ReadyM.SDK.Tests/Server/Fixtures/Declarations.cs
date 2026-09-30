@@ -205,3 +205,23 @@ public readonly partial struct Patrol
 [Include(typeof(Position))]
 [Include(typeof(Patrol))]
 public readonly partial struct Guard;
+
+/// A mixin whose values go over the wire, which is what makes an entity of it networked.
+[ArchetypeMixin]
+[Replicated]
+[Propagates(Propagation.OwnershipBased)]
+public readonly partial struct Telemetry
+{
+    public partial int Ticks { get; set; }
+}
+
+/// A shape the server creates over the network.
+[Archetype]
+[Include(typeof(Position))]
+[Include(typeof(Telemetry))]
+public readonly partial struct Beacon;
+
+/// The same, for the case of one no game registered an archetype for.
+[Archetype]
+[Include(typeof(Telemetry))]
+public readonly partial struct Unbound;
