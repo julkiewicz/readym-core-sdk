@@ -4,11 +4,12 @@ using System.Linq;
 using System.Reflection;
 using ReadyM.Api.Compat;
 using ReadyM.Api.Interop.Registry;
+using ReadyM.Api.Mapping.Events;
 
 namespace ReadyM.Api.ECS.Registry;
 
 internal class NativeTypeRegistry(IEnumerable<INativeTypeRegistration> registrations)
-    : IdTypeRegistryBase<INativeTypeRegistry, ValueType, IInteropType>(registrations), INativeTypeRegistry
+    : IdTypeRegistryBase<INativeTypeRegistry, ValueType, IGameEvent>(registrations), INativeTypeRegistry
 {
     private readonly Dictionary<int, Type> _types = new();
 
@@ -21,7 +22,7 @@ internal class NativeTypeRegistry(IEnumerable<INativeTypeRegistration> registrat
         return base.RegisterComponentImpl<T>(default);
     }
 
-    public INativeTypeRegistry RegisterEvent<T>() where T : struct, IInteropType
+    public INativeTypeRegistry RegisterEvent<T>() where T : struct, IInteropType, IGameEvent
     {
         AssignId<T>();
         return base.RegisterEventImpl<T>();
