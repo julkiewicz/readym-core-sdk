@@ -148,17 +148,44 @@ Every available lifetime method is duck-typed, optional, and private. A service 
 * `void Update()`, called once per client or server update loop tick
 * `void Start()`, called when the game starts, after DI container initialization
 * `void Stop()`, called when the DI container is disposed
+* `void OnEnabled()`, called just before its update starts ticking
+* `void OnDisabled()`, called just after its update stops ticking
 
 A `Time` property is available, with `DeltaTime` (seconds since last update), `Elapsed` (seconds since app start) and `Ticks` (updates so far) fields.
 
-Internally, a service declaring `Start` or `Stop` becomes an `IHostedService`.
+Internally, a service declaring `Start`, `Stop` or `OnEnabled` becomes an `IHostedService`.
 
 Generated:
 
 * `IUpdatingService` and the `Time` property, when an update was declared, plus the registration that makes the game tick it
-* `IHostedService`, when a `Start` or a `Stop` was declared
+* `IHostedService`, when a `Start`, a `Stop` or an `OnEnabled` was declared
+* a `public bool Enabled { get; }` property, on every service
 * DI registration call
 * the create handler registrations, one per watched shape
+
+### Enabling and disabling services
+
+Inject `IServices` to switch any service off and on again while the game runs, including one from another mod:
+
+```csharp
+[Service]
+public sealed partial class ArenaControl(IServices services)
+{
+    private void Pause() => services.Disable<Regeneration>();
+    private void Resume() => services.Enable<Regeneration>();
+}
+```
+
+A disabled service stops updating, and its create and delete handlers stop running with it. Its `Time` stops too, so it reads when it last ran rather than how long it has been off.
+
+A service that was off while entities came and went never heard about them, so re-sync whatever state it keeps in `OnEnabled` rather than assuming it is still current.
+
+`OnEnabled` runs before the first tick after each switch on, including the game's own start.
+`OnDisabled` runs after the last tick before each switch off. Neither runs when the container is disposed, which is what `Stop` is for.
+
+Disabling one that is already disabled, or enabling one that is already enabled, logs a warning and does nothing.
+
+`Enabled` is read-only.
 
 ### UpdateOrder
 

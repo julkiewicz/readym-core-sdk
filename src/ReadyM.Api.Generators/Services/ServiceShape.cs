@@ -16,6 +16,10 @@ internal static class ServiceShape
 
     public const string StopName = "Stop";
 
+    public const string OnEnabledName = "OnEnabled";
+
+    public const string OnDisabledName = "OnDisabled";
+
     public static readonly DiagnosticDescriptor NotPartial = new(
         "READYM022",
         "Service is not partial",
@@ -107,11 +111,14 @@ internal static class ServiceShape
         var update = ReadHook(service, UpdateName, at, problems);
         var start = ReadHook(service, StartName, at, problems);
         var stop = ReadHook(service, StopName, at, problems);
+        var onEnabled = ReadHook(service, OnEnabledName, at, problems);
+        var onDisabled = ReadHook(service, OnDisabledName, at, problems);
         var watching = ReadWatchers(service, ArchetypeNames.CreateHandlerAttribute, problems);
         var leaving = ReadWatchers(service, ArchetypeNames.DeleteHandlerAttribute, problems);
         var order = ReadOrder(service, update, at, problems);
 
-        return new Service(update, start, stop, watching, leaving, order, [.. problems]);
+        return new Service(
+            update, start, stop, onEnabled, onDisabled, watching, leaving, order, [.. problems]);
     }
 
     public static bool IsService(ISymbol symbol)
@@ -289,6 +296,8 @@ internal static class ServiceShape
         IMethodSymbol? update,
         IMethodSymbol? start,
         IMethodSymbol? stop,
+        IMethodSymbol? onEnabled,
+        IMethodSymbol? onDisabled,
         IReadOnlyList<(IMethodSymbol Method, INamedTypeSymbol Shape)> watching,
         IReadOnlyList<(IMethodSymbol Method, INamedTypeSymbol Shape)> leaving,
         Ordering order,
@@ -299,6 +308,12 @@ internal static class ServiceShape
         public IMethodSymbol? Start { get; } = start;
 
         public IMethodSymbol? Stop { get; } = stop;
+
+        /// Run as its update starts ticking, which is at startup unless something disabled it.
+        public IMethodSymbol? OnEnabled { get; } = onEnabled;
+
+        /// Run once its update has stopped ticking.
+        public IMethodSymbol? OnDisabled { get; } = onDisabled;
 
         /// Shapes it is told about as they are created.
         public IReadOnlyList<(IMethodSymbol Method, INamedTypeSymbol Shape)> Watching { get; } = watching;
@@ -311,11 +326,13 @@ internal static class ServiceShape
 
         public ImmutableArray<Diagnostic> Problems { get; } = problems;
 
-        /// A service with either end of a lifetime is started and stopped with the game.
-        public bool Hosted => Start is not null || Stop is not null;
+        /// A service with either end of a lifetime is started and stopped with the game. OnEnabled
+        /// counts, since the first one fires as the game starts and a service declaring only that
+        /// would otherwise not be built in time to see it.
+        public bool Hosted => Start is not null || Stop is not null || OnEnabled is not null;
 
         public static Service Refused(Diagnostic problem)
-            => new(null, null, null, [], [], Ordering.Default, [problem]);
+            => new(null, null, null, null, null, [], [], Ordering.Default, [problem]);
     }
 
     /// What [UpdateOrder] said, or what it means to have left it off.

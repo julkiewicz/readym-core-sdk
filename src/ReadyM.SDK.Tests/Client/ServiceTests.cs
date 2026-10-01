@@ -1,4 +1,4 @@
-using Friflo.Engine.ECS;
+﻿using Friflo.Engine.ECS;
 using ReadyM.Api.DI;
 using Friflo.Engine.ECS.Systems;
 using ReadyM.SDK.Client.Systems;
@@ -56,6 +56,22 @@ public class ServiceTests : ClientSdkTest
             service.Update(new UpdateTime(0.5f, 10f));
 
         Assert.Equal(1, Container.Resolve<Counting>().Ticks);
+        Assert.Equal(0.5f, Container.Resolve<Regeneration>().Healed);
+    }
+
+    /// A game's loop hands every service its update all the same. A disabled one is what does
+    /// nothing with it, so nothing has to be resolved again when it comes back.
+    [Fact]
+    public void A_disabled_service_sits_out_the_games_loop()
+    {
+        ServiceRegistry.RegisterAll(Container);
+
+        Container.Resolve<IServices>().Disable<Counting>();
+
+        foreach (var service in ServiceRegistry.Resolve(Container))
+            service.Update(new UpdateTime(0.5f, 10f));
+
+        Assert.Equal(0, Container.Resolve<Counting>().Ticks);
         Assert.Equal(0.5f, Container.Resolve<Regeneration>().Healed);
     }
 

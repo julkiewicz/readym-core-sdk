@@ -64,6 +64,10 @@ internal static class ArchetypeNames
 
     public const string ModConfigAttribute = Namespace + ".ModConfigAttribute";
 
+    public const string Service = "global::ReadyM.SDK.Services.IService";
+
+    public const string ServiceSwitch = "global::ReadyM.SDK.Services.ServiceSwitch";
+
     public const string UpdatingService = "global::ReadyM.SDK.Services.IUpdatingService";
 
     public const string ServiceRegistry = "global::ReadyM.SDK.Services.ServiceRegistry";

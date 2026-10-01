@@ -84,3 +84,49 @@ public sealed partial class Bookkeeping
     [CreateHandler(typeof(Parcel))]
     private void Track(Parcel parcel) => Seen.Add(parcel.Mark);
 }
+
+/// Both ends of the switch, so a test can see when each one ran and what ticked in between.
+[Service]
+public sealed partial class Lanterns
+{
+    public int Ticks { get; private set; }
+
+    public int Enables { get; private set; }
+
+    public int Disables { get; private set; }
+
+    private void Update() => Ticks++;
+
+    private void OnEnabled() => Enables++;
+
+    private void OnDisabled() => Disables++;
+}
+
+/// The order a service is set up in: Start first, then being told it is about to run.
+[Service]
+public sealed partial class Opening
+{
+    public List<string> Order { get; } = [];
+
+    private void Start() => Order.Add("Start");
+
+    private void OnEnabled() => Order.Add("OnEnabled");
+}
+
+/// Enabled is read-only, so a service that wants to stop itself goes through the same door anything
+/// else does, and its OnDisabled runs as it would for anyone.
+[Service]
+public sealed partial class Curfew(IServices services)
+{
+    public int Ticks { get; private set; }
+
+    public int Disables { get; private set; }
+
+    private void Update()
+    {
+        Ticks++;
+        services.Disable<Curfew>();
+    }
+
+    private void OnDisabled() => Disables++;
+}

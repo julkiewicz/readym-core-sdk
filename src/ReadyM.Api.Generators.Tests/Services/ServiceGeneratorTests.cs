@@ -198,9 +198,12 @@ public class ServiceGeneratorTests(ITestOutputHelper output)
             }
             """);
 
-        Assert.Contains("partial class Bookends : global::ReadyM.Api.DI.IHostedService", generated);
+        Assert.Contains(
+            "partial class Bookends : global::ReadyM.SDK.Services.IService, "
+            + "global::ReadyM.Api.DI.IHostedService",
+            generated);
         Assert.Contains("global::ReadyM.Api.DI.IHostedService.OnScopeStart()", generated);
-        Assert.Contains("=> Start();", generated);
+        Assert.Contains("Start();", generated);
         Assert.Contains("global::System.IDisposable.Dispose()", generated);
         Assert.Contains("=> Stop();", generated);
     }
@@ -217,8 +220,11 @@ public class ServiceGeneratorTests(ITestOutputHelper output)
             }
             """);
 
-        Assert.Contains("partial class StartOnly : global::ReadyM.Api.DI.IHostedService", generated);
-        Assert.Contains("=> Start();", generated);
+        Assert.Contains(
+            "partial class StartOnly : global::ReadyM.SDK.Services.IService, "
+            + "global::ReadyM.Api.DI.IHostedService",
+            generated);
+        Assert.Contains("Start();", generated);
         Assert.DoesNotContain("=> Stop();", generated);
         Assert.Contains("global::System.IDisposable.Dispose()", generated);
     }

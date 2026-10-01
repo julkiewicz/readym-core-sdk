@@ -60,6 +60,8 @@ internal class ServiceGenerator : IIncrementalGenerator
 
         using (writer.Braces($"partial class {symbol.Name}{Implements(read)}"))
         {
+            Switch(writer, read);
+
             if (read.Update is not null)
             {
                 writer.Line($"private {ArchetypeNames.Time} Time {{ get; set; }}");
@@ -68,6 +70,12 @@ internal class ServiceGenerator : IIncrementalGenerator
                 using (writer.Braces(
                            $"void {ArchetypeNames.UpdatingService}.Update(in {ArchetypeNames.Time} time)"))
                 {
+                    // A disabled service does not read the clock either, so its own Time still says
+                    // when it last ran rather than how long it has been switched off.
+                    using (writer.Braces("if (!Enabled)"))
+                        writer.Line("return;");
+
+                    writer.Line();
                     writer.Line("Time = time;");
                     writer.Line($"{ServiceShape.UpdateName}();");
                 }
@@ -77,7 +85,7 @@ internal class ServiceGenerator : IIncrementalGenerator
 
             if (read.Hosted)
             {
-                Lifetime(writer, $"void {ArchetypeNames.HostedService}.OnScopeStart()", read.Start);
+                Started(writer, read);
                 Lifetime(writer, $"void {ArchetypeNames.Disposable}.Dispose()", read.Stop);
             }
 
@@ -146,15 +154,68 @@ internal class ServiceGenerator : IIncrementalGenerator
 
     private static string Implements(ServiceShape.Service read)
     {
-        var interfaces = new List<string>();
-
-        if (read.Update is not null)
-            interfaces.Add(ArchetypeNames.UpdatingService);
+        // IUpdatingService is an IService, so a service that ticks says the one and means both.
+        var interfaces = new List<string>
+        {
+            read.Update is not null ? ArchetypeNames.UpdatingService : ArchetypeNames.Service,
+        };
 
         if (read.Hosted)
             interfaces.Add(ArchetypeNames.HostedService);
 
-        return interfaces.Count == 0 ? string.Empty : " : " + string.Join(", ", interfaces);
+        return " : " + string.Join(", ", interfaces);
+    }
+
+    /// The switch anything can read, and what the SDK calls once it has moved it. Enabled has no
+    /// setter and the state sits in ServiceSwitch rather than here, so a service cannot switch
+    /// itself behind the back of its own OnEnabled and OnDisabled: the two halves of a partial class
+    /// are one class, so a field written here would be the service's to write too.
+    private static void Switch(SourceWriter writer, ServiceShape.Service read)
+    {
+        writer.Line(
+            $"private readonly {ArchetypeNames.ServiceSwitch} _switch = "
+            + $"new {ArchetypeNames.ServiceSwitch}();");
+        writer.Line();
+        writer.Line("public bool Enabled => _switch.On;");
+        writer.Line();
+        writer.Line($"{ArchetypeNames.ServiceSwitch} {ArchetypeNames.Service}.Switch => _switch;");
+        writer.Line();
+
+        using (writer.Braces($"void {ArchetypeNames.Service}.Switched(bool enabled)"))
+        {
+            if (read.OnEnabled is not null)
+                using (writer.Braces("if (enabled)"))
+                    writer.Line($"{ServiceShape.OnEnabledName}();");
+
+            if (read.OnDisabled is not null)
+                using (writer.Braces(read.OnEnabled is not null ? "else" : "if (!enabled)"))
+                    writer.Line($"{ServiceShape.OnDisabledName}();");
+        }
+
+        writer.Line();
+    }
+
+    /// Start and the first OnEnabled, in that order: a service is set up before it is told it runs.
+    private static void Started(SourceWriter writer, ServiceShape.Service read)
+    {
+        using (writer.Braces($"void {ArchetypeNames.HostedService}.OnScopeStart()"))
+        {
+            if (read.Start is not null)
+                writer.Line($"{ServiceShape.StartName}();");
+
+            if (read.OnEnabled is not null)
+            {
+                if (read.Start is not null)
+                    writer.Line();
+
+                // Something may have switched it off while the mods were loading, which is before
+                // any of this runs, and then it never started ticking in the first place.
+                using (writer.Braces("if (Enabled)"))
+                    writer.Line($"{ServiceShape.OnEnabledName}();");
+            }
+        }
+
+        writer.Line();
     }
 
     /// One end of a hosted lifetime. A service may declare only the other one, and the interface
@@ -178,7 +239,7 @@ internal class ServiceGenerator : IIncrementalGenerator
 
     /// The shape is what the handler is handed in to, since the component behind it never leaves the
     /// assembly that declared it. The service is resolved as the handler runs, not now: the
-    /// container is still being filled.
+    /// container is still being filled, and the switch is read then for the same reason.
     private static void Watch(
         SourceWriter writer,
         string service,
@@ -189,9 +250,17 @@ internal class ServiceGenerator : IIncrementalGenerator
         var name = shape.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         writer.Line();
-        writer.Line($"{name}.{watchPoint}(");
-        writer.Line($"    static (in {ArchetypeNames.EntityHandle} handle)");
-        writer.Line($"        => {ArchetypeNames.CreateHandlers}.Services.Resolve<{service}>()");
-        writer.Line($"            .{method.Name}(new {name}(handle)));");
+        writer.Line($"{name}.{watchPoint}(static (in {ArchetypeNames.EntityHandle} handle) =>");
+        writer.Line("{");
+        writer.Line($"    var service = {ArchetypeNames.CreateHandlers}.Services.Resolve<{service}>();");
+        writer.Line();
+
+        // The watch itself stays, since a service can be switched back on and taking it off and
+        // putting it back would move the handler to the end of the list every time.
+        writer.Line("    if (!service.Enabled)");
+        writer.Line("        return;");
+        writer.Line();
+        writer.Line($"    service.{method.Name}(new {name}(handle));");
+        writer.Line("});");
     }
 }

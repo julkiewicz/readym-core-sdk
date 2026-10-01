@@ -35,6 +35,8 @@ public static class ServiceRegistry
         foreach (var declaration in Declared.Values)
             declaration.Register(container);
 
+        container.RegisterSingleton<IServices>(new ServiceSwitchboard(container), replace: true);
+
         InUpdateOrder(logger);
     }
 
