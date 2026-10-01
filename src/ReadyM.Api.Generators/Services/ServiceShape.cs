@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -62,8 +62,36 @@ internal static class ServiceShape
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor OrdersNothing = new(
+        "READYM033",
+        "Update order names something that does not update",
+        "'{0}' orders its update against '{1}', which is not a [Service] that declares an Update. "
+        + "Only a service that ticks can be ordered against.",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor OrdersWithoutUpdate = new(
+        "READYM034",
+        "Update order on a service that does not update",
+        "'{0}' carries [UpdateOrder] somewhere other than on an Update the SDK can run, so there is "
+        + "nothing for it to order. Put it on the service's Update.",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor OrdersInACycle = new(
+        "READYM035",
+        "Update order is a cycle",
+        "'{0}' orders its update in a cycle: {1}. There is no order that satisfies every constraint, "
+        + "so remove one of them.",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static readonly DiagnosticDescriptor[] All =
-        [NotPartial, NotSealed, NotAHook, NotAHandler, WatchesNothing];
+        [NotPartial, NotSealed, NotAHook, NotAHandler, WatchesNothing,
+         OrdersNothing, OrdersWithoutUpdate, OrdersInACycle];
 
     public static Service Read(INamedTypeSymbol service)
     {
@@ -81,13 +109,91 @@ internal static class ServiceShape
         var stop = ReadHook(service, StopName, at, problems);
         var watching = ReadWatchers(service, ArchetypeNames.CreateHandlerAttribute, problems);
         var leaving = ReadWatchers(service, ArchetypeNames.DeleteHandlerAttribute, problems);
+        var order = ReadOrder(service, update, at, problems);
 
-        return new Service(update, start, stop, watching, leaving, [.. problems]);
+        return new Service(update, start, stop, watching, leaving, order, [.. problems]);
     }
 
     public static bool IsService(ISymbol symbol)
         => symbol.GetAttributes().Any(attribute
             => attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.ServiceAttribute);
+
+    /// <summary>What [UpdateOrder] on the update said, having checked that it can mean anything.</summary>
+    private static Ordering ReadOrder(
+        INamedTypeSymbol service,
+        IMethodSymbol? update,
+        Location at,
+        List<Diagnostic> problems)
+    {
+        // Looked for anywhere rather than on Update alone, so putting it on the wrong method is
+        // refused instead of quietly doing nothing.
+        var carrier = service.GetMembers().OfType<IMethodSymbol>()
+            .FirstOrDefault(method => Order(method) is not null);
+
+        if (carrier is null)
+            return Ordering.Default;
+
+        var attribute = Order(carrier)!;
+        var where = carrier.Locations.FirstOrDefault() ?? at;
+
+        // Ordering something the SDK never runs says nothing, and reads as though it does.
+        if (update is null || !SymbolEqualityComparer.Default.Equals(carrier, update))
+        {
+            problems.Add(Diagnostic.Create(OrdersWithoutUpdate, where, service.Name));
+            return Ordering.Default;
+        }
+
+        var priority = attribute.ConstructorArguments.Length > 0
+                       && attribute.ConstructorArguments[0].Value is int given
+            ? given
+            : Ordering.DefaultPriority;
+
+        return new Ordering(
+            priority,
+            Targets(attribute, "Before", service, where, problems),
+            Targets(attribute, "After", service, where, problems));
+    }
+
+    private static AttributeData? Order(ISymbol method)
+        => method.GetAttributes().FirstOrDefault(attribute
+            => attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.UpdateOrderAttribute);
+
+    /// The services one end of the constraint names, refusing anything that does not tick.
+    private static IReadOnlyList<INamedTypeSymbol> Targets(
+        AttributeData attribute,
+        string name,
+        INamedTypeSymbol service,
+        Location at,
+        List<Diagnostic> problems)
+    {
+        var named = attribute.NamedArguments.FirstOrDefault(pair => pair.Key == name).Value;
+
+        if (named.Kind != TypedConstantKind.Array)
+            return [];
+
+        var found = new List<INamedTypeSymbol>();
+
+        foreach (var value in named.Values)
+        {
+            if (value.Value is not INamedTypeSymbol target)
+                continue;
+
+            if (!Updates(target))
+            {
+                problems.Add(Diagnostic.Create(OrdersNothing, at, service.Name, target.Name));
+                continue;
+            }
+
+            found.Add(target);
+        }
+
+        return found;
+    }
+
+    /// Whether the type is a service the SDK ticks, which is all that can be ordered against.
+    public static bool Updates(INamedTypeSymbol type)
+        => IsService(type)
+           && type.GetMembers(UpdateName).OfType<IMethodSymbol>().Any(Callable);
 
     /// One duck-typed method the SDK calls, or null when the service declared none it can call.
     private static IMethodSymbol? ReadHook(
@@ -185,6 +291,7 @@ internal static class ServiceShape
         IMethodSymbol? stop,
         IReadOnlyList<(IMethodSymbol Method, INamedTypeSymbol Shape)> watching,
         IReadOnlyList<(IMethodSymbol Method, INamedTypeSymbol Shape)> leaving,
+        Ordering order,
         ImmutableArray<Diagnostic> problems)
     {
         public IMethodSymbol? Update { get; } = update;
@@ -199,11 +306,32 @@ internal static class ServiceShape
         /// Shapes it is told about just before they go.
         public IReadOnlyList<(IMethodSymbol Method, INamedTypeSymbol Shape)> Leaving { get; } = leaving;
 
+        /// Where its update runs relative to the others.
+        public Ordering Order { get; } = order;
+
         public ImmutableArray<Diagnostic> Problems { get; } = problems;
 
         /// A service with either end of a lifetime is started and stopped with the game.
         public bool Hosted => Start is not null || Stop is not null;
 
-        public static Service Refused(Diagnostic problem) => new(null, null, null, [], [], [problem]);
+        public static Service Refused(Diagnostic problem)
+            => new(null, null, null, [], [], Ordering.Default, [problem]);
+    }
+
+    /// What [UpdateOrder] said, or what it means to have left it off.
+    internal readonly struct Ordering(int priority, IReadOnlyList<INamedTypeSymbol> before, IReadOnlyList<INamedTypeSymbol> after)
+    {
+        public const int DefaultPriority = 100;
+
+        public int Priority { get; } = priority;
+
+        public IReadOnlyList<INamedTypeSymbol> Before { get; } = before;
+
+        public IReadOnlyList<INamedTypeSymbol> After { get; } = after;
+
+        public static Ordering Default => new(DefaultPriority, [], []);
+
+        /// Whether anything was said, which is what decides if the registration carries it.
+        public bool IsDefault => Priority == DefaultPriority && Before.Count == 0 && After.Count == 0;
     }
 }

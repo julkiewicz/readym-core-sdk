@@ -160,6 +160,15 @@ Generated:
 * DI registration call
 * the create handler registrations, one per watched shape
 
+### UpdateOrder
+
+Placed on the `Update()` method of a service, it specifies the order in which services are updated each tick.
+
+The default priority is 100. Larger priority = executed **later** in the tick.
+`Before` and `After` parameters specify constraints against other services, and take precedence over the priority value.
+
+Services with otherwise equal priority are updated in the alphabetical order of their type names.
+
 ### CreateHandler
 
 Annotated method defined logic that runs immediately after a component of a given shape is created.
@@ -190,3 +199,10 @@ An optional `void Start()` method is called when the mod is loaded,
 after DI registers types from the current assembly, so we can inject config classes or services.
 
 A `public string ModDirectory { get; }` property is available, which points to the mod's root directory on disk.
+
+### ModConfig
+
+A `sealed partial class` annotated with `[ModConfig]` is a configuration class for a mod.
+
+A "config.json" file (you can override the name) is automatically loaded from the mod's root directory
+and deserialized into the class, which is registered in DI.

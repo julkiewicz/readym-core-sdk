@@ -58,6 +58,8 @@ internal static class ArchetypeNames
 
     public const string ServiceAttribute = Namespace + ".ServiceAttribute";
 
+    public const string UpdateOrderAttribute = Namespace + ".UpdateOrderAttribute";
+
     public const string ModEntryAttribute = Namespace + ".ModEntryAttribute";
 
     public const string ModConfigAttribute = Namespace + ".ModConfigAttribute";

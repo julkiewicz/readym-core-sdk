@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -104,7 +104,7 @@ internal class ServiceGenerator : IIncrementalGenerator
                     writer.Line();
 
                     if (read.Update is not null)
-                        writer.Line($"{ArchetypeNames.ServiceRegistry}.Register<{name}>();");
+                        writer.Line($"{ArchetypeNames.ServiceRegistry}.Register<{name}>({Order(read.Order)});");
                     else
                         writer.Line($"{ArchetypeNames.ServiceRegistry}.Hold<{name}>();");
 
@@ -118,6 +118,30 @@ internal class ServiceGenerator : IIncrementalGenerator
         }
 
         return (ArchetypeNames.HintOf(symbol, "Service"), writer.ToString());
+    }
+
+    /// <summary>What the registration carries, which is nothing where the service said nothing.</summary>
+    /// <remarks>
+    /// Written as an array rather than a collection expression, because the mod compiling this may
+    /// be on an older language version than the SDK.
+    /// </remarks>
+    private static string Order(ServiceShape.Ordering order)
+    {
+        if (order.IsDefault)
+            return string.Empty;
+
+        return $"{order.Priority}, {Types(order.Before)}, {Types(order.After)}";
+    }
+
+    private static string Types(IReadOnlyList<INamedTypeSymbol> services)
+    {
+        if (services.Count == 0)
+            return "null";
+
+        var named = services.Select(service
+            => $"typeof({service.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})");
+
+        return "new global::System.Type[] { " + string.Join(", ", named) + " }";
     }
 
     private static string Implements(ServiceShape.Service read)
