@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Yooni.Native.Logging;
@@ -63,6 +64,10 @@ public class NativeTrackerRepo : IDisposable
     private bool _alreadyInit;
     private bool _disposed;
 
+    // Whether this repo allocated the root it tracks into. An ADOPTED root belongs to whoever handed it over
+    // (in the game, the C++ side), so releasing it lets go of it and leaves the freeing to its owner.
+    private bool _ownsRoot;
+
     internal static readonly NativeTrackerRepo Instance = new();
 
     public static void Init(AllocatorKind allocatorKind)
@@ -84,6 +89,7 @@ public class NativeTrackerRepo : IDisposable
         ref var root = ref _ptr.Get();
         root.Entries = new NativeList<TrackEntryEx>(1024, allocatorKind);
         root.FreeList = new NativeList<int>(1024, allocatorKind);
+        _ownsRoot = true;
         _alreadyInit = true;
         _disposed = false;
     }
@@ -95,16 +101,28 @@ public class NativeTrackerRepo : IDisposable
 
         _ptr = new TypedPtr<EntryList>(trackerPtr);
         _allocator = allocatorKind;
+        _ownsRoot = false;
         _alreadyInit = true;
         _disposed = false;
     }
 
+    /// <summary>The root, for another runtime to adopt with <see cref="Init(IntPtr, AllocatorKind)"/>. The C++
+    /// repo has the same accessor; this one is how a test stands in for it.</summary>
+    internal unsafe IntPtr GetNativeBinding()
+        => (IntPtr)Unsafe.AsPointer(ref _ptr.Get());
+
     void IDisposable.Dispose()
     {
-        ref var root = ref _ptr.Get();
-        root.Entries.Dispose();
-        root.FreeList.Dispose();
-        _ptr.Free(_allocator);
+        if (_ownsRoot)
+        {
+            ref var root = ref _ptr.Get();
+            root.Entries.Dispose();
+            root.FreeList.Dispose();
+            _ptr.Free(_allocator);
+        }
+
+        _ptr = default;
+        _ownsRoot = false;
         _allocator = default;
         _alreadyInit = false;
         _disposed = true;
