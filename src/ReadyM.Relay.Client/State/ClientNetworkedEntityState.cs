@@ -17,6 +17,7 @@ internal class ClientNetworkedEntityState(
         Action<EntityBuilder>? setComponents = null,
         PlayerId? ownerOverride = null)
     {
+        EnsureConnected();
         var (entity, _) = netEntity.CreateNetworkedEntity(archetypeId, scopeEntity, setComponents, ownerOverride);
         return entity;
     }
@@ -32,6 +33,7 @@ internal class ClientNetworkedEntityState(
         Action<EntityBuilder>? setComponents = null,
         PlayerId? ownerOverride = null)
     {
+        EnsureConnected();
         if (!state.CurrentAreaEntity.HasValue)
             throw new InvalidOperationException("Attempted to create a networked entity in area but no area is set.");
 
@@ -46,6 +48,7 @@ internal class ClientNetworkedEntityState(
         Action<EntityBuilder>? setComponents = null,
         PlayerId? ownerOverride = null)
     {
+        EnsureConnected();
         var cellEntry = state.GetActiveCellEntry(cellId);
         if (!cellEntry.HasValue)
             throw new InvalidOperationException($"Attempted to create a networked entity in cell {cellId} but that cell is not active.");
@@ -57,11 +60,19 @@ internal class ClientNetworkedEntityState(
 
     public Entity CreatePlayerEntity(ArchetypeId archetypeId)
     {
+        EnsureConnected();
         if (state.LocalPlayerEntity == null)
             throw new InvalidOperationException("Attempted to create a networked entity for player but no player entity is set.");
 
         var scopeEntity = state.LocalPlayerEntity.Value;
         var (entity, _) = netEntity.CreateNetworkedEntity(archetypeId, scopeEntity);
         return entity;
+    }
+
+    // ClientState counts as connected once the global snapshot is in; an entity created before then would come back in it.
+    private void EnsureConnected()
+    {
+        if (!state.IsConnected)
+            throw new InvalidOperationException("Attempted to create a networked entity before being connected.");
     }
 }
