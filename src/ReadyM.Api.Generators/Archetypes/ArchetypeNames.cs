@@ -60,6 +60,8 @@ internal static class ArchetypeNames
 
     public const string ModEntryAttribute = Namespace + ".ModEntryAttribute";
 
+    public const string ModConfigAttribute = Namespace + ".ModConfigAttribute";
+
     public const string UpdatingService = "global::ReadyM.SDK.Services.IUpdatingService";
 
     public const string ServiceRegistry = "global::ReadyM.SDK.Services.ServiceRegistry";
@@ -73,6 +75,8 @@ internal static class ArchetypeNames
     public const string ModEntry = "global::ReadyM.SDK.Mods.IModEntry";
 
     public const string ModEntryRegistry = "global::ReadyM.SDK.Mods.ModEntryRegistry";
+
+    public const string ModConfigRegistry = "global::ReadyM.SDK.Mods.ModConfigRegistry";
 
     public const string CreateHandlers = "global::ReadyM.SDK.Archetypes.CreateHandlerRegistry";
 

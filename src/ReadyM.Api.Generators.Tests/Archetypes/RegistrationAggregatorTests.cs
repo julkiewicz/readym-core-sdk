@@ -57,6 +57,12 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
         {
             private void Start() { }
         }
+
+        [ModConfig]
+        public sealed partial class Settings
+        {
+            public int Rounds { get; set; }
+        }
         """;
 
     [Fact]
@@ -78,6 +84,29 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
     [Fact]
     public void It_names_the_mods_entry_point()
         => Assert.Contains("global::Mod.Entry.Registration.Register();", Generated(Source));
+
+    /// A config is read before anything in the assembly is touched, so its own initializer is too late.
+    [Fact]
+    public void It_names_a_mods_config()
+        => Assert.Contains("global::Mod.Settings.Registration.Register();", Generated(Source));
+
+    /// Nothing is written for a config the analyzer refuses, so naming it would not compile.
+    [Fact]
+    public void It_leaves_out_a_config_that_was_refused()
+        => Assert.DoesNotContain("Unbuildable", Generated("""
+            using ReadyM.SDK.Attributes;
+
+            namespace Mod;
+
+            [Archetype]
+            public readonly partial struct Subject
+            {
+                public partial int Mark { get; set; }
+            }
+
+            [ModConfig]
+            public abstract partial class Unbuildable { }
+            """));
 
     /// Nothing is written for an entry point the analyzer refuses, so naming it would not compile.
     [Fact]

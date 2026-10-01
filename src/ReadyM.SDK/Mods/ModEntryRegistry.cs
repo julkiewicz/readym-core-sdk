@@ -25,6 +25,9 @@ public static class ModEntryRegistry
         if (!Declared.TryGetValue(assembly, out var declaration))
             return null;
 
+        // Ahead of the entry point, so a config this mod declares reaches its constructor.
+        ModConfigRegistry.RegisterAll(assembly, container, modDirectory);
+
         var entry = declaration.Build(container);
 
         entry.SetModDirectory(modDirectory);

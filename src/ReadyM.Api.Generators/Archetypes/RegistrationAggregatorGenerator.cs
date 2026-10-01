@@ -43,13 +43,18 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
             static (node, _) => node is ClassDeclarationSyntax,
             ReadModEntry);
 
+        var configs = context.SyntaxProvider.ForAttributeWithMetadataName(
+            ArchetypeNames.ModConfigAttribute,
+            static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+            ReadModConfig);
+
         var all = archetypes.Collect().Combine(mixins.Collect())
-            .Combine(services.Collect()).Combine(entries.Collect());
+            .Combine(services.Collect()).Combine(entries.Collect()).Combine(configs.Collect());
 
         context.RegisterSourceOutput(all, static (spc, found) =>
         {
-            var names = found.Left.Left.Left.Concat(found.Left.Left.Right)
-                .Concat(found.Left.Right).Concat(found.Right)
+            var names = found.Left.Left.Left.Left.Concat(found.Left.Left.Left.Right)
+                .Concat(found.Left.Left.Right).Concat(found.Left.Right).Concat(found.Right)
                 .SelectMany(entry => entry)
                 .Distinct()
                 .OrderBy(name => name, System.StringComparer.Ordinal)
@@ -95,6 +100,21 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
                 found.Add($"{prefix}{symbol.Name}.{handler.Name}DeleteRegistration");
 
         return found.ToImmutable();
+    }
+
+    /// The registration a mod's config produces, unless the analyzer refuses the class.
+    private static ImmutableArray<string> ReadModConfig(GeneratorAttributeSyntaxContext context, CancellationToken ct)
+    {
+        if (context.TargetSymbol is not INamedTypeSymbol { ContainingType: null } symbol)
+            return [];
+
+        if (Mods.ModConfigShape.Read(symbol).Problems.Any(problem => problem.Severity == DiagnosticSeverity.Error))
+            return [];
+
+        var ns = ArchetypeNames.NamespaceOf(symbol);
+        var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
+
+        return [$"{prefix}{symbol.Name}.Registration"];
     }
 
     /// The registration a mod's entry point produces, unless the analyzer refuses the class.

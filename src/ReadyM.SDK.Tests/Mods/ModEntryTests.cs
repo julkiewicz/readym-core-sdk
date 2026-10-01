@@ -1,4 +1,6 @@
-﻿using ReadyM.Api.DI;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using ReadyM.Api.DI;
 using ReadyM.SDK.Attributes;
 using ReadyM.SDK.Mods;
 
@@ -14,6 +16,12 @@ namespace ReadyM.SDK.Tests.Mods;
 public class ModEntryTests
 {
     private readonly TestContainer _container = new();
+
+    public ModEntryTests()
+    {
+        // As a host does. Reading a mod's config reports what it found through it.
+        _container.RegisterSingleton<ILogger>(NullLogger.Instance);
+    }
 
     private IModEntry? Start(string directory = "mods/example")
         => ModEntryRegistry.Start(typeof(ExampleEntry).Assembly, _container, directory);
