@@ -279,6 +279,6 @@ internal sealed class DeriveIGameEventGenerator : IIncrementalGenerator
     {
         var chars = part.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray();
         var id = new string(chars);
-        return id.Length == 0 || char.IsDigit(id[0]) ? "_" + id : id;
+        return id.Length == 0 || char.IsDigit(id[0]) ? $"_{id}" : id;
     }
 }

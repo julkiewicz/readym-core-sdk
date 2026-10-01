@@ -143,7 +143,7 @@ internal static class SourceGeneratorTestHelper
             .ToArray();
 
         return CSharpCompilation.Create(
-            assemblyName: assemblyName ?? "ReadyM.Api.Generators.Tests.Dynamic_" + Guid.NewGuid().ToString("N"),
+            assemblyName: assemblyName ?? $"ReadyM.Api.Generators.Tests.Dynamic_{Guid.NewGuid():N}",
             syntaxTrees: syntaxTrees,
             references: GetMetadataReferences(output),
             options: new CSharpCompilationOptions(
