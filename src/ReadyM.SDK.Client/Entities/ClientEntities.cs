@@ -1,6 +1,6 @@
 ﻿using Friflo.Engine.ECS;
 using ReadyM.SDK.Archetypes;
-using ReadyM.SDK.Core;
+using ReadyM.SDK.Archetypes.Core;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Exceptions;
 

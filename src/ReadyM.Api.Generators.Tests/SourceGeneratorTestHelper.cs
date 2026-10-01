@@ -86,12 +86,15 @@ internal static class SourceGeneratorTestHelper
         ITestOutputHelper output,
         IEnumerable<Assembly>? alsoReference = null,
         string? assemblyName = null,
-        IReadOnlyDictionary<string, string>? buildProperties = null)
+        IReadOnlyDictionary<string, string>? buildProperties = null,
+        IEnumerable<MetadataReference>? alsoReferenceMetadata = null,
+        IEnumerable<string>? withoutReferences = null)
     {
         if (sources is null)
             throw new ArgumentNullException(nameof(sources));
 
-        var inputCompilation = CreateCompilation(sources, output, alsoReference, assemblyName);
+        var inputCompilation = CreateCompilation(
+            sources, output, alsoReference, assemblyName, alsoReferenceMetadata, withoutReferences);
 
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             generators.Select(GeneratorExtensions.AsSourceGenerator),
@@ -163,7 +166,9 @@ internal static class SourceGeneratorTestHelper
         IEnumerable<(string Path, string Source)> sources,
         ITestOutputHelper output,
         IEnumerable<Assembly>? alsoReference = null,
-        string? assemblyName = null)
+        string? assemblyName = null,
+        IEnumerable<MetadataReference>? alsoReferenceMetadata = null,
+        IEnumerable<string>? withoutReferences = null)
     {
         if (sources is null)
             throw new ArgumentNullException(nameof(sources));
@@ -189,7 +194,8 @@ internal static class SourceGeneratorTestHelper
         return CSharpCompilation.Create(
             assemblyName: assemblyName ?? SdkInternalsAssembly + "_" + Guid.NewGuid().ToString("N"),
             syntaxTrees: syntaxTrees,
-            references: GetMetadataReferences(output, alsoReference),
+            references: GetMetadataReferences(output, alsoReference, withoutReferences)
+                .Concat(alsoReferenceMetadata ?? []),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 nullableContextOptions: NullableContextOptions.Enable,
@@ -304,9 +310,15 @@ internal static class SourceGeneratorTestHelper
         return "<unknown>";
     }
 
+    /// <param name="withoutReferences">
+    /// Assembly names to leave out, so a test can compile against the same set a real project has.
+    /// Everything the test assembly references is pulled in by default, which is more than any one
+    /// mod sees.
+    /// </param>
     private static IEnumerable<MetadataReference> GetMetadataReferences(
         ITestOutputHelper output,
-        IEnumerable<Assembly>? alsoReference)
+        IEnumerable<Assembly>? alsoReference,
+        IEnumerable<string>? withoutReferences = null)
     {
         var assemblies = new[]
         {
@@ -335,8 +347,13 @@ internal static class SourceGeneratorTestHelper
             AddAssemblyAndReferencesRecursive(assembly, seen, output);
         }
 
+        var dropped = new HashSet<string>(withoutReferences ?? [], StringComparer.OrdinalIgnoreCase);
+
         foreach (var path in seen)
         {
+            if (dropped.Contains(Path.GetFileNameWithoutExtension(path)))
+                continue;
+
             yield return MetadataReference.CreateFromFile(path);
         }
     }

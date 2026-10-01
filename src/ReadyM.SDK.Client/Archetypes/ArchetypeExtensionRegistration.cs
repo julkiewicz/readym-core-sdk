@@ -3,7 +3,7 @@ using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.ECS.Archetypes;
-using ReadyM.SDK.Core;
+using ReadyM.SDK.Archetypes.Core;
 
 namespace ReadyM.SDK.Client.Archetypes;
 

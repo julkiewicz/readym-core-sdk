@@ -1,6 +1,7 @@
 ﻿using Friflo.Engine.ECS;
 using ReadyM.Api.DI;
 using Friflo.Engine.ECS.Systems;
+using ReadyM.SDK.Archetypes.Core;
 using ReadyM.SDK.Client.Systems;
 using ReadyM.SDK.Services;
 using ReadyM.SDK.Tests.Client.Fixtures;
@@ -89,7 +90,7 @@ public class ServiceTests : ClientSdkTest
     [Fact]
     public void A_games_loop_updates_every_declared_service()
     {
-        Entities.Create<Core.World>();
+        Entities.Create<World>();
         ModSystems.Refresh(Entities);
 
         var root = new SystemRoot(Store);

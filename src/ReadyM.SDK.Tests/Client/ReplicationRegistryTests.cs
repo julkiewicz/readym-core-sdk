@@ -104,12 +104,12 @@ public class ReplicationRegistryTests
     public void Only_a_shapes_generated_components_are_the_sdks_to_register()
     {
         Assert.Equal(
-            [typeof(global::ReadyM.SDK.Core.World).Assembly.GetType("ReadyM.SDK.Core.WorldArchetypeMarker")],
-            Generated<global::ReadyM.SDK.Core.World>());
+            [typeof(global::ReadyM.SDK.Archetypes.Core.World).Assembly.GetType("ReadyM.SDK.Core.WorldArchetypeMarker")],
+            Generated<global::ReadyM.SDK.Archetypes.Core.World>());
 
-        Assert.Empty(Generated<global::ReadyM.SDK.Core.Area>());
-        Assert.Empty(Generated<global::ReadyM.SDK.Core.Player>());
-        Assert.Empty(Generated<global::ReadyM.SDK.Core.Cell>());
+        Assert.Empty(Generated<global::ReadyM.SDK.Archetypes.Core.Area>());
+        Assert.Empty(Generated<global::ReadyM.SDK.Archetypes.Core.Player>());
+        Assert.Empty(Generated<global::ReadyM.SDK.Archetypes.Core.Cell>());
     }
 
     /// Mirrors the rule ServerArchetypes applies, which cannot be reached from here: a generated

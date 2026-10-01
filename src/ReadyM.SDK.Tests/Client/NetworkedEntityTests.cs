@@ -9,6 +9,7 @@ using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.ECS.Managers;
 using ReadyM.Api.Multiplayer.ECS.Values;
 using ReadyM.SDK.Archetypes;
+using ReadyM.SDK.Archetypes.Core;
 using ReadyM.SDK.Client.Archetypes;
 using ReadyM.SDK.Client.Entities;
 using ReadyM.SDK.Entities;
@@ -52,7 +53,7 @@ public class NetworkedEntityTests : IDisposable
         World = _container.Resolve<Store>();
         World.SetThread(Thread.CurrentThread);
 
-        Bind<Core.Area>();
+        Bind<Area>();
         Bind<Prop>();
         Bind<Rig>();
         Bind<Borrowed>();
@@ -139,7 +140,7 @@ public class NetworkedEntityTests : IDisposable
     [Fact]
     public void A_networked_entity_keeps_the_scope_it_was_made_in()
     {
-        var area = Entities.Create<Core.Area>();
+        var area = Entities.Create<Area>();
         var rig = Entities.Create<Rig>(area);
 
         Assert.True(Has<MetadataComponent>(rig));
@@ -149,7 +150,7 @@ public class NetworkedEntityTests : IDisposable
     [Fact]
     public void A_local_entity_keeps_it_too()
     {
-        var area = Entities.Create<Core.Area>();
+        var area = Entities.Create<Area>();
         var prop = Entities.Create<Prop>(area);
 
         Assert.False(Has<MetadataComponent>(prop));

@@ -1,6 +1,6 @@
 ﻿using ReadyM.Api.Idents;
 using ReadyM.SDK.Archetypes;
-using ReadyM.SDK.Core;
+using ReadyM.SDK.Archetypes.Core;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Exceptions;
 

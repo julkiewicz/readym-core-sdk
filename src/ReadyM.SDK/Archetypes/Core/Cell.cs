@@ -1,10 +1,8 @@
-﻿
-using ReadyM.Api.Idents;
+﻿using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.ECS.Components;
-using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Attributes;
 
-namespace ReadyM.SDK.Core;
+namespace ReadyM.SDK.Archetypes.Core;
 
 [Archetype]
 [ExplicitComponent(typeof(CellScopeComponent))]

@@ -1,6 +1,6 @@
 ﻿using ReadyM.SDK.Attributes;
 
-namespace ReadyM.SDK.Core;
+namespace ReadyM.SDK.Archetypes.Core;
 
 [Archetype]
 public readonly partial struct World;

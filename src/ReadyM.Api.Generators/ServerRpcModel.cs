@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 
@@ -107,6 +107,11 @@ internal static class ServerRpcModel
         return null;
     }
 
+    /// <summary>Whether a class names the contract set it implements, which is what makes it one.</summary>
+    public static bool HasServerRpcFor(INamedTypeSymbol type) =>
+        type.GetAttributes().Any(a =>
+            a.AttributeClass?.Name is "ServerRpcForAttribute" or "ServerRpcFor");
+
     public static bool HasContractsAttribute(INamedTypeSymbol type) =>
         type.GetAttributes().Any(a =>
             a.AttributeClass?.Name is "ServerRpcContractsAttribute" or "ServerRpcContracts");
@@ -118,6 +123,36 @@ internal static class ServerRpcModel
     public static bool IsServerToClient(IMethodSymbol method) =>
         method.GetAttributes().Any(a =>
             a.AttributeClass?.Name is "ServerToClientAttribute" or "ServerToClient");
+
+    public static bool IsClientToClients(IMethodSymbol method) => ClientToClients(method) is not null;
+
+    /// <summary>The <c>[ClientToClients]</c> on a method, which carries the relay mode, or null.</summary>
+    public static AttributeData? ClientToClients(IMethodSymbol method) =>
+        method.GetAttributes().FirstOrDefault(a =>
+            a.AttributeClass?.Name is "ClientToClientsAttribute" or "ClientToClients");
+
+    /// <summary>
+    /// The RelayMode a <c>[ClientToClients]</c> names, as its underlying byte. Zero
+    /// (AreaOfInterestOthers) when the attribute is there but its argument could not be read.
+    /// </summary>
+    public static byte RelayModeOf(IMethodSymbol method)
+    {
+        var attribute = ClientToClients(method);
+
+        if (attribute is null || attribute.ConstructorArguments.Length == 0)
+            return 0;
+
+        return attribute.ConstructorArguments[0].Value is { } value
+            ? System.Convert.ToByte(value)
+            : (byte)0;
+    }
+
+    /// <summary>
+    /// Whether a name travels between clients rather than through the server, which is what decides
+    /// the code space it is assigned out of. The two cannot be mixed under one name.
+    /// </summary>
+    public static bool IsServerDirected(IMethodSymbol method) =>
+        IsClientToServer(method) || IsServerToClient(method);
 
     /// <summary>All <c>[ServerRpcContracts]</c> classes reachable under <paramref name="ns"/>.</summary>
     public static List<INamedTypeSymbol> CollectContractClasses(INamespaceSymbol ns)
@@ -154,7 +189,8 @@ internal static class ServerRpcModel
             {
                 var cs = IsClientToServer(method);
                 var sc = IsServerToClient(method);
-                if (!cs && !sc)
+                var cc = IsClientToClients(method);
+                if (!cs && !sc && !cc)
                     continue;
 
                 result.TryGetValue(method.Name, out var entry);
@@ -162,6 +198,8 @@ internal static class ServerRpcModel
                     entry.ClientToServer = method;
                 if (sc)
                     entry.ServerToClient = method;
+                if (cc)
+                    entry.ClientToClients = method;
                 result[method.Name] = entry;
             }
         }
@@ -176,5 +214,8 @@ internal static class ServerRpcModel
 
         /// <summary>Response/push (s-&gt;c) method, or null.</summary>
         public IMethodSymbol? ServerToClient;
+
+        /// <summary>Peer-to-peer (c-&gt;cs) method, or null. Never set alongside the other two.</summary>
+        public IMethodSymbol? ClientToClients;
     }
 }

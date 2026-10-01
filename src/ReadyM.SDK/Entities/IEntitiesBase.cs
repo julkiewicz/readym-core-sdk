@@ -1,5 +1,5 @@
 ﻿using ReadyM.SDK.Archetypes;
-using ReadyM.SDK.Core;
+using ReadyM.SDK.Archetypes.Core;
 
 namespace ReadyM.SDK.Entities;
 

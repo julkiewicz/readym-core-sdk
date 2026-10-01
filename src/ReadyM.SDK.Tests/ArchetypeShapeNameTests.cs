@@ -1,5 +1,5 @@
 ﻿using ReadyM.Api.Multiplayer.ECS.Archetypes;
-using ReadyM.SDK.Core;
+using ReadyM.SDK.Archetypes.Core;
 
 namespace ReadyM.SDK.Tests;
 
