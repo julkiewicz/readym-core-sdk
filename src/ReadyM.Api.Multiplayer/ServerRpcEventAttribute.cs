@@ -3,6 +3,7 @@
 namespace ReadyM.Api.Multiplayer;
 
 /// <exclude />
+[Obsolete("Part of old 0.x SDK. Use [RpcContracts] instead.")]
 [AttributeUsage(AttributeTargets.Class)]
 public sealed class ServerRpcContractsAttribute : Attribute;
 
@@ -13,7 +14,8 @@ public sealed class ServerRpcContractsAttribute : Attribute;
 /// transitively; this is what tells the generator which one to emit against. Only the legs declared
 /// by the named class are generated, so one contract set per RPC class.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+[Obsolete("Part of old 0.x SDK. Use [RpcHandlersFor] instead.")]
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class ServerRpcForAttribute(Type contractsType) : Attribute
 {
     /// <summary>The <c>[ServerRpcContracts]</c> class this RPC class implements.</summary>

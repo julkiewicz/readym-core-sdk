@@ -3,6 +3,7 @@ using ReadyM.Api.DI;
 using ReadyM.Relay.Server.Sdk.Ecs.Components;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Entities;
+using ReadyM.Api.Multiplayer.RPC;
 using ReadyM.SDK.Server.Systems;
 using ReadyM.SDK.Services;
 
@@ -43,6 +44,7 @@ public static class ServerSdk
         ExtensionNativeDelete.Use(api);
 
         ServiceRegistry.RegisterAll(services);
+        RpcHandlerRegistry.RegisterAll(services, RpcSide.Server);
 
         // TODO: Wire as a standard system somewhere, since this is based on the obsolete ModSystemBase
         ModSystemUpdates.Wire(services);

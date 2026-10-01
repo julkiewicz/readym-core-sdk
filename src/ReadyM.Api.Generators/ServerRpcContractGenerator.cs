@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace ReadyM.Api.Generators;
 
 /// <summary>
-/// Runs on the Common project. For classes marked [ServerRpcContracts], emits partial method
+/// Runs on the Common project. For classes marked [RpcContracts], emits partial method
 /// implementations and the ServerRpcManifest (the shared code assignment referenced by both the
 /// server handler and client event generators). Overloads of a name collapse to one manifest entry
 /// (one wire code). See <see cref="ClientToServerAttribute"/> for the direction rules.

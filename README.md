@@ -233,3 +233,55 @@ A `sealed partial class` annotated with `[ModConfig]` is a configuration class f
 
 A "config.json" file (you can override the name) is automatically loaded from the mod's root directory
 and deserialized into the class, which is registered in DI.
+
+### RpcContracts
+
+A `static partial class` annotated with `[RpcContracts]`, declared in a mod's Common project, is
+one set of RPCs. Each one is a `static partial void` whose name is the RPC and whose parameters are the
+payload, marked with the direction it travels:
+
+```csharp
+[RpcContracts]
+public static partial class CoopRpcContracts
+{
+    [ClientToServer] public static partial void ScaleBossHp(int percent);
+    [ServerToClient] public static partial void BossHpScaled(int percent);
+    [ClientToClients(RelayMode.AreaOfInterestAll)] public static partial void Wave(int kind);
+}
+```
+
+One name is one wire code, so a request and its response share a name and may carry different payloads.
+A name is either routed through the server or relayed between clients, never both: the two are numbered
+out of separate code spaces, so mixing them under one name is refused.
+
+Implementing a set is a `partial class` annotated with `[RpcHandlersFor(typeof(TheContracts))]`, on
+the client, on the server, or both. It needs no base class and may implement any subset of the stubs:
+
+```csharp
+[RpcHandlersFor(typeof(CoopRpcContracts))]
+public partial class CoopRpc
+{
+    partial void OnBossHpScaled(int percent) { }
+
+    partial void OnWave(PlayerId sender, int kind) { }
+}
+```
+
+What each direction generates:
+
+| Direction | On the client | On the server |
+| --- | --- | --- |
+| `[ClientToServer]` | `SendX(payload)` | `partial void OnX(RpcContext context, payload)` |
+| `[ServerToClient]` | `partial void OnX(payload)` | `SendX(PlayerId recipient, payload)` |
+| `[ClientToClients(mode)]` | `SendX(payload)` **and** `partial void OnX(PlayerId sender, payload)` | nothing |
+
+A peer-to-peer RPC never reaches a mod on the server: the relay forwards it by the `RelayMode` the
+contract named, and every client that receives it runs its own `OnX`. The sender is passed in because
+it is the one thing a receiver cannot work out for itself. Nothing is sent before the relay has given
+this client a player id.
+
+`RelayMode` picks who hears it: `AreaOfInterestOthers`, `AreaOfInterestAll`, `GlobalOthers` or
+`GlobalAll`. The others on the enum are not part of the public API and are refused.
+
+A class carrying `[RpcHandlersFor]` is registered as a singleton in DI automatically, the way a
+`[Service]` is.

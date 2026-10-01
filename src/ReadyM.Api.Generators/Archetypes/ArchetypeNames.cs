@@ -64,6 +64,15 @@ internal static class ArchetypeNames
 
     public const string ModConfigAttribute = Namespace + ".ModConfigAttribute";
 
+    public const string RpcHandlersForAttribute = Namespace + ".RpcHandlersForAttribute";
+
+    /// The 0.x spelling of [RpcHandlersFor], which lives in the multiplayer API rather than here.
+    public const string ServerRpcForAttribute = "ReadyM.Api.Multiplayer.ServerRpcForAttribute";
+
+    public const string RpcHandlerRegistry = "global::ReadyM.Api.Multiplayer.RPC.RpcHandlerRegistry";
+
+    public const string RpcSide = "global::ReadyM.Api.Multiplayer.RPC.RpcSide";
+
     public const string Service = "global::ReadyM.SDK.Services.IService";
 
     public const string ServiceSwitch = "global::ReadyM.SDK.Services.ServiceSwitch";

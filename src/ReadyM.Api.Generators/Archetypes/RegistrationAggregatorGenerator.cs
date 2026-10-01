@@ -48,13 +48,28 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
             static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
             ReadModConfig);
 
+        var handlers = context.SyntaxProvider.ForAttributeWithMetadataName(
+            ArchetypeNames.RpcHandlersForAttribute,
+            static (node, _) => node is ClassDeclarationSyntax,
+            ReadRpcHandlers);
+
+        // The 0.x spelling of the same attribute, so a mod that has not moved over is collected too.
+        var legacyHandlers = context.SyntaxProvider.ForAttributeWithMetadataName(
+            ArchetypeNames.ServerRpcForAttribute,
+            static (node, _) => node is ClassDeclarationSyntax,
+            ReadRpcHandlers);
+
         var all = archetypes.Collect().Combine(mixins.Collect())
-            .Combine(services.Collect()).Combine(entries.Collect()).Combine(configs.Collect());
+            .Combine(services.Collect()).Combine(entries.Collect()).Combine(configs.Collect())
+            .Combine(handlers.Collect()).Combine(legacyHandlers.Collect());
 
         context.RegisterSourceOutput(all, static (spc, found) =>
         {
-            var names = found.Left.Left.Left.Left.Concat(found.Left.Left.Left.Right)
-                .Concat(found.Left.Left.Right).Concat(found.Left.Right).Concat(found.Right)
+            var declared = found.Left.Left;
+
+            var names = declared.Left.Left.Left.Left.Concat(declared.Left.Left.Left.Right)
+                .Concat(declared.Left.Left.Right).Concat(declared.Left.Right).Concat(declared.Right)
+                .Concat(found.Left.Right).Concat(found.Right)
                 .SelectMany(entry => entry)
                 .Distinct()
                 .OrderBy(name => name, System.StringComparer.Ordinal)
@@ -100,6 +115,23 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
                 found.Add($"{prefix}{symbol.Name}.{handler.Name}DeleteRegistration");
 
         return found.ToImmutable();
+    }
+
+    /// <summary>The registration an RPC class produces, if a generator will complete it.</summary>
+    /// <remarks>
+    /// Both sides carry the same attribute and only one of the two generators claims a class, but
+    /// the registration it writes has the same name either way, so this does not have to know which.
+    /// </remarks>
+    private static ImmutableArray<string> ReadRpcHandlers(GeneratorAttributeSyntaxContext context, CancellationToken ct)
+    {
+        if (context.TargetSymbol is not INamedTypeSymbol { ContainingType: null } symbol
+            || !ServerRpcModel.Implements(symbol))
+            return [];
+
+        var ns = ArchetypeNames.NamespaceOf(symbol);
+        var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
+
+        return [$"{prefix}{symbol.Name}.Registration"];
     }
 
     /// The registration a mod's config produces, unless the analyzer refuses the class.

@@ -11,7 +11,7 @@ namespace ReadyM.Api.Generators;
 
 /// <summary>
 /// Mirror of the server handler generator, on a client mod project. Per RPC name, for each
-/// <c>[ServerRpcFor]</c> class emits the declared legs: request (c-&gt;s) as a Send(...), response
+/// <c>[RpcHandlersFor]</c> class emits the declared legs: request (c-&gt;s) as a Send(...), response
 /// (s-&gt;c) as an On(...) handler + dispatch, and peer-to-peer (c-&gt;cs) as both. A one-way RPC only
 /// produces its declared leg.
 /// </summary>
@@ -29,7 +29,7 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
     {
         var eventClasses = context.SyntaxProvider
             .CreateSyntaxProvider(Predicate, Transform)
-            .Where(x => x is not null)
+            .Where(x => x.Symbol is not null)
             .Collect();
 
         context.RegisterSourceOutput(eventClasses, static (ctx, classes) => GenerateSources(ctx, classes));
@@ -39,31 +39,41 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
         node is ClassDeclarationSyntax cls &&
         cls.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
 
-    private static INamedTypeSymbol? Transform(GeneratorSyntaxContext context, CancellationToken _)
+    /// The class, plus what its target lets the registration carry. A pair rather than a symbol,
+    /// so the pipeline is never handed a whole compilation to compare.
+    private static (INamedTypeSymbol? Symbol, bool ModuleInitializer) Transform(
+        GeneratorSyntaxContext context, CancellationToken _)
     {
+        (INamedTypeSymbol? Symbol, bool ModuleInitializer) none = (null, false);
+
         if (context.Node is not ClassDeclarationSyntax)
-            return null;
+            return none;
 
         var classSymbol = context.SemanticModel.GetDeclaredSymbol(context.Node) as INamedTypeSymbol;
         if (classSymbol is null || classSymbol.IsAbstract)
-            return null;
+            return none;
+
+        var found = (
+            Symbol: (INamedTypeSymbol?)classSymbol,
+            ModuleInitializer: Archetypes.ExtendsEmitter.HasModuleInitializer(context.SemanticModel.Compilation));
 
         // A class that still writes the 0.x base is this side's wherever it is compiled, and it is
         // picked up without the attribute so that it keeps its diagnostic.
         if (DerivesFrom(classSymbol, LegacyBaseClassName))
-            return classSymbol;
+            return found;
 
         if (DerivesFrom(classSymbol, ServerSideBaseClassName))
-            return null;
+            return none;
 
         // Otherwise the attribute is what makes a class an RPC client, since the base is written
         // here. Both sides name their contracts the same way, so the compilation decides which side
         // a class that says nothing else is on: only a server mod can reach the server SDK.
         return ServerRpcModel.HasServerRpcFor(classSymbol)
                && !ServerRpcHandlerGenerator.IsServerSide(context.SemanticModel.Compilation)
-            ? classSymbol
-            : null;
+            ? found
+            : none;
     }
+
 
     private static bool DerivesFrom(INamedTypeSymbol symbol, string baseName)
     {
@@ -86,13 +96,13 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
 
     private static void GenerateSources(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> rawClasses)
+        ImmutableArray<(INamedTypeSymbol? Symbol, bool ModuleInitializer)> rawClasses)
     {
-        var classes = rawClasses.Where(c => c is not null).Select(c => c!).ToList();
-
         // Each class names its own contract set, so a mod can host clients for several of them.
-        foreach (var classSymbol in classes)
+        foreach (var (symbol, moduleInitializer) in rawClasses.Where(c => c.Symbol is not null))
         {
+            var classSymbol = symbol!;
+
             if (!ServerRpcModel.TryResolveContracts(context, classSymbol, out var contractsType, out var manifest))
                 continue;
 
@@ -111,7 +121,7 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
                 })
                 .ToList();
 
-            GenerateEventClass(context, classSymbol, rpcs, manifestFqn);
+            GenerateEventClass(context, classSymbol, rpcs, manifestFqn, moduleInitializer);
         }
     }
 
@@ -119,7 +129,8 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
         SourceProductionContext context,
         INamedTypeSymbol classSymbol,
         List<Rpc> rpcs,
-        string manifestFqn)
+        string manifestFqn,
+        bool moduleInitializer)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
         var className = classSymbol.Name;
@@ -229,6 +240,8 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
                         {{deinitCalls}}
                             }
                         """);
+
+        RpcRegistrationEmitter.Emit(sb, classSymbol, moduleInitializer, "Client");
 
         sb.AppendLine("}");
 
