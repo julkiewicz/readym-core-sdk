@@ -1,5 +1,6 @@
-using Friflo.Engine.ECS.Systems;
+﻿using Friflo.Engine.ECS.Systems;
 using ReadyM.Api.DI;
+using ReadyM.Api.Multiplayer.RPC;
 using ReadyM.SDK.Services;
 
 namespace ReadyM.SDK.Client.Systems;
@@ -18,6 +19,7 @@ public sealed class ModSystemUpdates : BaseSystem
         _services = services;
 
         ServiceRegistry.RegisterAll(services);
+        RpcHandlerRegistry.RegisterAll(services, RpcSide.Client);
     }
 
     public override string Name => "Mod systems";
