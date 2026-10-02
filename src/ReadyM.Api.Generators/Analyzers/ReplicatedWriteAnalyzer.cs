@@ -14,10 +14,8 @@ namespace ReadyM.Api.Generators.Analyzers;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
 {
-    private const string Id = "READYM017";
-
     private static readonly DiagnosticDescriptor Rule = new(
-        Id,
+        "READYM017",
         "Replicated value is written directly",
         "'{0}.{1}' is replicated - declare a mapping and use \"Pull\", or override the value",
         "ReadyM",

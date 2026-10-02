@@ -326,10 +326,12 @@ internal static class ServiceShape
 
         public ImmutableArray<Diagnostic> Problems { get; } = problems;
 
-        /// A service with either end of a lifetime is started and stopped with the game. OnEnabled
-        /// counts, since the first one fires as the game starts and a service declaring only that
-        /// would otherwise not be built in time to see it.
-        public bool Hosted => Start is not null || Stop is not null || OnEnabled is not null;
+        /// Started by the SDK once the host says its game is up. OnEnabled counts, since the first
+        /// one fires then and a service declaring only that would otherwise not be built to see it.
+        public bool Started => Start is not null || OnEnabled is not null;
+
+        /// Only a Stop needs the container to dispose it, which is what ends a service.
+        public bool Disposable => Stop is not null;
 
         public static Service Refused(Diagnostic problem)
             => new(null, null, null, null, null, [], [], Ordering.Default, [problem]);

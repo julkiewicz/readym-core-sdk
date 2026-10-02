@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReadyM.Api.DI;
 using ReadyM.SDK.Services;
@@ -193,6 +193,7 @@ public class ServiceSwitchTests
         ServiceRegistry.RegisterAll(container);
 
         container.StartHostedServices();
+        ServiceRegistry.StartAll(container);
 
         return container;
     }

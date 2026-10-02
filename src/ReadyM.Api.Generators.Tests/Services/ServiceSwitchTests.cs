@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Microsoft.CodeAnalysis;
 using ReadyM.Api.Generators.Services;
 using Xunit;
@@ -160,11 +160,11 @@ public class ServiceSwitchTests(ITestOutputHelper output)
     }
 
     /// Or the first OnEnabled would never be reached: nothing builds a service that only ticks until
-    /// the first tick, which is after the game has started everything it hosts.
+    /// the first tick, which is after the game said it was ready.
     [Fact]
-    public void Declaring_OnEnabled_makes_a_service_hosted()
+    public void Declaring_OnEnabled_makes_a_service_started()
         => Assert.Contains(
-            "global::ReadyM.Api.DI.IHostedService.OnScopeStart()",
+            "global::ReadyM.SDK.Services.IStartedService.Start()",
             Generated(Hooks("private void OnEnabled() { }")));
 
     /// A service is set up before it is told it is about to run.
@@ -177,7 +177,7 @@ public class ServiceSwitchTests(ITestOutputHelper output)
                 private void OnEnabled() { }
             """));
 
-        var scopeStart = generated[generated.IndexOf("OnScopeStart()", StringComparison.Ordinal)..];
+        var scopeStart = generated[generated.IndexOf("IStartedService.Start()", StringComparison.Ordinal)..];
 
         Assert.True(
             scopeStart.IndexOf("Start();", StringComparison.Ordinal)

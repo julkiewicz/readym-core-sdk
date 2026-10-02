@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReadyM.Api.DI;
 using ReadyM.SDK.Services;
@@ -6,17 +6,43 @@ using ReadyM.SDK.Tests.Client.Fixtures;
 
 namespace ReadyM.SDK.Tests.Client;
 
-/// A [Service] that declared a Start or a Stop is a hosted service, so the game starts it with
-/// everything else it hosts and stops it when the container goes.
+/// A [Service] is started when the host says its game is up, which is its own moment and later
+/// than the container being filled. A Stop still rides the container going away.
 public class ServiceLifetimeTests
 {
     [Fact]
-    public void Start_runs_when_the_game_starts_its_hosted_services()
+    public void Start_runs_when_the_game_says_it_is_ready()
     {
         using var container = Started();
 
         Assert.Equal(1, container.Resolve<Bookends>().Started);
         Assert.True(container.Resolve<StartOnly>().Started);
+    }
+
+    /// <summary>Filling a container is not a game being ready, and only the game decides that.</summary>
+    /// <remarks>
+    /// A host builds its container long before its game is up. Started with it, a service reaching
+    /// for the game in its Start finds nothing bound, which is what this separation is for.
+    /// </remarks>
+    [Fact]
+    public void Nothing_is_started_by_the_container_alone()
+    {
+        using var container = Filled();
+
+        container.StartHostedServices();
+
+        Assert.Equal(0, container.Resolve<Bookends>().Started);
+    }
+
+    /// A host says it once, but says it on a container, and a process may hold more than one.
+    [Fact]
+    public void Saying_it_twice_starts_each_service_once()
+    {
+        using var container = Started();
+
+        ServiceRegistry.StartAll(container);
+
+        Assert.Equal(1, container.Resolve<Bookends>().Started);
     }
 
     /// Nothing has stopped yet, which is the half of the pair a test can easily get wrong.
@@ -50,6 +76,16 @@ public class ServiceLifetimeTests
 
     private static Container Started()
     {
+        var container = Filled();
+
+        container.StartHostedServices();
+        ServiceRegistry.StartAll(container);
+
+        return container;
+    }
+
+    private static Container Filled()
+    {
         var container = new Container();
 
         container.Init();
@@ -57,8 +93,6 @@ public class ServiceLifetimeTests
         container.RegisterSingleton<ILogger>(NullLogger.Instance);
 
         ServiceRegistry.RegisterAll(container);
-
-        container.StartHostedServices();
 
         return container;
     }

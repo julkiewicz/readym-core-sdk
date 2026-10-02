@@ -146,19 +146,18 @@ A `sealed partial class` annotated with `[Service]` is always registered as a si
 Every available lifetime method is duck-typed, optional, and private. A service may declare:
 
 * `void Update()`, called once per client or server update loop tick
-* `void Start()`, called when the game starts, after DI container initialization
+* `void Start()`, called once the game is up and every mod is in
 * `void Stop()`, called when the DI container is disposed
 * `void OnEnabled()`, called just before its update starts ticking
 * `void OnDisabled()`, called just after its update stops ticking
 
 A `Time` property is available, with `DeltaTime` (seconds since last update), `Elapsed` (seconds since app start) and `Ticks` (updates so far) fields.
 
-Internally, a service declaring `Start`, `Stop` or `OnEnabled` becomes an `IHostedService`.
-
 Generated:
 
 * `IUpdatingService` and the `Time` property, when an update was declared, plus the registration that makes the game tick it
-* `IHostedService`, when a `Start`, a `Stop` or an `OnEnabled` was declared
+* `IStartedService`, when a `Start` or an `OnEnabled` was declared
+* `IDisposable`, when a `Stop` was declared
 * a `public bool Enabled { get; }` property, on every service
 * DI registration call
 * the create handler registrations, one per watched shape
@@ -223,7 +222,9 @@ A `sealed partial class` annotated with `[ModEntry]` is the entry point of a mod
 It may accept constructor parameters filled from DI. 
 
 An optional `void Start()` method is called when the mod is loaded, 
-after DI registers types from the current assembly, so we can inject config classes or services.
+after DI registers types from the current assembly, so we can inject config classes or services. It
+is the registration phase: the container is still open and the game is not up yet, so anything that
+touches the game belongs in a `[Service]`.
 
 A `public string ModDirectory { get; }` property is available, which points to the mod's root directory on disk.
 

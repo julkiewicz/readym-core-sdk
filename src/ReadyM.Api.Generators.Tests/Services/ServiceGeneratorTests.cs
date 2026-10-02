@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Microsoft.CodeAnalysis;
 using ReadyM.Api.Generators.Services;
 using Xunit;
@@ -186,7 +186,7 @@ public class ServiceGeneratorTests(ITestOutputHelper output)
             """);
 
     [Fact]
-    public void A_service_with_both_ends_is_hosted()
+    public void A_service_with_both_ends_is_started_and_disposed()
     {
         var generated = Generated("""
             [Service]
@@ -200,17 +200,17 @@ public class ServiceGeneratorTests(ITestOutputHelper output)
 
         Assert.Contains(
             "partial class Bookends : global::ReadyM.SDK.Services.IService, "
-            + "global::ReadyM.Api.DI.IHostedService",
+            + "global::ReadyM.SDK.Services.IStartedService, global::System.IDisposable",
             generated);
-        Assert.Contains("global::ReadyM.Api.DI.IHostedService.OnScopeStart()", generated);
+        Assert.Contains("global::ReadyM.SDK.Services.IStartedService.Start()", generated);
         Assert.Contains("Start();", generated);
         Assert.Contains("global::System.IDisposable.Dispose()", generated);
         Assert.Contains("=> Stop();", generated);
     }
 
-    /// Either end alone is enough, and the interface still wants the other one.
+    /// The two ends are separate: one is the SDK starting it, the other the container letting it go.
     [Fact]
-    public void A_service_with_only_a_start_is_hosted_and_disposes_of_nothing()
+    public void A_service_with_only_a_start_is_not_disposable()
     {
         var generated = Generated("""
             [Service]
@@ -222,16 +222,15 @@ public class ServiceGeneratorTests(ITestOutputHelper output)
 
         Assert.Contains(
             "partial class StartOnly : global::ReadyM.SDK.Services.IService, "
-            + "global::ReadyM.Api.DI.IHostedService",
+            + "global::ReadyM.SDK.Services.IStartedService",
             generated);
         Assert.Contains("Start();", generated);
-        Assert.DoesNotContain("=> Stop();", generated);
-        Assert.Contains("global::System.IDisposable.Dispose()", generated);
+        Assert.DoesNotContain("global::System.IDisposable", generated);
     }
 
     /// An update and a lifetime are separate things, and a service may hold both.
     [Fact]
-    public void A_service_may_update_and_be_hosted()
+    public void A_service_may_update_and_be_started()
     {
         var generated = Generated("""
             [Service]
@@ -244,7 +243,8 @@ public class ServiceGeneratorTests(ITestOutputHelper output)
             """);
 
         Assert.Contains(
-            "partial class Both : global::ReadyM.SDK.Services.IUpdatingService, global::ReadyM.Api.DI.IHostedService",
+            "partial class Both : global::ReadyM.SDK.Services.IUpdatingService, "
+            + "global::ReadyM.SDK.Services.IStartedService",
             generated);
         Assert.Contains("ServiceRegistry.Register<global::Mod.Both>()", generated);
     }

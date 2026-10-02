@@ -79,6 +79,8 @@ internal static class ArchetypeNames
 
     public const string UpdatingService = "global::ReadyM.SDK.Services.IUpdatingService";
 
+    public const string StartedService = "global::ReadyM.SDK.Services.IStartedService";
+
     public const string ServiceRegistry = "global::ReadyM.SDK.Services.ServiceRegistry";
 
     public const string Time = "global::ReadyM.SDK.Services.UpdateTime";

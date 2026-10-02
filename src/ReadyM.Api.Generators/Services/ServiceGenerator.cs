@@ -83,11 +83,11 @@ internal class ServiceGenerator : IIncrementalGenerator
                 writer.Line();
             }
 
-            if (read.Hosted)
-            {
+            if (read.Started)
                 Started(writer, read);
+
+            if (read.Disposable)
                 Lifetime(writer, $"void {ArchetypeNames.Disposable}.Dispose()", read.Stop);
-            }
 
             writer.Line("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
 
@@ -160,8 +160,11 @@ internal class ServiceGenerator : IIncrementalGenerator
             read.Update is not null ? ArchetypeNames.UpdatingService : ArchetypeNames.Service,
         };
 
-        if (read.Hosted)
-            interfaces.Add(ArchetypeNames.HostedService);
+        if (read.Started)
+            interfaces.Add(ArchetypeNames.StartedService);
+
+        if (read.Disposable)
+            interfaces.Add(ArchetypeNames.Disposable);
 
         return " : " + string.Join(", ", interfaces);
     }
@@ -198,15 +201,28 @@ internal class ServiceGenerator : IIncrementalGenerator
     /// Start and the first OnEnabled, in that order: a service is set up before it is told it runs.
     private static void Started(SourceWriter writer, ServiceShape.Service read)
     {
-        using (writer.Braces($"void {ArchetypeNames.HostedService}.OnScopeStart()"))
+        writer.Line("private bool _started;");
+        writer.Line();
+
+        using (writer.Braces($"void {ArchetypeNames.StartedService}.Start()"))
         {
+            // A host says its game is up once, but says it on a container, and a process may hold
+            // more than one. Guarded here rather than there, so neither has to keep count.
+            using (writer.Braces("if (_started)"))
+                writer.Line("return;");
+
+            writer.Line();
+            writer.Line("_started = true;");
+
             if (read.Start is not null)
+            {
+                writer.Line();
                 writer.Line($"{ServiceShape.StartName}();");
+            }
 
             if (read.OnEnabled is not null)
             {
-                if (read.Start is not null)
-                    writer.Line();
+                writer.Line();
 
                 // Something may have switched it off while the mods were loading, which is before
                 // any of this runs, and then it never started ticking in the first place.

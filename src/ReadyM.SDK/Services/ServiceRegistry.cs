@@ -40,6 +40,26 @@ public static class ServiceRegistry
         InUpdateOrder(logger);
     }
 
+    /// <summary>Starts every service that declared a Start, which is what [Service] calls ready.</summary>
+    /// <returns>How many were started, which a game can log.</returns>
+    public static int StartAll(IDependencyContainer container)
+    {
+        var started = 0;
+
+        foreach (var declaration in Declared.Values.OrderBy(
+                     declaration => declaration.Service.FullName, StringComparer.Ordinal))
+        {
+            // Read off the type, so a service that declared no Start is still never built here.
+            if (!typeof(IStartedService).IsAssignableFrom(declaration.Service))
+                continue;
+
+            ((IStartedService)declaration.Get(container)).Start();
+            started++;
+        }
+
+        return started;
+    }
+
     /// The services a game has to update, in the order they run. The rest are resolved lazily.
     public static List<IUpdatingService> Resolve(IDependencyContainer container)
         => InUpdateOrder(null)
@@ -70,6 +90,9 @@ public static class ServiceRegistry
 
         public abstract void Register(IDependencyContainer container);
 
+        /// The one instance, whether or not it updates.
+        public abstract object Get(IDependencyContainer container);
+
         // ReSharper disable once MemberHidesStaticFromOuterClass
         public abstract IUpdatingService? Resolve(IDependencyContainer container);
     }
@@ -84,6 +107,8 @@ public static class ServiceRegistry
         public override void Register(IDependencyContainer container)
             => container.RegisterSingleton<TService>();
 
+        public override object Get(IDependencyContainer container) => container.Resolve<TService>();
+
         // ReSharper disable once MemberHidesStaticFromOuterClass
         public override IUpdatingService Resolve(IDependencyContainer container)
             => container.Resolve<TService>();
@@ -96,6 +121,8 @@ public static class ServiceRegistry
 
         public override void Register(IDependencyContainer container)
             => container.RegisterSingleton<TService>();
+
+        public override object Get(IDependencyContainer container) => container.Resolve<TService>();
 
         // ReSharper disable once MemberHidesStaticFromOuterClass
         public override IUpdatingService? Resolve(IDependencyContainer container)
