@@ -55,6 +55,10 @@ internal sealed class FakeRelay
     private readonly SetParentDelegate _setParent = static (_, _) => throw NotModelled();
     private readonly GetParentDelegate _getParent = static _ => throw NotModelled();
     private readonly GetChildrenDelegate _getChildren = static (_, _, _) => throw NotModelled();
+    private readonly unsafe TryGetAreaScopeEntityDelegate _tryGetAreaScope = static (_, _) => throw NotModelled();
+    private readonly CreateAreaScopeEntityDelegate _createAreaScope = static _ => throw NotModelled();
+    private readonly unsafe TryGetCellScopeEntityDelegate _tryGetCellScope = static (_, _) => throw NotModelled();
+    private readonly CreateCellScopeEntityDelegate _createCellScope = static _ => throw NotModelled();
 
     private static NotSupportedException NotModelled([CallerMemberName] string member = "")
         => new($"The fake relay does not model {member}.");
@@ -112,7 +116,12 @@ internal sealed class FakeRelay
         DeleteEntityTree = Marshal.GetFunctionPointerForDelegate(_deleteTree),
         SetParent = Marshal.GetFunctionPointerForDelegate(_setParent),
         GetParent = Marshal.GetFunctionPointerForDelegate(_getParent),
-        GetChildren = Marshal.GetFunctionPointerForDelegate(_getChildren)
+        GetChildren = Marshal.GetFunctionPointerForDelegate(_getChildren),
+        GetComponentIdByName = Marshal.GetFunctionPointerForDelegate(_getComponentIdByName),
+        TryGetAreaScopeEntity = Marshal.GetFunctionPointerForDelegate(_tryGetAreaScope),
+        CreateAreaScopeEntity = Marshal.GetFunctionPointerForDelegate(_createAreaScope),
+        TryGetCellScopeEntity = Marshal.GetFunctionPointerForDelegate(_tryGetCellScope),
+        CreateCellScopeEntity = Marshal.GetFunctionPointerForDelegate(_createCellScope)
     };
 
     internal ArchetypePointers Archetypes => new()
@@ -129,7 +138,7 @@ internal sealed class FakeRelay
     {
         RegisterModComponent = Marshal.GetFunctionPointerForDelegate(_registerModComponent),
         GetComponentIdByName = Marshal.GetFunctionPointerForDelegate(_getComponentIdByName),
-        AddArchetypeExtensions = IntPtr.Zero
+        AddArchetypeExtension = IntPtr.Zero
     };
 
     // -- world building, done by a test rather than across the boundary ------------------------
@@ -320,11 +329,11 @@ internal sealed class FakeRelay
 
     /// <summary>The v0 server api bound to this relay, for comparing the two generations.</summary>
     internal EcsApi CreateEcsApi()
-        => new(Pointers, new ComponentRegistry(Aot, new ModComponentManager(), NullLogger.Instance));
+        => new(Pointers, new ModComponentIds(Aot.GetComponentIdByName));
 
     /// The v1 server api bound to this relay, wired the way the mod host wires it.
     internal ServerEntityApi CreateEntityApi()
-        => new(Pointers, Archetypes, new ComponentRegistry(Aot, new ModComponentManager(), NullLogger.Instance));
+        => new(Pointers, Archetypes, new ModComponentIds(Aot.GetComponentIdByName));
 
     /// The id the relay assigned, for a caller that drives Query itself rather than through the SDK.
     internal int ComponentId<T>() where T : struct => IdOf(typeof(T));

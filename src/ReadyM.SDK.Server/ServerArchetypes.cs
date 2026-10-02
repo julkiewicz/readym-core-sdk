@@ -1,6 +1,6 @@
 ﻿using ReadyM.SDK.Archetypes;
 using IComponentRegistry = ReadyM.Relay.Server.Sdk.Ecs.Components.IComponentRegistry;
-using HostComponents = ReadyM.Relay.Server.Sdk.Ecs.Components.ComponentRegistry;
+using HostComponents = ReadyM.Relay.Server.Sdk.Ecs.Components.ModComponentRegistry;
 
 namespace ReadyM.SDK.Server;
 

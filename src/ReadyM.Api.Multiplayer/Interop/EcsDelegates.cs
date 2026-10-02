@@ -15,8 +15,8 @@ internal delegate void ModifyArchetypeDelegate(ArchetypeId archetype, NativeList
 /// The id this game already gave the shape, or -1 when it registers no archetype for it.
 internal delegate int ResolveArchetypeDelegate(NativeString256 shape);
 
-/// Adds components to an archetype the server owns.
-internal delegate void AddArchetypeExtensionsDelegate(NativeString256 shape, NativeList<int> componentsSerialized);
+/// Adds one component to an archetype the server owns, both named by their full type name.
+internal delegate void AddArchetypeExtensionDelegate(NativeString256 shape, NativeString256 component);
 
 // Entity identity crosses the boundary as a RawEntity, id plus revision, because the relay world
 // recycles ids: the id freed by a delete is the next one handed out. A caller that kept an identity

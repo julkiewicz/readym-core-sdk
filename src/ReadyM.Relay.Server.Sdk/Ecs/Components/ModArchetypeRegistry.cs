@@ -27,7 +27,6 @@ internal sealed class ModArchetypeRegistry : IArchetypeRegistry, IHostedService
     private readonly List<IArchetypeBuilderCallback> _filters = [];
 
     private readonly IEnumerable<IArchetypeRegistration> _registrations;
-    private readonly ComponentRegistry _components;
 
     public ModArchetypeRegistry(ArchetypePointers pointers, IEnumerable<IArchetypeRegistration> registrations, ModComponentIds componentIds, EcsApi ecs, ILogger logger)
     {
@@ -35,7 +34,6 @@ internal sealed class ModArchetypeRegistry : IArchetypeRegistry, IHostedService
         _componentIdCallback = new CollectComponentIdsCallback(componentIds, _logger);
         _componentInitCallback = new ComponentInitCallback(ecs);
         _registrations = registrations;
-        _components = registry;
 
         _registerArchetypeDelegate = Marshal.GetDelegateForFunctionPointer<RegisterArchetypeDelegate>(pointers.RegisterArchetype);
         _modifyArchetypeDelegate = Marshal.GetDelegateForFunctionPointer<ModifyArchetypeDelegate>(pointers.ModifyArchetype);

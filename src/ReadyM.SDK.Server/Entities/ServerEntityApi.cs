@@ -33,12 +33,12 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
     private readonly RegisterArchetypeDelegate _registerArchetype;
     private readonly ResolveArchetypeDelegate _resolveArchetype;
     private readonly ConcurrentDictionary<ComponentSet, ArchetypeId> _archetypeIds = new();
-    private readonly ComponentRegistry _registry;
+    private readonly ModComponentIds _registry;
     private readonly ConcurrentDictionary<ComponentSet, int[]> _componentIds = new();
     private readonly ComponentIndexes _indexes = new();
     private QueryScope _scope = new();
 
-    public ServerEntityApi(EcsApiPointers pointers, ArchetypePointers archetypes, ComponentRegistry registry)
+    public ServerEntityApi(EcsApiPointers pointers, ArchetypePointers archetypes, ModComponentIds registry)
     {
         _registry = registry;
         _query = Marshal.GetDelegateForFunctionPointer<QueryDelegate>(pointers.Query);
@@ -235,7 +235,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         return true;
     }
 
-    public int ComponentIdOf(Type type) => _registry.ResolveComponentId(type);
+    public int ComponentIdOf(Type type) => _registry.Resolve(type);
 
     public unsafe ComponentRef Locate(RawEntity rawEntity, int componentId)
     {
@@ -255,7 +255,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
     public unsafe void ReplaceIndexed<TComponent, TKey>(RawEntity rawEntity, TComponent component)
         where TComponent : struct, IIndexedComponent<TKey> where TKey : notnull
     {
-        var id = _registry.ResolveComponentId<TComponent>();
+        var id = _registry.Resolve<TComponent>();
 
         ComponentSlot slot;
         _getComponentSlot(rawEntity, MatchRevision, id, &slot);
@@ -292,7 +292,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         RawEntity found;
         var copy = key;
 
-        var hit = _findByIndex(_registry.ResolveComponentId<TComponent>(), &copy, Unsafe.SizeOf<TKey>(), &found);
+        var hit = _findByIndex(_registry.Resolve<TComponent>(), &copy, Unsafe.SizeOf<TKey>(), &found);
 
         entity = found;
         return hit != 0;
@@ -379,7 +379,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         var ids = new int[set.Types.Length];
 
         for (var i = 0; i < ids.Length; i++)
-            ids[i] = self._registry.ResolveComponentId(set.Types[i]);
+            ids[i] = self._registry.Resolve(set.Types[i]);
 
         return ids;
     }, this);
