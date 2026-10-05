@@ -23,7 +23,7 @@ public static class DependencyInjectionExtensions
     /// <returns>How many sets of mappings were collected, which a game can log.</returns>
     /// <remarks>
     /// Collected once, so every mod has to have registered its own by the time this runs. A mod
-    /// entered through [ModEntry] registers them in Start, which is later than it used to be.
+    /// entered through [ModEntry] registers them in Init, which is later than it used to be.
     /// </remarks>
     public static int ApplyShapeMappings(this IDependencyContainer container)
     {

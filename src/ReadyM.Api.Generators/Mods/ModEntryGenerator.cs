@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -6,7 +6,7 @@ using ReadyM.Api.Generators.Archetypes;
 
 namespace ReadyM.Api.Generators.Mods;
 
-/// Completes a <c>[ModEntry]</c> class: the folder the mod was loaded from, the start the loader
+/// Completes a <c>[ModEntry]</c> class: the folder the mod was loaded from, the init the loader
 /// calls, and the registration that tells the loader this assembly is a mod at all.
 [Generator]
 internal class ModEntryGenerator : IIncrementalGenerator
@@ -67,16 +67,16 @@ internal class ModEntryGenerator : IIncrementalGenerator
             writer.Line("    => ModDirectory = directory;");
             writer.Line();
 
-            if (read.Start is null)
+            if (read.Init is null)
             {
-                using (writer.Braces($"void {ArchetypeNames.ModEntry}.Start()"))
+                using (writer.Braces($"void {ArchetypeNames.ModEntry}.Init()"))
                 {
                 }
             }
             else
             {
-                writer.Line($"void {ArchetypeNames.ModEntry}.Start()");
-                writer.Line($"    => {ModEntryShape.StartName}();");
+                writer.Line($"void {ArchetypeNames.ModEntry}.Init()");
+                writer.Line($"    => {ModEntryShape.InitName}();");
             }
 
             writer.Line();

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -9,7 +9,7 @@ namespace ReadyM.Api.Generators.Mods;
 /// What a class has to look like to be a mod's entry point, for the generator and the analyzer alike.
 internal static class ModEntryShape
 {
-    public const string StartName = "Start";
+    public const string InitName = "Init";
 
     public static readonly DiagnosticDescriptor NotPartial = new(
         "READYM027",
@@ -59,17 +59,17 @@ internal static class ModEntryShape
         if (!entry.IsSealed)
             problems.Add(Diagnostic.Create(NotSealed, at, entry.Name));
 
-        return new Entry(ReadStart(entry, at, problems), [.. problems]);
+        return new Entry(ReadInit(entry, at, problems), [.. problems]);
     }
 
     public static bool IsModEntry(ISymbol symbol)
         => symbol.GetAttributes().Any(attribute
             => attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.ModEntryAttribute);
 
-    /// The start the loader calls, or null when the entry point declared none it can call.
-    private static IMethodSymbol? ReadStart(INamedTypeSymbol entry, Location at, List<Diagnostic> problems)
+    /// The init the loader calls, or null when the entry point declared none it can call.
+    private static IMethodSymbol? ReadInit(INamedTypeSymbol entry, Location at, List<Diagnostic> problems)
     {
-        var named = entry.GetMembers(StartName).OfType<IMethodSymbol>().ToList();
+        var named = entry.GetMembers(InitName).OfType<IMethodSymbol>().ToList();
 
         if (named.Count == 0)
             return null;
@@ -79,7 +79,7 @@ internal static class ModEntryShape
             return callable;
 
         problems.Add(Diagnostic.Create(
-            NotAHook, named[0].Locations.FirstOrDefault() ?? at, entry.Name, StartName));
+            NotAHook, named[0].Locations.FirstOrDefault() ?? at, entry.Name, InitName));
 
         return null;
     }
@@ -100,9 +100,9 @@ internal static class ModEntryShape
             .OfType<ClassDeclarationSyntax>()
             .Any(declaration => declaration.Modifiers.Any(modifier => modifier.ValueText == "partial"));
 
-    internal readonly struct Entry(IMethodSymbol? start, Diagnostic[] problems)
+    internal readonly struct Entry(IMethodSymbol? init, Diagnostic[] problems)
     {
-        public IMethodSymbol? Start { get; } = start;
+        public IMethodSymbol? Init { get; } = init;
 
         public Diagnostic[] Problems { get; } = problems;
 

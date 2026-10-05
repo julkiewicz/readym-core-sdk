@@ -8,5 +8,5 @@ public interface IModEntry
 {
     void SetModDirectory(string directory);
 
-    void Start();
+    void Init();
 }

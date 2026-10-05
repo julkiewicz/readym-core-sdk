@@ -221,7 +221,7 @@ A `sealed partial class` annotated with `[ModEntry]` is the entry point of a mod
 
 It may accept constructor parameters filled from DI. 
 
-An optional `void Start()` method is called when the mod is loaded, 
+An optional `void Init()` method is called when the mod is loaded, 
 after DI registers types from the current assembly, so we can inject config classes or services. It
 is the registration phase: the container is still open and the game is not up yet, so anything that
 touches the game belongs in a `[Service]`.

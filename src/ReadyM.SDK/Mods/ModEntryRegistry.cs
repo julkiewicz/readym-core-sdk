@@ -20,7 +20,7 @@ public static class ModEntryRegistry
         => Declared.ContainsKey(assembly);
 
     /// Builds the entry class out of the container and runs what it declared, if anything.
-    public static IModEntry? Start(Assembly assembly, IDependencyContainer container, string modDirectory)
+    public static IModEntry? Init(Assembly assembly, IDependencyContainer container, string modDirectory)
     {
         if (!Declared.TryGetValue(assembly, out var declaration))
             return null;
@@ -31,29 +31,29 @@ public static class ModEntryRegistry
         var entry = declaration.Build(container);
 
         entry.SetModDirectory(modDirectory);
-        entry.Start();
+        entry.Init();
 
         return entry;
     }
 
-    /// Starts the entry point of every assembly given, in the order given, and says how many ran.
-    public static int StartAll(
+    /// Initializes the entry point of every assembly given, in the order given, and says how many ran.
+    public static int InitAll(
         IEnumerable<(Assembly Assembly, string Directory)> loaded,
         IDependencyContainer container,
-        Action<Assembly>? onStarted = null,
+        Action<Assembly>? onInitialized = null,
         Action<Assembly, Exception>? onFailed = null)
     {
-        var started = 0;
+        var initialized = 0;
 
         foreach (var (assembly, directory) in loaded)
         {
             try
             {
-                if (Start(assembly, container, directory) is null)
+                if (Init(assembly, container, directory) is null)
                     continue;
 
-                started++;
-                onStarted?.Invoke(assembly);
+                initialized++;
+                onInitialized?.Invoke(assembly);
             }
             catch (Exception ex)
             {
@@ -61,7 +61,7 @@ public static class ModEntryRegistry
             }
         }
 
-        return started;
+        return initialized;
     }
 
     private abstract class Declaration

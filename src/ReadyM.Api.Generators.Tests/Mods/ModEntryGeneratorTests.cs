@@ -62,19 +62,19 @@ public class ModEntryGeneratorTests(ITestOutputHelper output)
             Generated("[ModEntry] public sealed partial class Entry;"));
 
     [Fact]
-    public void A_declared_start_is_called()
+    public void A_declared_init_is_called()
         => Assert.Contains(
-            "=> Start();",
-            Generated("[ModEntry] public sealed partial class Entry { private void Start() { } }"));
+            "=> Init();",
+            Generated("[ModEntry] public sealed partial class Entry { private void Init() { } }"));
 
-    /// Most of a mod's work is its constructor and its services, so a start is worth leaving out.
+    /// Most of a mod's work is its constructor and its services, so an init is worth leaving out.
     [Fact]
-    public void A_start_is_optional()
+    public void An_init_is_optional()
     {
         var generated = Generated("[ModEntry] public sealed partial class Entry;");
 
-        Assert.Contains("IModEntry.Start()", generated);
-        Assert.DoesNotContain("=> Start();", generated);
+        Assert.Contains("IModEntry.Init()", generated);
+        Assert.DoesNotContain("=> Init();", generated);
     }
 
     // -- what it refuses ---------------------------------------------------------------------------
@@ -87,14 +87,14 @@ public class ModEntryGeneratorTests(ITestOutputHelper output)
     public void An_entry_point_that_is_not_sealed_is_refused()
         => AssertReports("READYM028", "[ModEntry] public partial class Entry { }");
 
-    /// A public start would be callable by anything, and the loader calls it exactly once.
+    /// A public init would be callable by anything, and the loader calls it exactly once.
     [Theory]
-    [InlineData("public void Start() { }")]
-    [InlineData("private static void Start() { }")]
-    [InlineData("private int Start() => 0;")]
-    [InlineData("private void Start(int unused) { }")]
-    public void A_start_the_loader_cannot_call_is_refused(string start)
-        => AssertReports("READYM029", $"[ModEntry] public sealed partial class Entry {{ {start} }}");
+    [InlineData("public void Init() { }")]
+    [InlineData("private static void Init() { }")]
+    [InlineData("private int Init() => 0;")]
+    [InlineData("private void Init(int unused) { }")]
+    public void An_init_the_loader_cannot_call_is_refused(string init)
+        => AssertReports("READYM029", $"[ModEntry] public sealed partial class Entry {{ {init} }}");
 
     /// A mod is entered once, so a second one is a question the loader has no answer to.
     [Fact]

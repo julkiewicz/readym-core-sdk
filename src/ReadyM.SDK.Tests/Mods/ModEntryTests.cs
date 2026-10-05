@@ -23,8 +23,8 @@ public class ModEntryTests
         _container.RegisterSingleton<ILogger>(NullLogger.Instance);
     }
 
-    private IModEntry? Start(string directory = "mods/example")
-        => ModEntryRegistry.Start(typeof(ExampleEntry).Assembly, _container, directory);
+    private IModEntry? Init(string directory = "mods/example")
+        => ModEntryRegistry.Init(typeof(ExampleEntry).Assembly, _container, directory);
 
     [Fact]
     public void An_assembly_that_declares_one_says_so()
@@ -40,15 +40,15 @@ public class ModEntryTests
     {
         _container.RegisterSingleton(new Dependency("wired"));
 
-        Assert.Equal("wired", ((ExampleEntry)Start()!).Saw);
+        Assert.Equal("wired", ((ExampleEntry)Init()!).Saw);
     }
 
     [Fact]
-    public void Its_start_runs()
+    public void Its_init_runs()
     {
         _container.RegisterSingleton(new Dependency("wired"));
 
-        Assert.True(((ExampleEntry)Start()!).Started);
+        Assert.True(((ExampleEntry)Init()!).Initialized);
     }
 
     /// Pushed in after the constructor, so it is the folder by the time anything the mod does reads it.
@@ -57,7 +57,7 @@ public class ModEntryTests
     {
         _container.RegisterSingleton(new Dependency("wired"));
 
-        Assert.Equal("mods/example", ((ExampleEntry)Start("mods/example")!).ModDirectory);
+        Assert.Equal("mods/example", ((ExampleEntry)Init("mods/example")!).ModDirectory);
     }
 
     /// One instance, so a service taking the entry point and the loader see the same object.
@@ -66,7 +66,7 @@ public class ModEntryTests
     {
         _container.RegisterSingleton(new Dependency("wired"));
 
-        Assert.Same(Start(), _container.Resolve<ExampleEntry>());
+        Assert.Same(Init(), _container.Resolve<ExampleEntry>());
     }
 
     private sealed class TestContainer : DependencyContainerBase;
@@ -79,7 +79,7 @@ public sealed partial class ExampleEntry(Dependency dependency)
 {
     public string Saw { get; } = dependency.Value;
 
-    public bool Started { get; private set; }
+    public bool Initialized { get; private set; }
 
-    private void Start() => Started = true;
+    private void Init() => Initialized = true;
 }
