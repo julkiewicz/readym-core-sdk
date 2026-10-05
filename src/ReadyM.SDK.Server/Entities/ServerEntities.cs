@@ -1,4 +1,5 @@
-﻿using ReadyM.Api.Idents;
+﻿using System.Diagnostics.CodeAnalysis;
+using ReadyM.Api.Idents;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Archetypes.Core;
 using ReadyM.SDK.Entities;
@@ -68,7 +69,8 @@ internal class ServerEntities(ServerEntityApi api) : IEntities
         where T6 : struct, IArchetypeMixin
         => new(api);
 
-    public bool TryLookup<T, TKey>(TKey key, out T shape) where T : struct, IArchetypeQueryable, IIndexed<TKey>
+    public bool TryLookup<T, TKey>(TKey key, out T shape) 
+        where T : struct, IArchetypeQueryable, IIndexed<TKey>
     {
         if (IndexRegistry.TryFind<T, TKey>(api, key, out var entity))
         {
