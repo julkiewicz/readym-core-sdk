@@ -59,6 +59,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
     private readonly INetworkedComponentRegistry _netComponentRegistry;
 
     private readonly SystemGroup _clearDirtySystemGroup;
+    private readonly HashSet<NetworkId> _deletesFromServer = [];
 
     protected SystemGroup ReceiveSystemGroup { get; }
 
@@ -362,6 +363,8 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                 if (self.NetEntity.TryGetEntityByNetworkId(netId0, out var entity))
                 {
                     self.Logger.LogDebug("Deleting remote entity: {Id}", netId0);
+                    // The command buffer runs the delete after the skip counter is back to zero
+                    self._deletesFromServer.Add(netId0);
                     cb.DeleteEntity(entity.Value.Id);
                 }
                 else
@@ -379,6 +382,9 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
     // NOTE: We deleted the entity, and we need to message the server about it
     protected void OnEntityDeleteHandler(NetworkId netId, Entity entity)
     {
+        if (_deletesFromServer.Remove(netId))
+            return;
+
         if (_skipEcsEventMessages > 0)
             return;
 
