@@ -38,6 +38,7 @@ public struct EcsApiPointers
     public required IntPtr CreateAreaScopeEntity;
     public required IntPtr TryGetCellScopeEntity;
     public required IntPtr CreateCellScopeEntity;
+    public required IntPtr TryGetEntityCell;
 
     /// <summary>
     /// Resolves a component id from a full type name. Phase two, deliberately: the host cannot answer until

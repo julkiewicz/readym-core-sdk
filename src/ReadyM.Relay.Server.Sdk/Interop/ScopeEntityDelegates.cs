@@ -18,5 +18,8 @@ internal delegate RawEntity CreateAreaScopeEntityDelegate(AreaId areaId);
 /// <summary>1 and the cell's scope entity written to <paramref name="entity"/> if it has one, else 0.</summary>
 internal unsafe delegate byte TryGetCellScopeEntityDelegate(FullCellId cellId, RawEntity* entity);
 
-/// <summary>The cell's new scope entity, or default if the cell already has one or its area has none.</summary>
-internal delegate RawEntity CreateCellScopeEntityDelegate(FullCellId cellId);
+/// <summary>The id of the cell's new scope entity, or 0 if the cell already has one or its area has none.</summary>
+internal delegate int CreateCellScopeEntityDelegate(FullCellId cellId);
+
+/// <summary>1 and the cell the entity is scoped to written to <paramref name="cellId"/> if it is in a cell scope, else 0.</summary>
+internal unsafe delegate byte TryGetEntityCellDelegate(int entityId, FullCellId* cellId);

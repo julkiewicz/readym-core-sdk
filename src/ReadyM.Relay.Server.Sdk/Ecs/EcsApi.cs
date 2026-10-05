@@ -32,6 +32,7 @@ public partial class EcsApi
     private readonly CreateAreaScopeEntityDelegate _createAreaScopeEntity;
     private readonly TryGetCellScopeEntityDelegate _tryGetCellScopeEntity;
     private readonly CreateCellScopeEntityDelegate _createCellScopeEntity;
+    private readonly TryGetEntityCellDelegate _tryGetEntityCell;
     private readonly ModComponentIds _componentIds;
 
     internal EcsApi(EcsApiPointers pointers, ModComponentIds componentIds)
@@ -53,6 +54,7 @@ public partial class EcsApi
         _createAreaScopeEntity = Marshal.GetDelegateForFunctionPointer<CreateAreaScopeEntityDelegate>(pointers.CreateAreaScopeEntity);
         _tryGetCellScopeEntity = Marshal.GetDelegateForFunctionPointer<TryGetCellScopeEntityDelegate>(pointers.TryGetCellScopeEntity);
         _createCellScopeEntity = Marshal.GetDelegateForFunctionPointer<CreateCellScopeEntityDelegate>(pointers.CreateCellScopeEntity);
+        _tryGetEntityCell = Marshal.GetDelegateForFunctionPointer<TryGetEntityCellDelegate>(pointers.TryGetEntityCell);
     }
 
     /// <summary>
@@ -220,6 +222,25 @@ public partial class EcsApi
         }
 
         entity = EntityFrom(scopeEntity);
+        return true;
+    }
+
+    /// <summary>
+    /// Gets the cell an entity is scoped to.
+    /// </summary>
+    /// <param name="entityId">The entity whose cell to get.</param>
+    /// <param name="cellId">The cell, or default when the entity is not in a cell scope.</param>
+    /// <returns>Whether the entity is in a cell scope.</returns>
+    public unsafe bool TryGetEntityCell(int entityId, out FullCellId cellId)
+    {
+        FullCellId found;
+        if (_tryGetEntityCell(entityId, &found) == 0)
+        {
+            cellId = default;
+            return false;
+        }
+
+        cellId = found;
         return true;
     }
 
