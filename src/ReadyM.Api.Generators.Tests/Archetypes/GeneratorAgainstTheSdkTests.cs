@@ -187,6 +187,59 @@ public class GeneratorAgainstTheSdkTests(ITestOutputHelper output)
         AssertNoErrors(result.OutputDiagnostics, "the query does not compile");
     }
 
+    /// <summary>
+    /// Taking entities out of a chunk loop to act on afterwards, which is the one thing a view
+    /// cannot do by itself: it is a ref struct, so it cannot be put in a list.
+    /// </summary>
+    /// <remarks>
+    /// Written the way a mod writes it, and compiled, because the whole point of Keep is that the
+    /// call site stays short. Collecting used to mean naming the shape a second time through the
+    /// handle, which reads as a cast rather than as taking something out of the loop.
+    /// </remarks>
+    [Theory]
+    [InlineData("Server", "entities.Query<Npc>()", "Npc")]
+    [InlineData("Client", "entities.Query<Npc>()", "Npc")]
+    [InlineData("Server", "entities.Query<Position>()", "Position")]
+    [InlineData("Client", "entities.Query<Position>()", "Position")]
+    public void A_view_keeps_an_entity_past_the_loop(string half, string query, string shape)
+    {
+        var loop =
+            $$"""
+              using System.Collections.Generic;
+
+              namespace Mod;
+
+              public static class Use
+              {
+                  public static List<{{shape}}> Run(ReadyM.SDK.{{half}}.Entities.IEntities entities)
+                  {
+                      var kept = new List<{{shape}}>();
+
+                      foreach (var found in {{query}})
+                          kept.Add(found.Keep());
+
+                      return kept;
+                  }
+              }
+              """;
+
+        var result = SourceGeneratorTestHelper.RunGenerators(
+            [("Declarations.cs", Declarations), ("Use.cs", loop)],
+            [new ArchetypeGenerator(), new ArchetypeMixinGenerator(), new ChunkCombinationGenerator()],
+            output,
+            Sdk);
+
+        AssertNoErrors(result.OutputDiagnostics, "keeping an entity past the loop does not compile");
+    }
+
+    /// <summary>Every view, and each one keeps its own shape rather than some base of it.</summary>
+    /// <remarks>An archetype and a mixin both get a view, so both are asked for here.</remarks>
+    [Theory]
+    [InlineData("Npc")]
+    [InlineData("Position")]
+    public void Every_view_keeps_the_shape_it_views(string shape)
+        => Assert.Contains($"public global::Mod.{shape} Keep()", Generated(Run()));
+
     private static string Generated(SourceGeneratorTestHelper.GeneratorRunResult result)
         => string.Join("\n", result.GeneratedSyntaxTrees.Select(tree => tree.GetText().ToString()));
 

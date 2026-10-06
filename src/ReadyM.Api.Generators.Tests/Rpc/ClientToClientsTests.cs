@@ -12,7 +12,7 @@ namespace ReadyM.Api.Generators.Tests.Rpc;
 /// </summary>
 public class ClientToClientsTests(ITestOutputHelper output)
 {
-    private static readonly Assembly[] Sdk = [typeof(ReadyM.Api.Multiplayer.ClientToClientsAttribute).Assembly];
+    private static readonly Assembly[] Sdk = [typeof(Multiplayer.ClientToClientsAttribute).Assembly];
 
     /// What a client mod cannot reach, which is how the generators tell the two sides apart. The
     /// test assembly references it, so a client project has to be described by what it leaves out.

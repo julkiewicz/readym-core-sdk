@@ -112,6 +112,13 @@ internal static class ChunkViewEmitter
         writer.Line("/// The way out to anything a chunk view cannot do, such as a structural change after the loop.");
         writer.Line($"public {ArchetypeNames.EntityHandle} Handle");
         writer.Line($"    => _prototype.For(global::System.Runtime.CompilerServices.Unsafe.Add(ref global::System.Runtime.CompilerServices.Unsafe.AsRef(in _entities), _index));");
+        writer.Line();
+        writer.Line("/// This entity as the shape, which is what a view cannot be: one outlives the loop, the other does not.");
+        writer.Line("/// <remarks>");
+        writer.Line("/// For collecting entities to act on afterwards. The shape reads through a handle rather than the");
+        writer.Line("/// chunk, so it costs a lookup per value; inside the loop the view is the cheaper way to read.");
+        writer.Line("/// </remarks>");
+        writer.Line($"public {model.QualifiedName} Keep() => new(Handle);");
     }
 
     private static void EmitAccessors(SourceWriter writer, DeclarationModel model, IReadOnlyList<Slot> slots, bool writes)

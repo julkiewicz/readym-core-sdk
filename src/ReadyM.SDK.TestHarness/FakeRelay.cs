@@ -59,6 +59,7 @@ internal sealed class FakeRelay
     private readonly CreateAreaScopeEntityDelegate _createAreaScope = static _ => throw NotModelled();
     private readonly unsafe TryGetCellScopeEntityDelegate _tryGetCellScope = static (_, _) => throw NotModelled();
     private readonly CreateCellScopeEntityDelegate _createCellScope = static _ => throw NotModelled();
+    private readonly unsafe TryGetEntityCellDelegate _tryGetEntityCell = static (_, _) => throw NotModelled();
 
     private static NotSupportedException NotModelled([CallerMemberName] string member = "")
         => new($"The fake relay does not model {member}.");
@@ -121,7 +122,8 @@ internal sealed class FakeRelay
         TryGetAreaScopeEntity = Marshal.GetFunctionPointerForDelegate(_tryGetAreaScope),
         CreateAreaScopeEntity = Marshal.GetFunctionPointerForDelegate(_createAreaScope),
         TryGetCellScopeEntity = Marshal.GetFunctionPointerForDelegate(_tryGetCellScope),
-        CreateCellScopeEntity = Marshal.GetFunctionPointerForDelegate(_createCellScope)
+        CreateCellScopeEntity = Marshal.GetFunctionPointerForDelegate(_createCellScope),
+        TryGetEntityCell = Marshal.GetFunctionPointerForDelegate(_tryGetEntityCell)
     };
 
     internal ArchetypePointers Archetypes => new()

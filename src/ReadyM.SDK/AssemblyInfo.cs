@@ -8,6 +8,7 @@
 [assembly: InternalsVisibleTo("WukongMp.Sdk.Common")]
 [assembly: InternalsVisibleTo("OblivionMp.Sdk")]
 [assembly: InternalsVisibleTo("OblivionMp.Sdk.Common")]
+[assembly: InternalsVisibleTo("OblivionMp.Sdk.Serverside")]
 [assembly: InternalsVisibleTo("ReadyM.Relay.Server.PluginHost")]
 [assembly: InternalsVisibleTo("ReadyM.Api.Generators.Tests.Dynamic")]
 
