@@ -51,11 +51,15 @@ public static class DependencyInjectionExtensions
             container.Resolve<ILogger>()
         ).Register(container.Resolve<Store>());
 
+    public static void RegisterModDeclarations(this IDependencyContainer container)
+    {
+        ServiceRegistry.RegisterAll(container);
+        RpcHandlerRegistry.RegisterAll(container, RpcSide.Client);
+    }
+
     public static void RegisterReadyMSdk(this IDependencyContainer container)
     {
         CreateHandlerRegistry.Use(container);
-        ServiceRegistry.RegisterAll(container);
-        RpcHandlerRegistry.RegisterAll(container, RpcSide.Client);
 
         container.RegisterSingleton<IEntities, ClientEntities>();
         container.RegisterSingleton<IEntityApi, ClientEntityApi>();

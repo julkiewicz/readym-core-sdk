@@ -1,6 +1,5 @@
 ﻿using Friflo.Engine.ECS.Systems;
 using ReadyM.Api.DI;
-using ReadyM.Api.Multiplayer.RPC;
 using ReadyM.SDK.Services;
 
 namespace ReadyM.SDK.Client.Systems;
@@ -16,10 +15,15 @@ public sealed class ModSystemUpdates : BaseSystem
 
     public ModSystemUpdates(IDependencyContainer services)
     {
-        _services = services;
+        if (!ServiceRegistry.RegisteredFor(services))
+        {
+            throw new InvalidOperationException(
+                "The services the mods declared are not registered on this container. Call "
+                + nameof(DependencyInjectionExtensions.RegisterModDeclarations)
+                + " once the mod assemblies are loaded and before their entry points run.");
+        }
 
-        ServiceRegistry.RegisterAll(services);
-        RpcHandlerRegistry.RegisterAll(services, RpcSide.Client);
+        _services = services;
     }
 
     public override string Name => "Mod systems";

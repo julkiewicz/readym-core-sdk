@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using ReadyM.Api.DI;
 using ReadyM.SDK.Attributes;
@@ -11,6 +12,8 @@ namespace ReadyM.SDK.Services;
 public static class ServiceRegistry
 {
     private static readonly ConcurrentDictionary<Type, Declaration> Declared = new();
+
+    private static readonly ConditionalWeakTable<IDependencyContainer, object> RegisteredIn = new();
 
     /// Called by generated code for a [Service] that declared an update.
     public static void Register<TService>(
@@ -32,6 +35,8 @@ public static class ServiceRegistry
     /// <exception cref="ServiceOrderException">The constraints contain a cycle.</exception>
     public static void RegisterAll(IDependencyContainer container, ILogger? logger = null)
     {
+        RegisteredIn.GetValue(container, static _ => new object());
+
         foreach (var declaration in Declared.Values)
             declaration.Register(container);
 
@@ -39,6 +44,9 @@ public static class ServiceRegistry
 
         InUpdateOrder(logger);
     }
+
+    /// <summary>Whether <see cref="RegisterAll"/> has already run for this container.</summary>
+    public static bool RegisteredFor(IDependencyContainer container) => RegisteredIn.TryGetValue(container, out _);
 
     /// <summary>Starts every service that declared a Start, which is what [Service] calls ready.</summary>
     /// <returns>How many were started, which a game can log.</returns>
