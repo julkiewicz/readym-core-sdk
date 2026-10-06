@@ -362,7 +362,7 @@ internal sealed class FakeRelay
     private int ResolveArchetypeImpl(NativeString256 shape)
         => _boundShapes.TryGetValue(shape.ToString(), out var id) ? id.Raw : -1;
 
-    private ArchetypeId RegisterArchetypeImpl(NativeList<int> componentIds)
+    private ArchetypeId RegisterArchetypeImpl(NativeString256 name, NativeList<int> componentIds)
     {
         var ids = new int[componentIds.Count];
 

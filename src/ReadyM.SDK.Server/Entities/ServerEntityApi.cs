@@ -155,7 +155,8 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         foreach (var id in ids)
             native.Add(id);
 
-        return _registerArchetype(native);
+        // Unnamed: an SDK shape declares no stable name yet, so its entities are not persisted.
+        return _registerArchetype(NativeString256.Null, native);
     }
 
     public unsafe EntityBuffer CollectInScope(RawEntity scope, ComponentSet components)

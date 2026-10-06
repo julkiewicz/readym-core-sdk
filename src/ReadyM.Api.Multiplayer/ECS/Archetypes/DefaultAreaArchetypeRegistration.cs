@@ -27,7 +27,7 @@ internal sealed class DefaultAreaArchetypeRegistration(IAreaComponentRegistry ar
     public ArchetypeId AreaArchetype { get; private set; }
 
     public void Register(IArchetypeRegistry registry)
-        => AreaArchetype = registry.RegisterArchetype(new ArchetypeBuilder()
+        => AreaArchetype = registry.RegisterArchetype(CoreArchetypeNames.Area, new ArchetypeBuilder()
             .Add<MetadataComponent>()
             .Add<AreaScopeComponent>()
             .Add<EmptyScopeDeletionComponent>()

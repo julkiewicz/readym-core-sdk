@@ -609,7 +609,8 @@ using {ns};
             member,
             model,
             CSharpFieldSupportRegistry.EmitSerializeVisitor,
-            CSharpFieldSupportRegistry.EmitDeserializeVisitor);
+            CSharpFieldSupportRegistry.EmitDeserializeVisitor,
+            CSharpFieldSupportRegistry.NetDataCodec);
         var fieldName = member.Source.Name;
         var fieldType = member.Source.Type;
         context.State.ResetCurrent(fieldName, fieldType);
