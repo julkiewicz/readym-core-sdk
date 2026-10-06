@@ -1,4 +1,4 @@
-using Friflo.Engine.ECS;
+﻿using Friflo.Engine.ECS;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Multiplayer.ECS.Components;
@@ -32,6 +32,11 @@ internal class ModChangeComponentArchetypeRegistration(ServerSideSettings server
         }
 
         public void AcceptTag<T>(ArchetypeBuilder builder) where T : struct, ITag
+        {
+            // no-op
+        }
+
+        public void AcceptTags(ArchetypeBuilder builder, in Tags tags)
         {
             // no-op
         }

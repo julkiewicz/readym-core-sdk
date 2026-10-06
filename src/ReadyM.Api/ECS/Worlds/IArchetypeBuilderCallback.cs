@@ -1,4 +1,4 @@
-using Friflo.Engine.ECS;
+﻿using Friflo.Engine.ECS;
 
 namespace ReadyM.Api.ECS.Worlds;
 
@@ -14,4 +14,7 @@ internal interface IArchetypeBuilderCallback
 
     void AcceptTag<T>(ArchetypeBuilder builder)
         where T : struct, ITag;
+
+    /// <summary>Tags named at run time rather than by type, which is how a mod's [Tag] arrives.</summary>
+    void AcceptTags(ArchetypeBuilder builder, in Tags tags);
 }

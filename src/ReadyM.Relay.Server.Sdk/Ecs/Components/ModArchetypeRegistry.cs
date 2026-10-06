@@ -72,9 +72,18 @@ internal sealed class ModArchetypeRegistry : IArchetypeRegistry, IHostedService
         public void AcceptStrideComponent(ArchetypeBuilder builder, int structIndex, int stride)
             => throw new NotSupportedException("Adding components by struct index is not supported in the mod archetype registry.");
 
+        // A tag is not a component and takes no id, so there is nothing to collect. The host puts a
+        // mod's tags on the archetype itself, see ServerEntityApi.
         public void AcceptTag<T>(ArchetypeBuilder builder)
             where T : struct, ITag
-            => throw new NotSupportedException("Adding tag components is not supported in the mod archetype registry.");
+        {
+            // empty
+        }
+
+        public void AcceptTags(ArchetypeBuilder builder, in Tags tags)
+        {
+            // empty
+        }
     }
 
     private class ComponentInitCallback(EcsApi ecs) : IArchetypeBuilderCallback
@@ -131,6 +140,11 @@ internal sealed class ModArchetypeRegistry : IArchetypeRegistry, IHostedService
 
         public void AcceptTag<T>(ArchetypeBuilder builder)
             where T : struct, ITag
+        {
+            // empty
+        }
+
+        public void AcceptTags(ArchetypeBuilder builder, in Tags tags)
         {
             // empty
         }

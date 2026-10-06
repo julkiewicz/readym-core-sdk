@@ -23,3 +23,9 @@ internal delegate RawEntity CreateCellScopeEntityDelegate(FullCellId cellId);
 
 /// <summary>1 and the cell the entity is scoped to written to <paramref name="cellId"/> if it is in a cell scope, else 0.</summary>
 internal unsafe delegate byte TryGetEntityCellDelegate(int entityId, FullCellId* cellId);
+
+/// <summary>1 and the scope holding the entity written to <paramref name="scope"/> if it is in one, else 0.</summary>
+/// <remarks>
+/// One step up. Recursive search is done by the caller if neccessary.
+/// </remarks>
+internal unsafe delegate byte TryGetEntityScopeDelegate(RawEntity entity, RawEntity* scope);

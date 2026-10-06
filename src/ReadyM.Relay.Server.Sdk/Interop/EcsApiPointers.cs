@@ -40,6 +40,9 @@ public struct EcsApiPointers
     public required IntPtr CreateCellScopeEntity;
     public required IntPtr TryGetEntityCell;
 
+    /// The scope an entity sits in, one step up.
+    public required IntPtr TryGetEntityScope;
+
     /// <summary>
     /// Resolves a component id from a full type name. Phase two, deliberately: the host cannot answer until
     /// it has built its component table, which happens after the schema is created. Mods only ask when they

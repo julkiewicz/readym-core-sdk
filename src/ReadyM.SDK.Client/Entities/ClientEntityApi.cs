@@ -260,6 +260,27 @@ internal sealed class ClientEntityApi : IEntityApi
         return false;
     }
 
+    public bool TryGetScope(RawEntity entity, out RawEntity scope)
+    {
+        var target = Resolve(entity);
+
+        if (target.TryGetComponent<InScopeComponent>(out var inScope))
+        {
+            scope = inScope.ScopeEntity.RawEntity;
+            return true;
+        }
+
+        // A cell is not in its area's scope, it is under it, so the chain only continues through this.
+        if (target.TryGetComponent<InParentAreaScopeComponent>(out var inArea))
+        {
+            scope = inArea.ParentAreaScopeEntity.RawEntity;
+            return true;
+        }
+
+        scope = default;
+        return false;
+    }
+
     public EntityBuffer CollectInScope(RawEntity scope, ComponentSet components)
     {
         var target = Resolve(scope);

@@ -401,6 +401,9 @@ public class ShapeMappingTests : ClientSdkTest
         public EntityBuffer CollectInScope(RawEntity scope, ComponentSet components)
             => inner.CollectInScope(scope, components);
 
+        public bool TryGetScope(RawEntity entity, out RawEntity scope)
+            => inner.TryGetScope(entity, out scope);
+
         public bool TryFindByIndex<TComponent, TKey>(TKey key, out RawEntity entity)
             where TComponent : struct, IIndexedComponent<TKey>
             => inner.TryFindByIndex<TComponent, TKey>(key, out entity);

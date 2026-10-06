@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -87,6 +87,22 @@ public class ArchetypeBuilder
         foreach (var filter in _filters)
         {
             accept(filter);
+        }
+
+        return this;
+    }
+
+    /// <summary>Adds tags the caller resolved itself, for a tag known only by name.</summary>
+    internal ArchetypeBuilder AddTags(Tags tags)
+    {
+        _acceptCallbacks.Add(callback =>
+        {
+            callback.AcceptTags(this, tags);
+        });
+
+        foreach (var filter in _filters)
+        {
+            filter.AcceptTags(this, tags);
         }
 
         return this;

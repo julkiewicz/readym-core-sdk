@@ -195,6 +195,27 @@ public readonly partial struct TestArea : IScope
     public partial int AreaId { get; set; }
 }
 
+/// Stands in for a tag the relay's own systems ask about, such as whether an owner may change.
+public readonly struct TestWatchedTag : Friflo.Engine.ECS.ITag;
+
+public readonly struct TestSecondTag : Friflo.Engine.ECS.ITag;
+
+/// A shape whose entities carry tags from the moment they exist.
+[Archetype]
+[Tag(typeof(TestWatchedTag))]
+[Tag(typeof(TestSecondTag))]
+public readonly partial struct Watched
+{
+    public partial int Marker { get; set; }
+}
+
+/// A scope that sits inside another, which is what a cell is to an area.
+[Archetype]
+public readonly partial struct TestRoom : IScope
+{
+    public partial int RoomId { get; set; }
+}
+
 [ArchetypeMixin]
 public readonly partial struct Patrol
 {

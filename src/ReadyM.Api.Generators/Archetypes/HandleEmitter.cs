@@ -38,6 +38,14 @@ internal static class HandleEmitter
         writer.Line($"{ArchetypeNames.EntityHandle} {ArchetypeNames.Shape}.Handle => _handle;");
         writer.Line();
         writer.Line($"{ArchetypeNames.ComponentSet} {ArchetypeNames.Queryable}.Components => {model.QualifiedAccessors}.Components;");
+        writer.Line();
+        writer.Line("/// This entity, which it already is: a loop over this shape hands over the shape itself.");
+        writer.Line("/// <remarks>");
+        writer.Line("/// Here so taking something out of a loop reads the same whichever way the loop walks. Whether a");
+        writer.Line("/// shape is walked by chunk follows from what it includes, which the call site cannot see and which");
+        writer.Line("/// changes when an include does.");
+        writer.Line("/// </remarks>");
+        writer.Line($"public {model.Name} Keep() => this;");
     }
 
     /// <summary>The set an accessor class exposes: its own component plus whatever it includes.</summary>

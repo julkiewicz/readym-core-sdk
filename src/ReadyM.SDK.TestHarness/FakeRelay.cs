@@ -34,6 +34,7 @@ internal sealed class FakeRelay
     private readonly SetComponentDelegate _setComponent;
     private readonly FindByIndexDelegate _findByIndex;
     private readonly QueryInScopeDelegate _queryInScope;
+    private readonly TryGetEntityScopeDelegate _tryGetEntityScope;
     private readonly CreateLocalEntityInScopeDelegate _createLocalEntityInScope;
     private readonly GetComponentSlotDelegate _getComponentSlot;
     private readonly IsEntityAliveDelegate _isEntityAlive;
@@ -41,6 +42,7 @@ internal sealed class FakeRelay
     private readonly RegisterModComponentDelegate _registerModComponent;
     private readonly RegisterArchetypeDelegate _registerArchetype;
     private readonly ResolveArchetypeDelegate _resolveArchetype;
+    private readonly AddArchetypeTagDelegate _addArchetypeTag;
     private readonly CreateLocalEntityDelegate _createLocalEntity;
     private readonly DeleteNetworkedEntityDelegate _deleteEntity;
 
@@ -73,6 +75,7 @@ internal sealed class FakeRelay
         _setComponent = SetComponentImpl;
         _findByIndex = FindByIndexImpl;
         _queryInScope = QueryInScopeImpl;
+        _tryGetEntityScope = TryGetEntityScopeImpl;
         _createLocalEntityInScope = CreateLocalEntityInScopeImpl;
         _getComponentSlot = GetComponentSlotImpl;
         _isEntityAlive = IsEntityAliveImpl;
@@ -80,6 +83,7 @@ internal sealed class FakeRelay
         _registerModComponent = static (_, _) => -1;
         _registerArchetype = RegisterArchetypeImpl;
         _resolveArchetype = ResolveArchetypeImpl;
+        _addArchetypeTag = AddArchetypeTagImpl;
         _createLocalEntity = CreateLocalEntityImpl;
         _createNetworked = CreateNetworkedEntityImpl;
         _createNetworkedInScope = CreateNetworkedEntityInScopeImpl;
@@ -105,6 +109,7 @@ internal sealed class FakeRelay
         SetComponent = Marshal.GetFunctionPointerForDelegate(_setComponent),
         FindByIndex = Marshal.GetFunctionPointerForDelegate(_findByIndex),
         QueryInScope = Marshal.GetFunctionPointerForDelegate(_queryInScope),
+        TryGetEntityScope = Marshal.GetFunctionPointerForDelegate(_tryGetEntityScope),
         CreateLocalEntityInScope = Marshal.GetFunctionPointerForDelegate(_createLocalEntityInScope),
         IsEntityAlive = Marshal.GetFunctionPointerForDelegate(_isEntityAlive),
         CreateLocalEntity = Marshal.GetFunctionPointerForDelegate(_createLocalEntity),
@@ -130,8 +135,35 @@ internal sealed class FakeRelay
     {
         RegisterArchetype = Marshal.GetFunctionPointerForDelegate(_registerArchetype),
         ModifyArchetype = IntPtr.Zero,
-        ResolveArchetype = Marshal.GetFunctionPointerForDelegate(_resolveArchetype)
+        ResolveArchetype = Marshal.GetFunctionPointerForDelegate(_resolveArchetype),
+        AddArchetypeTag = Marshal.GetFunctionPointerForDelegate(_addArchetypeTag)
     };
+
+    /// The tags each archetype was given, which a test reads instead of a schema.
+    private readonly Dictionary<ArchetypeId, List<string>> _archetypeTags = [];
+
+    /// <summary>What a shape's [Tag]s put on its archetype, in the order they arrived.</summary>
+    internal IReadOnlyList<string> TagsOn(ArchetypeId archetype)
+        => _archetypeTags.TryGetValue(archetype, out var tags) ? tags : [];
+
+    /// <summary>Tags this fake refuses, standing in for a schema that knows no such tag.</summary>
+    internal HashSet<string> UnknownTags { get; } = [];
+
+    private byte AddArchetypeTagImpl(ArchetypeId archetype, NativeString256 tagFullName)
+    {
+        var name = tagFullName.ToString();
+
+        if (UnknownTags.Contains(name))
+            return 0;
+
+        if (!_archetypeTags.TryGetValue(archetype, out var tags))
+            _archetypeTags[archetype] = tags = [];
+
+        if (!tags.Contains(name))
+            tags.Add(name);
+
+        return 1;
+    }
 
     /// Says this game registers an archetype for the shape, the way a game's own bindings do.
     internal void Bind(Type shape, ArchetypeId archetype) => _boundShapes[shape.FullName!] = archetype;
@@ -189,6 +221,16 @@ internal sealed class FakeRelay
 
     /// <summary>Puts an entity in a scope, as creating one inside a scope would.</summary>
     internal void PutInScope(RawEntity entity, RawEntity scope) => _scopes[entity.Id] = scope;
+
+    /// <summary>The scope an entity sits in, one step up, which is the link the relay reads.</summary>
+    private unsafe byte TryGetEntityScopeImpl(RawEntity entity, RawEntity* scope)
+    {
+        if (!_scopes.TryGetValue(entity.Id, out var holder))
+            return 0;
+
+        *scope = holder;
+        return 1;
+    }
 
     /// <summary>
     /// The entities a scope holds that carry every requested component, found from the links

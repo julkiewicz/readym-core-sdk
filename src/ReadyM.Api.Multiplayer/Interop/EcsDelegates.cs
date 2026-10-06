@@ -16,6 +16,9 @@ internal delegate ArchetypeId RegisterArchetypeDelegate(NativeString256 name, Na
 
 internal delegate void ModifyArchetypeDelegate(ArchetypeId archetype, NativeList<int> componentsSerialized);
 
+/// Puts one tag on an archetype, so every entity created as it carries the tag.
+internal delegate byte AddArchetypeTagDelegate(ArchetypeId archetype, NativeString256 tagFullName);
+
 /// The id this game already gave the shape, or -1 when it registers no archetype for it.
 internal delegate int ResolveArchetypeDelegate(NativeString256 shape);
 

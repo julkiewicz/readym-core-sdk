@@ -333,6 +333,7 @@ internal sealed class DeclarationModel
         Accessors = ReadAccessors(symbol);
         Includes = ReadIncludes(symbol);
         Extends = ReadExtends(symbol);
+        Tags = ReadTags(symbol);
         (HasReplicatedAttribute, Delivery) = ReadReplication(symbol);
         Propagation = ReadPropagation(symbol);
         CreateHandlers = ReadHandlers(symbol, ArchetypeNames.CreateHandlerAttribute);
@@ -377,6 +378,13 @@ internal sealed class DeclarationModel
     /// Archetypes this shape is added to when they are created.
     /// <summary>Archetypes this shape is added to on create, and the prefix its members take.</summary>
     public IReadOnlyList<(INamedTypeSymbol Archetype, string Prefix)> Extends { get; }
+
+    /// <summary>The tags every entity of this shape carries, named by [Tag].</summary>
+    /// <remarks>
+    /// Kept as symbols rather than names, because the generated code names them with typeof and the
+    /// compiler then says so when a tag is misspelt or is not visible from the mod.
+    /// </remarks>
+    public IReadOnlyList<INamedTypeSymbol> Tags { get; }
 
     public string Namespace => ArchetypeNames.NamespaceOf(Symbol);
 
@@ -712,6 +720,24 @@ internal sealed class DeclarationModel
             .Where(name => !string.IsNullOrEmpty(name))
             .Select(name => name!)
             .ToList();
+
+    private static IReadOnlyList<INamedTypeSymbol> ReadTags(INamedTypeSymbol symbol)
+    {
+        var tags = new List<INamedTypeSymbol>();
+
+        foreach (var attribute in symbol.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != ArchetypeNames.TagAttribute
+                || attribute.ConstructorArguments.Length == 0
+                || attribute.ConstructorArguments[0].Value is not INamedTypeSymbol tag)
+                continue;
+
+            if (!tags.Contains(tag, SymbolEqualityComparer.Default))
+                tags.Add(tag);
+        }
+
+        return tags;
+    }
 
     private static IReadOnlyList<(INamedTypeSymbol, string)> ReadExtends(INamedTypeSymbol symbol)
     {

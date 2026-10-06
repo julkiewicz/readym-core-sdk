@@ -34,6 +34,19 @@ internal class ServerEntities(ServerEntityApi api) : IEntities
         where T : IEntityShape, allows ref struct
         => api.Delete(shape.Handle.RawEntity);
 
+    public bool TryGetScope<TShape, TScope>(in TShape shape, out TScope scope)
+#if NET
+        where TShape : struct, IEntityShape, allows ref struct
+#else
+        where TShape : struct, IEntityShape
+#endif
+        where TScope : struct, IArchetypeQueryable, IScope
+        => ScopeLookup.TryFind(api, shape.Handle, out scope);
+    
+    public bool TryGetScope<TScope>(in EntityHandle handle, out TScope scope)
+        where TScope : struct, IArchetypeQueryable, IScope
+        => ScopeLookup.TryFind(api, handle, out scope);
+
     public EntityQuery<T1, T2> Query<T1, T2>()
         where T1 : struct, IArchetypeQueryable
         where T2 : struct, IArchetypeMixin

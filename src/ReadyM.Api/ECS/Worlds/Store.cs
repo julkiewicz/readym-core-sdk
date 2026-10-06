@@ -51,6 +51,9 @@ internal sealed partial class Store : IArchetypeRegistry, IArchetypeNames
         public void AcceptTag<T>(ArchetypeBuilder builder)
             where T : struct, ITag
             => Batch!.AddTag<T>();
+
+        public void AcceptTags(ArchetypeBuilder builder, in Tags tags)
+            => Batch!.AddTags(tags);
     }
 
     private class NativeInitCallback : IArchetypeBuilderCallback
@@ -98,6 +101,11 @@ internal sealed partial class Store : IArchetypeRegistry, IArchetypeNames
 
         public void AcceptTag<T>(ArchetypeBuilder builder)
             where T : struct, ITag
+        {
+            // empty
+        }
+
+        public void AcceptTags(ArchetypeBuilder builder, in Tags tags)
         {
             // empty
         }

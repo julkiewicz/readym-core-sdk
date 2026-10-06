@@ -11,11 +11,34 @@ public static class ArchetypeRegistry
 
     private static readonly Dictionary<ComponentSet, Type> Shapes = new(ByReference.Instance);
 
+    private static readonly Dictionary<Type, List<Type>> Tagged = [];
+
 #if NET
     private static readonly Lock Gate = new();
 #else
     private static readonly object Gate = new();
 #endif
+
+    /// <summary>Called by generated code for a shape's [Tag]s. Safe to call more than once.</summary>
+    public static void Tag(Type archetype, params Type[] tags)
+    {
+        lock (Gate)
+        {
+            if (!Tagged.TryGetValue(archetype, out var held))
+                Tagged[archetype] = held = [];
+
+            foreach (var tag in tags)
+                if (!held.Contains(tag))
+                    held.Add(tag);
+        }
+    }
+
+    /// <summary>The tags a shape declared, in the order it declared them.</summary>
+    internal static IReadOnlyList<Type> TagsFor(Type archetype)
+    {
+        lock (Gate)
+            return Tagged.TryGetValue(archetype, out var held) ? [.. held] : [];
+    }
 
     /// Called by generated code for each [Extends]. Safe to call more than once for the same pair.
     /// <param name="shape">The shape that added them, which is what says whose components they are.</param>

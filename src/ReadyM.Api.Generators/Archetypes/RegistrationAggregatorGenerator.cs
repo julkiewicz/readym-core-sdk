@@ -96,6 +96,9 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
         if (model.Extends.Count > 0)
             found.Add($"{prefix}{symbol.Name}Extends");
 
+        if (model.Tags.Count > 0)
+            found.Add($"{prefix}{symbol.Name}Tags");
+
         if (model.IndexedBy is not null)
             found.Add($"{prefix}{symbol.Name}Index");
 
