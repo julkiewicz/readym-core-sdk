@@ -60,6 +60,8 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
 
     private readonly SystemGroup _clearDirtySystemGroup;
     private readonly HashSet<NetworkId> _deletesFromServer = [];
+    private readonly Dictionary<NetworkId, List<NetDataReader>> _creationsWaitingForScope = [];
+    private readonly HashSet<NetworkId> _createdFromHeldCreations = [];
 
     protected SystemGroup ReceiveSystemGroup { get; }
 
@@ -138,6 +140,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
         // When an entity is deleted, we check if the event originated locally on the client. If yes, then a message is
         // sent to the server.
         NetEntity.OnEntityDelete += OnEntityDeleteHandler;
+        State.OnLeftArea += OnLeftAreaHandler;
 
         _ecsLoop.AddSystem(ReceiveSystemGroup);
         _ecsLoop.AddSystem(SyncSystemGroup);
@@ -171,6 +174,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
         RelayClient.RemoveBuiltInMessageHandler(RelayMessageCode.EcsChangeScope, OnEcsChangeScopeMessageHandler);
 
         NetEntity.OnEntityDelete -= OnEntityDeleteHandler;
+        State.OnLeftArea -= OnLeftAreaHandler;
     }
 
     protected virtual void OnOwnershipChanged(Entity entity) { }
@@ -195,6 +199,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                 Entity? scopeEntity = null;
 
                 var entityCount = readerCopy.GetUInt();
+                var created = new List<NetworkId>((int)entityCount);
 
                 for (var i = 0; i < entityCount; i++)
                 {
@@ -203,8 +208,9 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                     if (!self.NetEntity.TryGetEntityByNetworkId(meta.NetId, out var _))
                     {
                         self.NetEntity.CreateRemoteNetworkedEntity(meta, scopeEntity);
+                        created.Add(meta.NetId);
                     }
-                    else
+                    else if (!self._createdFromHeldCreations.Remove(meta.NetId))
                     {
                         self.Logger.LogError("Received snapshot create event for already existing entity: {Id} scope: {Scope}", meta.NetId, scopeNetId);
                     }
@@ -220,6 +226,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                 }
 
                 self.SerializationJobRegistry.ApplySnapshot(readerCopy);
+                self.CreateEntitiesWaitingFor(created);
             }
             finally
             {
@@ -323,32 +330,82 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                     {
                         // NOTE: This situation is possible when a new client enters the game and is forwarded entities
                         // created by another player before receiving the corresponding snapshot
-                        self.Logger.LogDebug("Scope entity with NetId {Scope} not found", scopeNetId);
+                        self.HoldCreationUntilScope(scopeNetId, readerCopy);
                         return;
                     }
                 }
 
-                var queryCount = readerCopy.GetUInt();
-                for (var i = 0; i < queryCount; i++)
-                {
-                    var meta = MetadataComponent.Deserialize(readerCopy);
-                    if (!self.NetEntity.TryGetEntityByNetworkId(meta.NetId, out var entity))
-                    {
-                        self.NetEntity.CreateRemoteNetworkedEntity(meta, scopeEntity);
-                    }
-                    else
-                    {
-                        self.Logger.LogError("Received create event for already existing entity: {Id}", meta.NetId);
-                    }
-                }
-
-                self.SerializationJobRegistry.ApplySnapshot(readerCopy);
+                self.CreateEntitiesWaitingFor(self.CreateEntities(scopeEntity, readerCopy, false));
             }
             finally
             {
                 _skipEcsEventMessages--;
             }
         }, this, _receiveSystem.Scheduler.MakeSafe(reader));
+    }
+
+    private List<NetworkId> CreateEntities(Entity? scopeEntity, NetDataReader reader, bool held)
+    {
+        var queryCount = reader.GetUInt();
+        var created = new List<NetworkId>((int)queryCount);
+        for (var i = 0; i < queryCount; i++)
+        {
+            var meta = MetadataComponent.Deserialize(reader);
+            if (!NetEntity.TryGetEntityByNetworkId(meta.NetId, out _))
+            {
+                NetEntity.CreateRemoteNetworkedEntity(meta, scopeEntity);
+                created.Add(meta.NetId);
+                if (held)
+                    _createdFromHeldCreations.Add(meta.NetId);
+            }
+            else if (!held)
+            {
+                Logger.LogError("Received create event for already existing entity: {Id}", meta.NetId);
+            }
+        }
+
+        if (held && created.Count == 0)
+            return created;
+
+        SerializationJobRegistry.ApplySnapshot(reader);
+        return created;
+    }
+
+    private void HoldCreationUntilScope(NetworkId scopeNetId, NetDataReader reader)
+    {
+        if (!_creationsWaitingForScope.TryGetValue(scopeNetId, out var waiting))
+        {
+            waiting = [];
+            _creationsWaitingForScope.Add(scopeNetId, waiting);
+        }
+
+        var bytes = reader.GetRemainingBytes();
+        waiting.Add(new NetDataReader(bytes, 0, bytes.Length));
+        Logger.LogInformation("Holding an entity creation until its scope {Scope} arrives", scopeNetId);
+    }
+
+    private void CreateEntitiesWaitingFor(List<NetworkId> createdNetIds)
+    {
+        foreach (var netId in createdNetIds)
+        {
+            if (!_creationsWaitingForScope.Remove(netId, out var waiting))
+                continue;
+
+            NetEntity.TryGetEntityByNetworkId(netId, out var scopeEntity);
+            Logger.LogInformation("Scope {Scope} arrived, creating the {Count} entity creation(s) held for it", netId, waiting.Count);
+            foreach (var reader in waiting)
+                CreateEntitiesWaitingFor(CreateEntities(scopeEntity, reader, true));
+        }
+    }
+
+    private void OnLeftAreaHandler(AreaId areaId, Entity areaEntity)
+    {
+        _createdFromHeldCreations.Clear();
+        if (_creationsWaitingForScope.Count == 0)
+            return;
+
+        Logger.LogInformation("Dropping entity creations held for {Count} scope(s) that never arrived before leaving {Area}", _creationsWaitingForScope.Count, areaId);
+        _creationsWaitingForScope.Clear();
     }
 
     // NOTE: Someone else deleted an entity, and we are notified about it
