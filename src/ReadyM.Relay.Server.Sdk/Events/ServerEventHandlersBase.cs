@@ -7,6 +7,7 @@ namespace ReadyM.Relay.Server.Sdk.Events;
 /// Subclasses should implement the Subscribe and Unsubscribe methods to register and unregister event handlers with the ServerEventsApi.
 /// </summary>
 /// <param name="events"></param>
+[Obsolete("Use [Service] instead")]
 public abstract class ServerEventHandlersBase(ServerEventsApi events) : IHostedService
 {
     public void OnScopeStart()

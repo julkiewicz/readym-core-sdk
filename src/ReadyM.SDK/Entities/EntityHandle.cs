@@ -16,9 +16,9 @@ namespace ReadyM.SDK.Entities;
 public readonly struct EntityHandle
 {
     private readonly RawEntity _rawEntity;
-    private readonly IEntityApi _api;
+    private readonly IEntityApi? _api;
 
-    internal EntityHandle(RawEntity rawEntity, IEntityApi api)
+    internal EntityHandle(RawEntity rawEntity, IEntityApi? api)
     {
         _rawEntity = rawEntity;
         _api = api;
@@ -33,13 +33,13 @@ public readonly struct EntityHandle
         => $"entity {_rawEntity.Id}";
 
     public bool IsAlive()
-        => _api.IsAlive(_rawEntity);
+        => _api is not null && _api.IsAlive(_rawEntity);
 
     public bool Is<T>() where T : struct, IArchetypeQueryable
-        => _api.HasComponents(_rawEntity, default(T).Components);
+        => _api is not null && _api.HasComponents(_rawEntity, default(T).Components);
 
     /// The same question asked with a set rather than a type, for the SDK's own bookkeeping.
-    internal bool Has(ComponentSet components) => _api.HasComponents(_rawEntity, components);
+    internal bool Has(ComponentSet components) => _api is not null && _api.HasComponents(_rawEntity, components);
 
     public T As<T>() where T : struct, IArchetypeQueryable
     {
@@ -89,7 +89,7 @@ public readonly struct EntityHandle
     /// <returns><c>false</c> when the write does not belong on this side.</returns>
     public bool Write<TComponent, TValue>(Field<TComponent, TValue> field, TValue value, WriteKind kind)
         where TComponent : struct, IComponent
-        => _api.Write(_rawEntity, ref GetComponent<TComponent>(), field, value, kind);
+        => _api!.Write(_rawEntity, ref GetComponent<TComponent>(), field, value, kind);
 
     /// <inheritdoc cref="Write{TComponent, TValue}(Field{TComponent, TValue}, TValue, WriteKind)"/>
     /// <remarks>Into a component the caller holds, for a value written back whole to move its index.</remarks>
@@ -99,24 +99,24 @@ public readonly struct EntityHandle
         TValue value,
         WriteKind kind)
         where TComponent : struct, IComponent
-        => _api.Write(_rawEntity, ref component, field, value, kind);
+        => _api!.Write(_rawEntity, ref component, field, value, kind);
 
     /// Whether the game may report this value, which is what a collection asks before changing.
     /// <returns><c>false</c> when the write does not belong on this side.</returns>
     public bool Mirrors<TComponent, TValue>(Field<TComponent, TValue> field)
         where TComponent : struct, IComponent
-        => _api.Mirrors(_rawEntity, in GetComponent<TComponent>(), field);
+        => _api!.Mirrors(_rawEntity, in GetComponent<TComponent>(), field);
 
     internal bool Allows(Type component, WriteKind kind) 
-        => _api.Allows(_rawEntity, component, kind);
+        => _api!.Allows(_rawEntity, component, kind);
 
     internal bool ShouldApplyToGame(Type component) 
-        => _api.ShouldApplyToGame(_rawEntity, component);
+        => _api!.ShouldApplyToGame(_rawEntity, component);
 
     /// Writes the whole component, which is what moves it in the index kept on it.
     public void ReplaceIndexed<TComponent, TKey>(in TComponent component)
         where TComponent : struct, IIndexedComponent<TKey>
-        => _api.ReplaceIndexed<TComponent, TKey>(_rawEntity, component);
+        => _api!.ReplaceIndexed<TComponent, TKey>(_rawEntity, component);
 
     /// The handle behind an archetype or mixin struct.
     public static EntityHandle Of<T>(in T archetype)
@@ -130,7 +130,7 @@ public readonly struct EntityHandle
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private ComponentRef Locate<T>() where T : struct, IComponent
-        => _api.Locate(_rawEntity, ComponentIds<T>.For(_api));
+        => _api!.Locate(_rawEntity, ComponentIds<T>.For(_api));
 
     private ComponentNotFoundException Missing<T>()
         => new($"Entity {_rawEntity.Id} is gone or does not carry {typeof(T).Name}.");
