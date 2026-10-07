@@ -45,7 +45,6 @@ internal class ApplyDeltaJob<T>(
             if (authoritativeSender.HasValue && owner != authoritativeSender.Value)
             {
                 // Non-owner sender: consume the bytes to stay aligned, but do not apply/relay.
-                logger.LogWarning("Dropping delta for {Component} entity {NetId}: sender {Sender} is not the owner {Owner}", typeof(T).Name, netId, authoritativeSender.Value, owner);
                 _skipInstance.ReadDelta(reader);
                 continue;
             }
