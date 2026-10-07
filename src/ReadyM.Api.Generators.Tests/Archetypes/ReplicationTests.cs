@@ -165,7 +165,7 @@ public class ReplicationTests(ITestOutputHelper output)
             "public static implicit operator global::ReadyM.SDK.Archetypes.Scope",
             Generated(
                 """
-                [Archetype]
+                [Archetype(replicated: false)]
                 public readonly partial struct Camp : global::ReadyM.SDK.Archetypes.IScope
                 {
                     public partial int Size { get; set; }
@@ -216,7 +216,7 @@ public class ReplicationTests(ITestOutputHelper output)
             public partial int Health { get; set; }
         }
 
-        [Archetype]
+        [Archetype(replicated: false)]
         [Include(typeof(Vitals))]
         public readonly partial struct Fighter;
         """;
@@ -319,7 +319,7 @@ public class ReplicationTests(ITestOutputHelper output)
                 public partial int Temperature { get; set; }
             }
 
-            [Archetype]
+            [Archetype(replicated: false)]
             [Include(typeof(Ambient))]
             [Propagates(Propagation.Both)]
             public readonly partial struct Region;
@@ -394,7 +394,7 @@ public class ReplicationTests(ITestOutputHelper output)
         => Assert.Contains(
             "CreateHandlerRegistry.Register(global::Mod.SubjectAccessors.Components,",
             Generated("""
-                [Archetype]
+                [Archetype(replicated: false)]
                 public readonly partial struct Subject
                 {
                     [CreateHandler]
@@ -455,7 +455,7 @@ public class ReplicationTests(ITestOutputHelper output)
         => Assert.Contains(
             "DeleteHandlerRegistry.Register(global::Mod.SubjectAccessors.Components,",
             Generated("""
-                [Archetype]
+                [Archetype(replicated: false)]
                 public readonly partial struct Subject
                 {
                     [DeleteHandler]
@@ -468,7 +468,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_shape_may_be_told_about_both_ends()
     {
         var generated = Generated("""
-            [Archetype]
+            [Archetype(replicated: false)]
             public readonly partial struct Subject
             {
                 [CreateHandler]
@@ -532,7 +532,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_marker_shape_cannot_replicate()
     {
         var reported = Report("""
-            [Archetype]
+            [ArchetypeMixin]
             [Replicated]
             public readonly partial struct Subject;
             """);
@@ -633,17 +633,17 @@ public class ReplicationTests(ITestOutputHelper output)
         Assert.True(model.IsReplicated);
     }
 
-    /// A marker replicates nothing whatever it asks for, which is what the diagnostic says too.
+    /// A marker replicates no values whatever it asks for. The entity still does, which is a
+    /// separate question the runtime reads off the archetype.
     [Fact]
-    public void A_marker_shape_does_not_replicate_even_when_it_asks()
+    public void A_marker_shape_does_not_replicate_values_even_when_it_asks()
     {
         var model = Model("""
-            [Archetype]
-            [Replicated]
+            [Archetype(replicated: true)]
             public readonly partial struct Subject;
             """);
 
-        Assert.True(model.HasReplicatedAttribute);
+        Assert.True(model.DeclaredReplicated);
         Assert.False(model.IsReplicated);
     }
 
@@ -676,6 +676,122 @@ public class ReplicationTests(ITestOutputHelper output)
             """);
 
         Assert.Equal(Delivery.Unreliable, model.Delivery);
+    }
+
+    // -- what an archetype declares ------------------------------------------------------------------
+
+    /// An archetype says it on [Archetype], so [Replicated] there is a second place to say it.
+    [Fact]
+    public void An_archetype_must_not_carry_replicated()
+        => AssertReports("READYM036", """
+            [Archetype(replicated: true)]
+            [Replicated]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """);
+
+    /// Furniture's shape: nothing of its own, and still an entity the other side hears about.
+    [Fact]
+    public void A_replicated_archetype_holding_no_values_is_fine()
+        => Assert.Empty(Report("""
+            [Archetype(replicated: true)]
+            public readonly partial struct Subject;
+            """));
+
+    [Fact]
+    public void A_replicated_archetype_replicates_its_own_values()
+    {
+        var model = Model("""
+            [Archetype(replicated: true)]
+            [Propagates(Propagation.OwnershipBased)]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """);
+
+        Assert.True(model.IsReplicated);
+        Assert.True(model.RegistersReplication);
+    }
+
+    [Fact]
+    public void A_local_archetype_keeps_its_own_values_local()
+    {
+        var model = Model("""
+            [Archetype(replicated: false)]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """);
+
+        Assert.False(model.IsReplicated);
+        Assert.False(model.RegistersReplication);
+    }
+
+    /// The same rule a replicated mixin is held to: values that are sent need a stated writer.
+    [Fact]
+    public void A_replicated_archetype_with_values_must_say_how_they_propagate()
+        => AssertReports("READYM014", """
+            [Archetype(replicated: true)]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """);
+
+    [Fact]
+    public void An_archetype_carries_its_delivery_on_the_attribute()
+    {
+        var model = Model("""
+            [Archetype(replicated: true, Delivery = Delivery.Unreliable)]
+            [Propagates(Propagation.OwnershipBased)]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """);
+
+        Assert.Equal(Delivery.Unreliable, model.Delivery);
+    }
+
+    /// Whether the entity gets a network identity is read at create time off the set, so the set has
+    /// to say it, and say it apart from any include whose set holds the same components.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void An_archetype_set_carries_its_flag(bool replicated)
+        => Assert.Contains(
+            $"ComponentSet.Archetype({(replicated ? "true" : "false")}, ",
+            Generated($$"""
+                [ArchetypeMixin]
+                [Replicated]
+                [Propagates(Propagation.OwnershipBased)]
+                public readonly partial struct Telemetry
+                {
+                    public partial int Ticks { get; set; }
+                }
+
+                [Archetype(replicated: {{(replicated ? "true" : "false")}})]
+                [Include(typeof(Telemetry))]
+                public readonly partial struct Subject;
+                """));
+
+    /// A mixin's set is shared by every shape that includes it, so it says nothing either way.
+    [Fact]
+    public void A_mixin_set_is_not_an_archetype_set()
+    {
+        var generated = Generated("""
+            [ArchetypeMixin]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """);
+
+        Assert.DoesNotContain("ComponentSet.Archetype(", generated);
     }
 
     // -- collections -------------------------------------------------------------------------------

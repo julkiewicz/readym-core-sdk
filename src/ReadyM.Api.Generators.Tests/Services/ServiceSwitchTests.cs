@@ -211,7 +211,7 @@ public class ServiceSwitchTests(ITestOutputHelper output)
     }
 
     private const string Watching = """
-        [Archetype]
+        [Archetype(replicated: false)]
         public readonly partial struct Parcel
         {
             public partial int Mark { get; set; }

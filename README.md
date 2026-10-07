@@ -47,7 +47,7 @@ This is a short overview of the attributes and what they do.
 
 ### Archetype / ArchetypeMixin
 
-* `[Archetype]` declares a partial struct an archetype of components.
+* `[Archetype(replicated: true|false)]` declares a partial struct an archetype of components. The flag is required, see [Replicated](#replicated).
 * `[ArchetypeMixin]` declares a partial struct an archetype mixin, with an underlying ECS component.
 
 Both archetypes and mixins are collectively called "shapes".
@@ -66,7 +66,16 @@ A shape with no fields still gets an empty component type generated, so that que
 
 ### Replicated
 
-Annotated shapes are replicated to clients in either a reliable or unreliable manner.
+Whether an entity exists on the other side is decided by its archetype, never by its components:
+
+* `[Archetype(replicated: true)]` entities get a network identity and an owner (`MetadataComponent`), and the game has to bind the archetype on both the client and the server.
+* `[Archetype(replicated: false)]` entities stay where they were created, even when they include mixins that replicate elsewhere. Nothing they hold is sent, and they need no binding.
+
+A query asks for components, so `Query<RefIdMixin>()` finds both kinds.
+
+`[Replicated]` is for mixins: their values are sent, reliably or unreliably, on the entities of a replicated archetype.
+An archetype's own values follow its flag, and take their delivery from `[Archetype(..., Delivery = Delivery.Unreliable)]`.
+Putting `[Replicated]` on an archetype is an error (READYM036).
 
 ### Propagates
 
@@ -122,7 +131,7 @@ All setters or setter methods are generated in such a way that they update the i
 ### ExplicitComponent
 
 Used internally to skip generating the underlying component type for a shape, when the component is already declared somewhere else.
-Using `[Replicates]` and `[Propagates]` on such a shape is forbidden, since the replication is configured internally, and propagation behavior is already defined on the underlying component type via a marker interface.
+Using `[Replicated]` and `[Propagates]` on such a shape is forbidden, since the replication is configured internally, and propagation behavior is already defined on the underlying component type via a marker interface.
 
 ### ExplicitCollection
 

@@ -39,7 +39,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
             private void OnCreated() => Mark = 7;
         }
 
-        [Archetype]
+        [Archetype(replicated: false)]
         [Include(typeof(Stamped))]
         public readonly partial struct Parcel;
 
@@ -98,7 +98,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
 
             namespace Mod;
 
-            [Archetype]
+            [Archetype(replicated: false)]
             public readonly partial struct Subject
             {
                 public partial int Mark { get; set; }
@@ -116,7 +116,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
 
             namespace Mod;
 
-            [Archetype]
+            [Archetype(replicated: false)]
             public readonly partial struct Subject
             {
                 public partial int Mark { get; set; }
@@ -138,7 +138,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
 
             namespace Mod;
 
-            [Archetype]
+            [Archetype(replicated: false)]
             public readonly partial struct Subject
             {
                 public partial int Mark { get; set; }

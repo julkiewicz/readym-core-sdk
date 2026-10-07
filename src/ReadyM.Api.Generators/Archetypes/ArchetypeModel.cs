@@ -334,7 +334,9 @@ internal sealed class DeclarationModel
         Includes = ReadIncludes(symbol);
         Extends = ReadExtends(symbol);
         Tags = ReadTags(symbol);
-        (HasReplicatedAttribute, Delivery) = ReadReplication(symbol);
+        (HasReplicatedAttribute, var mixinDelivery) = ReadReplication(symbol);
+        (DeclaredReplicated, var archetypeDelivery) = ReadArchetype(symbol);
+        Delivery = DeclaredReplicated is null ? mixinDelivery : archetypeDelivery;
         Propagation = ReadPropagation(symbol);
         CreateHandlers = ReadHandlers(symbol, ArchetypeNames.CreateHandlerAttribute);
         DeleteHandlers = ReadHandlers(symbol, ArchetypeNames.DeleteHandlerAttribute);
@@ -400,6 +402,14 @@ internal sealed class DeclarationModel
     /// rule can tell asking to replicate from replicating because the component already does.
     public bool HasReplicatedAttribute { get; }
 
+    /// What [Archetype(replicated: ...)] says, which is whether the archetype's entities get a network
+    /// identity. Null for a mixin, and for an archetype whose attribute does not compile.
+    public bool? DeclaredReplicated { get; }
+
+    /// Whether the declaration asks for its values to cross the wire: an archetype by its flag, a
+    /// mixin by [Replicated].
+    public bool AsksToReplicate => DeclaredReplicated ?? (!IsArchetype && HasReplicatedAttribute);
+
     /// How its values travel between the game and the ECS, and who may write them. Only a
     /// replicated shape has any say: a local one is the mod's own business either way.
     public Propagation? Propagation { get; }
@@ -407,15 +417,16 @@ internal sealed class DeclarationModel
     /// How this shape's changes travel, when it replicates at all.
     public Delivery Delivery { get; }
 
-    /// Whether this shape's values reach the other side. A shape says so with [Replicated], or says
-    /// nothing and inherits it from a component that is already networked.
+    /// Whether this shape's values reach the other side. A shape over a component it borrows takes
+    /// that component's word for it; one with a component generated for it asks.
     /// <remarks>
     /// A shape holding no values replicates nothing whatever it asks for: there is no component to
     /// carry, and its presence travels with the entity instead.
     /// </remarks>
     public bool IsReplicated
-        => (HasReplicatedAttribute || (ExplicitComponent is { } c && IsNetworkedComponent(c)))
-           && (ExplicitComponent is not null || Accessors.Count > 0);
+        => ExplicitComponent is { } borrowed
+            ? IsNetworkedComponent(borrowed)
+            : AsksToReplicate && Accessors.Count > 0;
 
     /// Whether this shape is the one that tells the host about its component.
     /// <remarks>
@@ -457,6 +468,30 @@ internal sealed class DeclarationModel
         }
 
         return (false, Delivery.Reliable);
+    }
+
+    private static (bool? Replicated, Delivery Delivery) ReadArchetype(INamedTypeSymbol symbol)
+    {
+        foreach (var attribute in symbol.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != ArchetypeNames.ArchetypeAttribute)
+                continue;
+
+            bool? replicated = attribute.ConstructorArguments.Length > 0
+                               && attribute.ConstructorArguments[0].Value is bool flag
+                ? flag
+                : null;
+
+            var delivery = Delivery.Reliable;
+
+            foreach (var named in attribute.NamedArguments)
+                if (named.Key == "Delivery" && named.Value.Value is int index)
+                    delivery = (Delivery)index;
+
+            return (replicated, delivery);
+        }
+
+        return (null, Delivery.Reliable);
     }
 
     /// <summary>The accessor [Index] marks, for a shape whose component is generated.</summary>

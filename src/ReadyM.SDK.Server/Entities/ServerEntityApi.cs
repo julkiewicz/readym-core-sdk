@@ -62,7 +62,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
             : Marshal.GetDelegateForFunctionPointer<AddArchetypeTagDelegate>(archetypes.AddArchetypeTag);
     }
 
-    /// Whether the entity is networked follows from the shape: it is, if any of its components are.
+    /// Whether the entity is networked is what its archetype declared, whatever components it holds.
     /// <param name="owner">Null leaves it the server's.</param>
     public RawEntity Create(ComponentSet components, RawEntity? scope = null, PlayerId? owner = null)
     {
@@ -73,10 +73,10 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
 
         var created = scope switch
         {
-            { } holder when components.Replicates
+            { } holder when components.Replicated
                 => _createNetworkedEntityInScope(archetype, holder, named, owner ?? default),
             { } holder => _createLocalEntityInScope(archetype, holder),
-            _ when components.Replicates => _createNetworkedEntity(archetype, named, owner ?? default),
+            _ when components.Replicated => _createNetworkedEntity(archetype, named, owner ?? default),
             _ => _createLocalEntity(archetype)
         };
 
@@ -89,6 +89,34 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
 
     private ArchetypeId ArchetypeOf(ComponentSet components)
         => _archetypeIds.GetOrAdd(components, static (set, self) => self.Tagged(set, self.Bound(set) ?? self.Register(set)), this);
+
+    /// <summary>
+    /// Settles the archetype of every shape that declared tags.
+    /// </summary>
+    internal int ApplyDeclaredTags()
+    {
+        var applied = 0;
+
+        foreach (var shape in ArchetypeRegistry.TaggedShapes())
+        {
+            if (Activator.CreateInstance(shape) is not IArchetypeQueryable queryable)
+                continue;
+
+            var components = ArchetypeRegistry.SetFor(shape, queryable.Components);
+            
+            if (components.Replicated && !Binds(shape))
+                continue;
+
+            ArchetypeOf(components);
+            applied++;
+        }
+
+        return applied;
+    }
+
+    /// <summary>Whether this game registers an archetype for the shape.</summary>
+    private bool Binds(Type shape)
+        => shape.FullName is { } name && _resolveArchetype(new NativeString256(name, useWide: false)) >= 0;
 
     /// <summary>Puts the shape's [Tag]s on the archetype, once, as it is first resolved.</summary>
     private ArchetypeId Tagged(ComponentSet components, ArchetypeId archetype)
@@ -122,11 +150,12 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         if (id >= 0)
             return new ArchetypeId((byte)id);
         
-        if (components.Replicates)
+        if (components.Replicated)
             throw new InvalidOperationException(
-                $"{shape} replicates, but this game registers no archetype for it. Bind it with "
-                + "IArchetypeShapeBindings on both the client and the server, or the entity would "
-                + "reach the other side under an id only this one knows.");
+                $"{shape} is declared replicated, but this game registers no archetype for it. Bind it "
+                + "with IArchetypeShapeBindings on both the client and the server, or the entity would "
+                + "reach the other side under an id only this one knows. An archetype that never leaves "
+                + "this side is [Archetype(replicated: false)].");
 
         return null;
     }

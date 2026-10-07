@@ -33,6 +33,9 @@ internal sealed class ClientEntityApi : IEntityApi
     /// One archetype per set, worked out on first use the way the server's half does it.
     private readonly ConcurrentDictionary<ComponentSet, ArchetypeId> _archetypes = new();
 
+    /// The tags a shape declared, resolved against this world's schema once per set.
+    private readonly ConcurrentDictionary<ComponentSet, Tags> _tags = new();
+
     private readonly ConcurrentDictionary<Type, IMappingDataPolicy<Entity>?> _policyOf = new();
     private QueryScope _scope = new();
 
@@ -175,7 +178,7 @@ internal sealed class ClientEntityApi : IEntityApi
 
     private INetworkedEntityManager? Networked(ComponentSet components)
     {
-        if (!components.Replicates)
+        if (!components.Replicated)
             return null;
 
         if (_networked is null || _world is null)
@@ -183,7 +186,7 @@ internal sealed class ClientEntityApi : IEntityApi
             // A shape that sends, in a session with nothing to send it over. Local is the only
             // thing left to do, and silence would look like the network dropping it.
             _logger.LogWarning(
-                "{Components} replicates, but this game registered no networked entity manager, "
+                "{Components} is declared replicated, but this game registered no networked entity manager, "
                 + "so the entity is local and no other side will hear about it.", components);
 
             return null;
@@ -196,13 +199,67 @@ internal sealed class ClientEntityApi : IEntityApi
     private ArchetypeId Archetype(ComponentSet components)
         => _archetypes.GetOrAdd(components, Bound);
 
+    /// <summary>
+    /// Settles the archetype of every shape that declared tags, before anything creates an entity.
+    /// </summary>
+    internal int ApplyDeclaredTags()
+    {
+        var applied = 0;
+
+        foreach (var shape in ArchetypeRegistry.TaggedShapes())
+        {
+            if (Activator.CreateInstance(shape) is not IArchetypeQueryable queryable
+                || ArchetypeBindings.Of(shape) is not { } id)
+                continue;
+
+            var components = ArchetypeRegistry.SetFor(shape, queryable.Components);
+
+            if (TagsOf(components) is { Count: > 0 } tags)
+                _world?.ModifyArchetype(id, builder => builder.AddTags(tags));
+
+            applied++;
+        }
+
+        return applied;
+    }
+    
+    private Tags TagsOf(ComponentSet components) => _tags.GetOrAdd(components, Declared);
+
+    private static Tags Declared(ComponentSet components)
+    {
+        var tags = new Tags();
+
+        if (ArchetypeRegistry.ShapeOf(components) is not { } shape)
+            return tags;
+
+        var schema = EntityStore.GetEntitySchema();
+
+        foreach (var declared in ArchetypeRegistry.TagsFor(shape))
+        {
+            if (!schema.TagTypeByType.TryGetValue(declared, out var tagType))
+                throw new InvalidOperationException(
+                    $"{shape.FullName} asks for the tag {declared.FullName}, which this game's ECS does "
+                    + "not know. A tag reaches the schema by being registered with the rest of them "
+                    + "before the mods load.");
+
+            tags.Add(new Tags(tagType));
+        }
+
+        return tags;
+    }
+
     /// The archetype this game registered for the shape. Only reached for one that replicates.
     private ArchetypeId Bound(ComponentSet components)
     {
         var shape = ArchetypeRegistry.ShapeOf(components);
 
         if (shape is not null && ArchetypeBindings.Of(shape) is { } id)
+        {
+            if (TagsOf(components) is { Count: > 0 } tags)
+                _world?.ModifyArchetype(id, builder => builder.AddTags(tags));
+
             return id;
+        }
 
         throw new InvalidOperationException(
             $"{shape?.FullName ?? components.ToString()} replicates, but this game registers no "
@@ -224,7 +281,9 @@ internal sealed class ClientEntityApi : IEntityApi
     {
         _scope.RefuseIfInQuery("Creating an entity");
 
-        return _store.GetArchetype(ClientComponents.Resolve(components)).CreateEntity().RawEntity;
+        return _store.GetArchetype(ClientComponents.Resolve(components), TagsOf(components))
+            .CreateEntity()
+            .RawEntity;
     }
 
     /// A component holding a native collection has no memory until this runs, and what a shape asked

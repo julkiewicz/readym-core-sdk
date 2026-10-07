@@ -31,13 +31,13 @@ public readonly partial struct Tagged
     public partial int Weight { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Registered))]
 [Include(typeof(Tagged))]
 public readonly partial struct Ticketed;
 
 /// An archetype indexed by its own property.
-[Archetype]
+[Archetype(replicated: false)]
 public readonly partial struct Station
 {
     [Index]
@@ -57,6 +57,6 @@ public readonly partial struct Berth
     public partial int Deck { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: true)]
 [Include(typeof(Berth))]
 public readonly partial struct Docked;

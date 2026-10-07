@@ -138,6 +138,7 @@ internal class ArchetypeGenerator : IIncrementalGenerator
 
         ExtendsEmitter.Emit(writer, model, compilation);
         TagEmitter.Emit(writer, model, compilation);
+        DeclarationEmitter.Emit(writer, model, compilation);
         IndexEmitter.Emit(writer, model, compilation);
         ReplicationEmitter.Emit(writer, model, compilation);
         NativeInitEmitter.Emit(writer, model, compilation);

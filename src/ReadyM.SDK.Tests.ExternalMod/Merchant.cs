@@ -3,7 +3,7 @@ using ReadyM.SDK.Attributes;
 namespace ReadyM.SDK.Tests.ExternalMod;
 
 /// An archetype another assembly includes, with an accessor of its own and a mixin of its own.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Wallet))]
 public readonly partial struct Merchant
 {

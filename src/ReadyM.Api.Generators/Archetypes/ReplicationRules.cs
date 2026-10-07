@@ -59,7 +59,7 @@ internal static class ReplicationRules
     public static readonly DiagnosticDescriptor PropagationNeedsReplication = new(
         "READYM016",
         "Propagation is stated on a shape nothing sends",
-        "'{0}' is not replicated. Drop [Propagates], or replicate the shape.",
+        "'{0}' sends no values of its own. Drop [Propagates], or replicate the shape.",
         "ReadyM",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -70,6 +70,15 @@ internal static class ReplicationRules
         "'{0}.{1}' is a collection, and only a replicated component is given the members that work "
         + "one: Add{1}, Clear{1} and the rest. On '{0}' it would be a handle to memory with nothing "
         + "to reach it by. Replicate the shape, or hold the values some other way.",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ReplicatedOnArchetype = new(
+        "READYM036",
+        "Archetype states replication with [Replicated]",
+        "'{0}' is an archetype, which says whether it replicates on [Archetype(replicated: ...)]. Drop "
+        + "[Replicated], which is for mixins. How its own values travel is [Archetype(..., Delivery = ...)].",
         "ReadyM",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -96,6 +105,10 @@ internal static class ReplicationRules
     {
         var found = new List<Diagnostic>();
         var at = model.Symbol.Locations.FirstOrDefault() ?? Location.None;
+
+        // Everything below that reads [Replicated] is then about a mixin.
+        if (model.IsArchetype && model.HasReplicatedAttribute)
+            return [Diagnostic.Create(ReplicatedOnArchetype, at, model.Name)];
 
         if (model.ExplicitComponent is { } component)
             return model.HasReplicatedAttribute

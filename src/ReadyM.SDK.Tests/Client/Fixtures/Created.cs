@@ -27,13 +27,13 @@ public readonly partial struct Announced
     }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Stamped))]
 public readonly partial struct Parcel;
 
 /// An archetype's own handler runs as well as the one on what it includes. Which of them goes first
 /// is nobody's to say, so this sets a value of its own rather than reading the other's.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Stamped))]
 public readonly partial struct Crate
 {
@@ -43,13 +43,13 @@ public readonly partial struct Crate
     private void OnCreated() => Seal = 1;
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Announced))]
 public readonly partial struct Herald;
 
 /// Several mixins each asking for something, under an archetype asking for something of its own.
 /// Creating one entity runs all of them, which is what makes a default a mixin's own business.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Stamped))]
 [Include(typeof(Announced))]
 [Include(typeof(Counted))]

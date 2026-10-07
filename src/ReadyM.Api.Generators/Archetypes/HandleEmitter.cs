@@ -53,6 +53,17 @@ internal static class HandleEmitter
     {
         var sets = AccessorEmitter.Sets(model);
 
+        // An archetype's set is its own even when it holds what an include's does, because it is
+        // what carries the archetype's word on replicating to the create call.
+        if (model.IsArchetype)
+        {
+            var replicated = model.DeclaredReplicated == true ? "true" : "false";
+
+            return sets.Count == 0
+                ? $"{ArchetypeNames.ComponentSet}.Archetype({replicated})"
+                : $"{ArchetypeNames.ComponentSet}.Archetype({replicated}, {string.Join(", ", sets)})";
+        }
+
         return sets.Count switch
         {
             0 => $"{ArchetypeNames.ComponentSet}.Empty",

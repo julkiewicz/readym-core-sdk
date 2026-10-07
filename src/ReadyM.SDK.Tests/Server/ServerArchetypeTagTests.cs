@@ -1,4 +1,4 @@
-using ReadyM.Api.Idents;
+﻿using ReadyM.Api.Idents;
 ﻿using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Tests.Server.Fixtures;
 
@@ -67,6 +67,22 @@ public class ServerArchetypeTagTests : ServerSdkTest
         var refused = Assert.Throws<InvalidOperationException>(() => Entities.Create<Watched>());
 
         Assert.Contains(Watched, refused.Message);
+    }
+
+    /// <summary>
+    /// The tags land without anything being created, which is what the hosts call at startup.
+    /// </summary>
+    /// <remarks>
+    /// The game makes plenty of entities from a raw archetype id rather than through a shape. Waiting
+    /// for the first create to settle the archetype would leave every one of those untagged, which is
+    /// why the hardcoded tags could not simply be deleted until this existed.
+    /// </remarks>
+    [Fact]
+    public void The_tags_land_before_anything_is_created()
+    {
+        Api.ApplyDeclaredTags();
+
+        Assert.Equal([Watched, Second], Relay.TagsOn(ArchetypeOf<Fixtures.Watched>()));
     }
 
     /// Interned by component set, so this is the id the create already used rather than a new one.

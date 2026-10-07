@@ -13,6 +13,8 @@ public static class ArchetypeRegistry
 
     private static readonly Dictionary<Type, List<Type>> Tagged = [];
 
+    private static readonly HashSet<Type> AllDeclared = [];
+
 #if NET
     private static readonly Lock Gate = new();
 #else
@@ -31,6 +33,26 @@ public static class ArchetypeRegistry
                 if (!held.Contains(tag))
                     held.Add(tag);
         }
+    }
+
+    internal static IReadOnlyList<Type> TaggedShapes()
+    {
+        lock (Gate)
+            return [.. Tagged.Keys];
+    }
+
+    /// <summary>Called by generated code for every [Archetype], so the SDK knows one exists.</summary>
+    public static void Declare(Type archetype)
+    {
+        lock (Gate)
+            AllDeclared.Add(archetype);
+    }
+
+    /// <summary>Every [Archetype] the loaded mods declared.</summary>
+    internal static IReadOnlyList<Type> Declared()
+    {
+        lock (Gate)
+            return [.. AllDeclared];
     }
 
     /// <summary>The tags a shape declared, in the order it declared them.</summary>
@@ -106,7 +128,7 @@ public static class ArchetypeRegistry
             for (var i = 0; i < sets.Count; i++)
                 all[i + 1] = sets[i].Components;
 
-            return Named(archetype, ComponentSet.Combine(all));
+            return Named(archetype, ComponentSet.Archetype(own.Replicated, all));
         }
     }
 

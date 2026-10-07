@@ -29,7 +29,7 @@ public readonly partial struct Chalked
     }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Chalked))]
 public readonly partial struct Crateload;
 
@@ -64,6 +64,6 @@ public sealed partial class Turnstile
 
 /// Carries the one component Ticketed is recognised by first, and nothing else it is made of. What
 /// rules a shape out cheaply must not let this through.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Registered))]
 public readonly partial struct HalfTicketed;

@@ -1,6 +1,7 @@
 ﻿namespace ReadyM.SDK.Attributes;
 
-/// Replicates this shape's values to the other side.
+/// Makes this mixin able to be replicated over the network, if included in a replicated archetype.
+/// Mixins without this attribute will not be replicated, even if the archetype is.
 [AttributeUsage(AttributeTargets.Struct)]
 public sealed class ReplicatedAttribute(Delivery delivery = Delivery.Reliable) : Attribute
 {

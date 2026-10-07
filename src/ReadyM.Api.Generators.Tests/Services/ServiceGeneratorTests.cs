@@ -19,7 +19,7 @@ public class ServiceGeneratorTests(ITestOutputHelper output)
 
           namespace Mod;
 
-          [Archetype]
+          [Archetype(replicated: false)]
           public readonly partial struct Subject
           {
               public partial int Mark { get; set; }

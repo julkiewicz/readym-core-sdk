@@ -41,6 +41,11 @@ public static class DependencyInjectionExtensions
         return collected;
     }
 
+    /// <summary>Puts what each shape's [Tag]s declared on the archetype the game registered for it.</summary>
+    /// <returns>How many shapes had any tags.</returns>
+    public static int ApplyArchetypeTags(this IDependencyContainer container)
+        => container.Resolve<IEntityApi>() is ClientEntityApi client ? client.ApplyDeclaredTags() : 0;
+
     public static void ApplyArchetypeExtensions(this IDependencyContainer container)
         => new ArchetypeExtensionRegistration(
             container.Resolve<DefaultWorldArchetypeRegistration>(),

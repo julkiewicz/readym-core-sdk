@@ -68,7 +68,7 @@ public class GeneratorAgainstTheSdkTests(ITestOutputHelper output)
             public partial float Spirit { get; set; }
         }
 
-        [Archetype]
+        [Archetype(replicated: false)]
         [Include(typeof(Position))]
         [Include(typeof(Vitals))]
         [Include(typeof(Named))]

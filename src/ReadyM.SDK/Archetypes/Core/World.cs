@@ -2,5 +2,5 @@
 
 namespace ReadyM.SDK.Archetypes.Core;
 
-[Archetype]
+[Archetype(replicated: true)]
 public readonly partial struct World;

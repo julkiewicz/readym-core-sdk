@@ -42,7 +42,7 @@ public class StructuralChangeInQueryAnalyzerTests(ITestOutputHelper output)
             public partial int Hp { get; set; }
         }
 
-        [Archetype]
+        [Archetype(replicated: false)]
         [Include(typeof(Position))]
         [Include(typeof(Vitals))]
         public readonly partial struct Npc

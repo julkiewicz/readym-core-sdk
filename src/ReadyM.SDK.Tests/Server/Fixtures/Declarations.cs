@@ -28,7 +28,7 @@ public readonly partial struct Named
     public partial string Label { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 [Include(typeof(Vitals))]
 [Include(typeof(Named))]
@@ -37,7 +37,7 @@ public readonly partial struct Npc
     public partial int Faction { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 public readonly partial struct Boulder
 {
@@ -45,7 +45,7 @@ public readonly partial struct Boulder
 }
 
 /// An archetype that is nothing but a position, so it is a strict subset of the other two.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 public readonly partial struct Placed;
 
@@ -53,7 +53,7 @@ public readonly partial struct Placed;
 /// Includes a mixin from an assembly compiled without the server SDK, so that mixin has no accessors
 /// reachable from a chunk and this shape stays on the identity path.
 /// </summary>
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 [Include(typeof(Wallet))]
 public readonly partial struct Peddler
@@ -82,7 +82,7 @@ public readonly partial struct Mood
 }
 
 /// Carries all six, and nothing of its own, so a query over any subset of them matches it.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 [Include(typeof(Vitals))]
 [Include(typeof(Named))]
@@ -101,17 +101,17 @@ public readonly partial struct QuestGiver
 
 /// Everything an Npc is, plus a quest. A query for Npc reaches these too; one for QuestNpc does not
 /// reach a plain Npc.
-[Archetype]
+[Archetype(replicated: false)]
 [IncludeArchetype(typeof(Npc))]
 [Include(typeof(QuestGiver))]
 public readonly partial struct QuestNpc;
 
 /// Carries nothing at all. Only its marker makes it findable, which is the point of having one.
-[Archetype]
+[Archetype(replicated: false)]
 public readonly partial struct Landmark;
 
 /// Everything a Landmark is, plus a position.
-[Archetype]
+[Archetype(replicated: false)]
 [IncludeArchetype(typeof(Landmark))]
 [Include(typeof(Position))]
 public readonly partial struct PlacedLandmark;
@@ -138,7 +138,7 @@ public readonly partial struct Metadata
 }
 
 /// An archetype over storage the relay owns, so it carries no marker.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 [Include(typeof(Metadata))]
 public readonly partial struct Networked;
@@ -153,7 +153,7 @@ public readonly partial struct Ticketed
     public partial int Fare { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 [Include(typeof(Ticketed))]
 public readonly partial struct Passenger;
@@ -175,7 +175,7 @@ public readonly partial struct Networked2
     public partial int Owner { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 [Include(typeof(Networked2))]
 public readonly partial struct Replicated;
@@ -188,7 +188,7 @@ internal struct TestAreaScopeComponent : IIndexedComponent<int>
     public int GetIndexedValue() => AreaId;
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [ExplicitComponent(typeof(TestAreaScopeComponent))]
 public readonly partial struct TestArea : IScope
 {
@@ -201,7 +201,7 @@ public readonly struct TestWatchedTag : Friflo.Engine.ECS.ITag;
 public readonly struct TestSecondTag : Friflo.Engine.ECS.ITag;
 
 /// A shape whose entities carry tags from the moment they exist.
-[Archetype]
+[Archetype(replicated: false)]
 [Tag(typeof(TestWatchedTag))]
 [Tag(typeof(TestSecondTag))]
 public readonly partial struct Watched
@@ -210,7 +210,7 @@ public readonly partial struct Watched
 }
 
 /// A scope that sits inside another, which is what a cell is to an area.
-[Archetype]
+[Archetype(replicated: false)]
 public readonly partial struct TestRoom : IScope
 {
     public partial int RoomId { get; set; }
@@ -222,7 +222,7 @@ public readonly partial struct Patrol
     public partial int Route { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Position))]
 [Include(typeof(Patrol))]
 public readonly partial struct Guard;
@@ -237,12 +237,23 @@ public readonly partial struct Telemetry
 }
 
 /// A shape the server creates over the network.
-[Archetype]
+[Archetype(replicated: true)]
 [Include(typeof(Position))]
 [Include(typeof(Telemetry))]
 public readonly partial struct Beacon;
 
 /// The same, for the case of one no game registered an archetype for.
-[Archetype]
+[Archetype(replicated: true)]
 [Include(typeof(Telemetry))]
 public readonly partial struct Unbound;
+
+/// Beacon's components on an entity that never leaves the server, which is what Oblivion's Spawner is.
+[Archetype(replicated: false)]
+[Include(typeof(Position))]
+[Include(typeof(Telemetry))]
+public readonly partial struct Probe;
+
+/// Replicated with nothing that sends, so the entity is the whole of what crosses.
+[Archetype(replicated: true)]
+[Include(typeof(Position))]
+public readonly partial struct Waypoint;
