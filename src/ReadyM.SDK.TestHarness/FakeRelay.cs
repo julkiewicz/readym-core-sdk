@@ -100,7 +100,9 @@ internal sealed class FakeRelay
 
     internal int DeleteCalls { get; private set; }
 
-    internal void ResetCounters() => (QueryCalls, SlotCalls, AliveCalls, CreateCalls, DeleteCalls) = (0, 0, 0, 0, 0);
+    internal void ResetCounters()
+        => (QueryCalls, SlotCalls, AliveCalls, CreateCalls, DeleteCalls, SetComponentCalls, FindByIndexCalls)
+            = (0, 0, 0, 0, 0, 0, 0);
 
     internal EcsApiPointers Pointers => new()
     {
@@ -271,7 +273,7 @@ internal sealed class FakeRelay
         SetComponentCalls++;
 
         if (!_indexes.TryGetValue(componentType, out var index))
-            return 0;
+            return IndexResult.NoIndex;
 
         if (!Resolve(entity, matchRevision, out var slot))
             return 0;
@@ -294,15 +296,25 @@ internal sealed class FakeRelay
 
         *found = default;
 
-        if (!_indexes.TryGetValue(componentType, out var index) || !index.TryFind((IntPtr)value, out var entity))
-            return 0;
+        // As the relay does: a mod component's index is the mod's own, so only the relay's can be missing.
+        if (!_indexes.TryGetValue(componentType, out var index))
+            return _modOwned.Contains(componentType) ? IndexResult.ModOwned : IndexResult.NoIndex;
+
+        if (!index.TryFind((IntPtr)value, out var entity))
+            return IndexResult.Missed;
 
         *found = entity;
-        return 1;
+        return IndexResult.Done;
     }
 
     /// A component a mod owns: reachable only through its heap handle, so managed fields are allowed.
-    internal void RegisterManaged<T>() where T : struct => Register<T>(static () => new ManagedHeap<T>());
+    internal void RegisterManaged<T>() where T : struct
+    {
+        Register<T>(static () => new ManagedHeap<T>());
+        _modOwned.Add(_heapFactories.Count - 1);
+    }
+
+    private readonly HashSet<int> _modOwned = [];
 
     /// <summary>
     /// Registers a component this assembly cannot name, which is any component belonging to another
@@ -316,6 +328,7 @@ internal sealed class FakeRelay
         var heap = typeof(PinnedHeap<>).MakeGenericType(component);
 
         _idsByName[component.FullName!] = _heapFactories.Count;
+        _modOwned.Add(_heapFactories.Count);
         _heapFactories.Add(() => (FakeHeap)Activator.CreateInstance(heap, nonPublic: true)!);
     }
 

@@ -257,3 +257,23 @@ public readonly partial struct Probe;
 [Archetype(replicated: true)]
 [Include(typeof(Position))]
 public readonly partial struct Waypoint;
+
+/// Stands in for a component the relay indexes but a game registered without its key.
+internal struct UnkeyedComponent : IIndexedComponent<int>
+{
+    public int Key;
+
+    public int GetIndexedValue() => Key;
+}
+
+[ArchetypeMixin]
+[ExplicitComponent(typeof(UnkeyedComponent))]
+public readonly partial struct Unkeyed
+{
+    public partial int Key { get; set; }
+}
+
+[Archetype(replicated: false)]
+[Include(typeof(Position))]
+[Include(typeof(Unkeyed))]
+public readonly partial struct Misregistered;

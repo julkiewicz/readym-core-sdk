@@ -14,7 +14,7 @@ internal class PendingActionUpdater<TContext>(TContext context, ILogger logger) 
 
     public override bool Update()
     {
-        if (_insideUpdate)
+        if (_insideUpdate || IsHeld)
             return false;
 
         EnsureThread();

@@ -338,8 +338,13 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         {
             var copy = component;
 
-            if (_setComponent(rawEntity, MatchRevision, id, &copy, Unsafe.SizeOf<TComponent>()) == 0)
-                throw Missing<TComponent>(rawEntity);
+            switch (_setComponent(rawEntity, MatchRevision, id, &copy, Unsafe.SizeOf<TComponent>()))
+            {
+                case IndexResult.NoIndex:
+                    throw NoIndex<TComponent, TKey>();
+                case IndexResult.Missed:
+                    throw Missing<TComponent>(rawEntity);
+            }
 
             return;
         }
@@ -352,22 +357,82 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
 
         _indexes.Remember<TComponent, TKey>(component.GetIndexedValue(), rawEntity);
     }
-
-    /// The index kept here answers first; anything it does not hold is the relay's to answer.
+    
     public unsafe bool TryFindByIndex<TComponent, TKey>(TKey key, out RawEntity entity)
         where TComponent : struct, IIndexedComponent<TKey> where TKey : notnull
     {
+        var id = _registry.Resolve<TComponent>();
+
         if (_indexes.TryFind<TComponent, TKey>(key, out entity))
-            return true;
+        {
+            if (Holds<TComponent, TKey>(entity, id, key))
+                return true;
+
+            _indexes.Forget<TComponent, TKey>(key, entity);
+        }
 
         RawEntity found;
         var copy = key;
 
-        var hit = _findByIndex(_registry.Resolve<TComponent>(), &copy, Unsafe.SizeOf<TKey>(), &found);
-
-        entity = found;
-        return hit != 0;
+        switch (_findByIndex(id, &copy, Unsafe.SizeOf<TKey>(), &found))
+        {
+            case IndexResult.Done:
+                entity = found;
+                return true;
+            case IndexResult.NoIndex:
+                throw NoIndex<TComponent, TKey>();
+            case IndexResult.ModOwned:
+                return TryFindByWalking<TComponent, TKey>(id, key, out entity);
+            default:
+                entity = default;
+                return false;
+        }
     }
+
+    private bool TryFindByWalking<TComponent, TKey>(int id, TKey key, out RawEntity entity)
+        where TComponent : struct, IIndexedComponent<TKey> where TKey : notnull
+    {
+        var carriers = CollectMatching(ComponentSet.Of<TComponent>());
+
+        try
+        {
+            for (var i = 0; i < carriers.Count; i++)
+            {
+                if (!Holds<TComponent, TKey>(carriers[i], id, key))
+                    continue;
+
+                entity = carriers[i];
+
+                // So the next lookup by the same key is answered without walking again.
+                _indexes.Remember<TComponent, TKey>(key, entity);
+                return true;
+            }
+        }
+        finally
+        {
+            carriers.Return();
+        }
+
+        entity = default;
+        return false;
+    }
+
+    private bool Holds<TComponent, TKey>(RawEntity entity, int id, TKey key)
+        where TComponent : struct, IIndexedComponent<TKey> where TKey : notnull
+    {
+        if (!IsAlive(entity))
+            return false;
+
+        var located = Locate(entity, id);
+
+        return located.Found
+               && EqualityComparer<TKey>.Default.Equals(located.As<TComponent>().GetIndexedValue(), key);
+    }
+
+    private static InvalidOperationException NoIndex<TComponent, TKey>()
+        => new($"This server keeps no index for {typeof(TComponent).Name}, so it cannot look one up by "
+               + $"{typeof(TKey).Name}. The game registers it with RegisterIndexedComponent<{typeof(TComponent).Name}, "
+               + $"{typeof(TKey).Name}>(); until then, find it with a query.");
 
     private static ref TComponent SlotRef<TComponent>(scoped in ComponentSlot slot) where TComponent : struct
     {

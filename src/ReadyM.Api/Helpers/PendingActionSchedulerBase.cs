@@ -56,4 +56,26 @@ internal abstract class PendingActionSchedulerBase
     }
 
     public abstract bool Update();
+
+    private int _held;
+
+    /// Keeps what other threads queued from running until <see cref="EndHold"/>.
+    public void BeginHold()
+    {
+        EnsureThread();
+        _held++;
+    }
+
+    public void EndHold()
+    {
+        EnsureThread();
+
+        if (_held <= 0)
+            throw new InvalidOperationException("No hold in progress");
+
+        _held--;
+    }
+
+    protected bool IsHeld
+        => _held > 0;
 }

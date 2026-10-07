@@ -69,6 +69,30 @@ public class ServerRelayIndexTests : ServerSdkTest
         Assert.False(Entities.TryLookup<Networked2, int>(2, out _));
     }
 
+    // -- a component the relay keeps no index for ------------------------------------------------
+
+    /// A miss would say nothing holds the key while a query over the component finds the entity.
+    [Fact]
+    public void A_lookup_the_relay_keeps_no_index_for_throws_rather_than_missing()
+    {
+        Spawn<Misregistered>();
+
+        var refused = Assert.Throws<InvalidOperationException>(() => Entities.TryLookup<Unkeyed, int>(0, out _));
+
+        Assert.Contains("RegisterIndexedComponent<UnkeyedComponent, Int32>", refused.Message);
+    }
+
+    /// The same for a write, which would otherwise leave the index behind the value it holds.
+    [Fact]
+    public void A_write_the_relay_keeps_no_index_for_throws_rather_than_reporting_the_component_missing()
+    {
+        var misregistered = Spawn<Misregistered>();
+
+        var refused = Assert.Throws<InvalidOperationException>(() => misregistered.Key = 3);
+
+        Assert.Contains("keeps no index", refused.Message);
+    }
+
     [Fact]
     public void Moving_the_value_moves_the_entity_in_the_relay_index()
     {

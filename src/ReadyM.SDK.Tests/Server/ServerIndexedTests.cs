@@ -33,6 +33,66 @@ public class ServerIndexedTests : ServerSdkTest
         Assert.False(Entities.TryLookup<Ticketed, int>(2, out _));
     }
 
+    // -- agreeing with a query whatever the index saw --------------------------------------------
+
+    /// Writes the value the way a delta from a client lands, without the accessor seeing it.
+    private void WritePastTheIndex(Passenger passenger, int ticket)
+    {
+        var raw = IdentityOf(passenger);
+        var component = Relay.Get<TicketedComponent>(raw);
+
+        component.ticket = ticket;
+        Relay.Set(raw, component);
+    }
+
+    [Fact]
+    public void A_value_written_past_the_index_is_still_found()
+    {
+        var passenger = Spawn<Passenger>();
+
+        WritePastTheIndex(passenger, 77);
+
+        Assert.True(Entities.TryLookup<Ticketed, int>(77, out var found));
+        Assert.Equal(IdentityOf(passenger).Id, EntityHandle.Of(found).Id);
+    }
+
+    [Fact]
+    public void A_key_moved_past_the_index_no_longer_finds_the_entity()
+    {
+        var passenger = Spawn<Passenger>();
+
+        passenger.Ticket = 13;
+        WritePastTheIndex(passenger, 14);
+
+        Assert.False(Entities.TryLookup<Ticketed, int>(13, out _));
+        Assert.True(Entities.TryLookup<Ticketed, int>(14, out _));
+    }
+
+    [Fact]
+    public void A_deleted_entity_is_not_found()
+    {
+        var passenger = Spawn<Passenger>();
+
+        passenger.Ticket = 12;
+        Entities.Delete(passenger);
+
+        Assert.False(Entities.TryLookup<Ticketed, int>(12, out _));
+    }
+
+    /// Found by walking once, then answered from the index like any other value.
+    [Fact]
+    public void A_value_found_by_walking_is_remembered()
+    {
+        var passenger = Spawn<Passenger>();
+
+        WritePastTheIndex(passenger, 31);
+        Entities.TryLookup<Ticketed, int>(31, out _);
+        Relay.ResetCounters();
+
+        Assert.True(Entities.TryLookup<Ticketed, int>(31, out _));
+        Assert.Equal(0, Relay.FindByIndexCalls);
+    }
+
     [Fact]
     public void Moving_the_value_moves_the_entity_in_the_index()
     {

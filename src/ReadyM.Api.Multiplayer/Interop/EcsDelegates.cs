@@ -137,10 +137,32 @@ internal unsafe delegate void ChunkCallback(IntPtr entities, ChunkComponent* com
 /// Runs a query over <paramref name="n"/> component ids, one chunk callback per archetype.
 internal unsafe delegate void QueryDelegate(int* componentIds, int n, ChunkCallback cb);
 
-/// Writes a whole component, which is required for updating indices.
+/// <summary>What <see cref="SetComponentDelegate"/> and <see cref="FindByIndexDelegate"/> return.</summary>
+internal static class IndexResult
+{
+    /// Nothing was written, or nothing holds the value.
+    public const byte Missed = 0;
+
+    /// <summary>
+    /// Lookup was successful.
+    /// </summary>
+    public const byte Done = 1;
+
+    /// <summary>
+    /// The host keeps no index for the component.
+    /// </summary>
+    public const byte NoIndex = 2;
+
+    /// <summary>
+    /// The component is a mod's, whose index the mod keeps itself.
+    /// </summary>
+    public const byte ModOwned = 3;
+}
+
+/// Writes a whole component, which is required for updating indices. Answers an <see cref="IndexResult"/>.
 internal unsafe delegate byte SetComponentDelegate(RawEntity entity, byte matchRevision, int componentType, void* data, int size);
 
-/// The entity whose indexed component holds this value. Returns 0 when none does.
+/// The entity whose indexed component holds this value. Answers an <see cref="IndexResult"/>.
 /// <remarks>The value arrives as its own bytes, so only an unmanaged key can be asked for.</remarks>
 internal unsafe delegate byte FindByIndexDelegate(int componentType, void* value, int size, RawEntity* found);
 
