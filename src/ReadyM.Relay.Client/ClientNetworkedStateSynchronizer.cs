@@ -248,6 +248,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                 {
                     if (self.NetEntity.TryGetEntityByNetworkId(netId, out var entity))
                     {
+                        self.Logger.LogInformation("Ownership of entity {Id} changed from {OldOwner} to {Owner}", netId, entity.Value.GetComponent<MetadataComponent>().Owner, newOwner);
                         entity.Value.GetComponent<MetadataComponent>().Owner = newOwner;
                         self.OnOwnershipChanged(entity.Value);
                     }
@@ -356,7 +357,10 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                 NetEntity.CreateRemoteNetworkedEntity(meta, scopeEntity);
                 created.Add(meta.NetId);
                 if (held)
+                {
                     _createdFromHeldCreations.Add(meta.NetId);
+                    Logger.LogInformation("Created held entity {Id} owned by {Owner}", meta.NetId, meta.Owner);
+                }
             }
             else if (!held)
             {
