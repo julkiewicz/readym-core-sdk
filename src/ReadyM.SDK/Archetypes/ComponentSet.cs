@@ -11,9 +11,10 @@ public sealed class ComponentSet
 {
     public static readonly ComponentSet Empty = new([]);
 
-    private ComponentSet(Type[] types, bool split = true)
+    private ComponentSet(Type[] types, bool split = true, bool replicated = false)
     {
         Types = types;
+        Replicated = replicated;
 
         if (!split || types.Length <= 1)
         {
@@ -25,11 +26,7 @@ public sealed class ComponentSet
         Rest = new ComponentSet(types.Skip(1).ToArray(), split: false);
     }
 
-    /// Is any of the components in the set a networked component?
-    internal bool Replicates 
-        => _replicates ??= Types.Any(static type => typeof(Api.Multiplayer.ECS.Components.INetworkedComponent).IsAssignableFrom(type));
-
-    private bool? _replicates;
+    internal bool Replicated { get; }
 
     internal Type[] Types { get; }
 
@@ -44,6 +41,16 @@ public sealed class ComponentSet
 
     public static ComponentSet Combine(params ComponentSet[] sets)
     {
+        var types = Distinct(sets);
+
+        return types.Length == 0 ? Empty : new ComponentSet(types);
+    }
+
+    public static ComponentSet Archetype(bool replicated, params ComponentSet[] sets)
+        => new(Distinct(sets), replicated: replicated);
+
+    private static Type[] Distinct(ComponentSet[] sets)
+    {
         var types = new List<Type>();
 
         foreach (var set in sets)
@@ -51,7 +58,7 @@ public sealed class ComponentSet
             if (!types.Contains(type))
                 types.Add(type);
 
-        return types.Count == 0 ? Empty : new ComponentSet([.. types]);
+        return [.. types];
     }
 
     public override string ToString() => string.Join(", ", Types.Select(type => type.Name));

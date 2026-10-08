@@ -152,18 +152,61 @@ internal sealed class NetworkedEntityManager : INetworkedEntityManager, IDisposa
         // the same entities twice. It would also waste a whole lot of traffic.
         if (skipSync)
             _skipNetSync++;
+
         // NOTE: Deleting all scope entities "atomically" so that they don't accidentally become global without their
         // InScopeComponent links.
-        _world.Query<MetadataComponent>()
-            .HasValue<InScopeComponent, Entity>(scopeEntity)
-            .ForEachEntity((ref meta, entity) => { _commandBuffer.DeleteEntity(entity.Id); });
-        _commandBuffer.Playback();
+        DeleteHeldBy(scopeEntity);
 
         if (deleteScopeEntity)
             scopeEntity.DeleteEntity();
 
         if (skipSync)
             _skipNetSync--;
+    }
+
+    /// <summary>
+    /// Deletes everything in a scope entity, recursively.
+    /// </summary>
+    private void DeleteHeldBy(Entity holder)
+    {
+        if (!Holds(holder))
+            return;
+
+        var held = new List<Entity>();
+
+        Collect(holder, held, [holder.Id]);
+
+        foreach (var entity in held)
+            _commandBuffer.DeleteEntity(entity.Id);
+
+        _commandBuffer.Playback();
+    }
+
+    /// <summary>Whether anything is inside this entity's scope at all.</summary>
+    private static bool Holds(Entity entity)
+        => entity.GetIncomingLinks<InScopeComponent>().Count > 0
+           || entity.GetIncomingLinks<InParentAreaScopeComponent>().Count > 0;
+
+    /// <summary>
+    /// Everything in entity scope, appended deepest first.
+    /// </summary>
+    private static void Collect(Entity holder, List<Entity> into, HashSet<int> seen)
+    {
+        foreach (var link in holder.GetIncomingLinks<InScopeComponent>())
+            Descend(link.Entity, into, seen);
+
+        foreach (var link in holder.GetIncomingLinks<InParentAreaScopeComponent>())
+            Descend(link.Entity, into, seen);
+    }
+
+    private static void Descend(Entity entity, List<Entity> into, HashSet<int> seen)
+    {
+        if (!seen.Add(entity.Id))
+            return;
+
+        Collect(entity, into, seen);
+
+        into.Add(entity);
     }
 
     public void DeleteAllNetworkedEntities(bool skipSync)
@@ -193,6 +236,11 @@ internal sealed class NetworkedEntityManager : INetworkedEntityManager, IDisposa
             _logger.LogError("Attempted to delete scope entity {EntityId}. Scope entities are owned by the server.", entityId);
             return false;
         }
+
+        // A scope a mod declared holds its contents the same way a relay scope does, by an
+        // InScopeComponent link, and carries no ScopeEntityTag: that tag marks the scopes the relay
+        // owns and refuses above, not the ones a mod declares.
+        DeleteHeldBy(entity);
 
         // Local entities carry no MetadataComponent, so the delete broadcast in
         // OnEntityDeleteHandler skips them and only networked deletes reach clients

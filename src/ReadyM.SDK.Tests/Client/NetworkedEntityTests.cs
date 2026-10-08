@@ -18,8 +18,8 @@ using ReadyM.SDK.Tests.Client.Fixtures;
 namespace ReadyM.SDK.Tests.Client;
 
 /// <summary>
-/// Whether an entity is networked is not something a mod asks for. It follows from the shape: if
-/// anything the shape is made of crosses the wire, so does the entity carrying it.
+/// Whether an entity is networked is what its archetype declared, and nothing else: not what it is
+/// made of, and not what a mod asks for at the create.
 /// </summary>
 /// <remarks>
 /// Read through MetadataComponent, which is what the networked half puts on an entity and what the
@@ -57,6 +57,7 @@ public class NetworkedEntityTests : IDisposable
         Bind<Prop>();
         Bind<Rig>();
         Bind<Borrowed>();
+        Bind<Signpost>();
 
         ArchetypeBindings.Use(_bound);
 
@@ -93,18 +94,41 @@ public class NetworkedEntityTests : IDisposable
     public void A_shape_with_nothing_to_send_is_created_local()
         => Assert.False(Has<MetadataComponent>(Entities.Create<Prop>()));
 
-    /// Rig carries Telemetry, which replicates, so the entity has to be one the relay can name.
+    /// Rig is declared replicated, so the entity has to be one the relay can name.
     [Fact]
     public void A_shape_that_replicates_is_created_networked()
         => Assert.True(Has<MetadataComponent>(Entities.Create<Rig>()));
 
-    /// <summary>
-    /// A shape over a component the game declares and already sends counts too. The SDK generated
-    /// none of it, so the question is what the components are, not who wrote them.
-    /// </summary>
+    /// The same for a shape over a component the game declares. The SDK generated none of it, and it
+    /// makes no difference: the archetype said so.
     [Fact]
     public void A_shape_over_a_component_the_game_sends_is_networked_as_well()
         => Assert.True(Has<MetadataComponent>(Entities.Create<Borrowed>()));
+
+    /// Gauge carries the mixin Rig sends, and stays here anyway, without a binding to say where.
+    [Fact]
+    public void A_local_archetype_stays_local_whatever_it_includes()
+        => Assert.False(Has<MetadataComponent>(Entities.Create<Gauge>()));
+
+    /// Nothing Signpost holds is sent, and the entity still is: its presence is the message.
+    [Fact]
+    public void A_replicated_archetype_with_nothing_that_sends_is_networked()
+        => Assert.True(Has<MetadataComponent>(Entities.Create<Signpost>()));
+
+    /// A query asks for components, not for how the entity came to have them, so it finds both.
+    [Fact]
+    public void A_query_over_a_replicated_mixin_finds_local_entities_too()
+    {
+        Entities.Create<Rig>();
+        Entities.Create<Gauge>();
+
+        var found = 0;
+
+        foreach (var _ in Entities.Query<Telemetry>())
+            found++;
+
+        Assert.Equal(2, found);
+    }
 
     // -- who owns it -------------------------------------------------------------------------------
 
@@ -240,6 +264,8 @@ public class NetworkedEntityTests : IDisposable
             Prop prop => EntityHandle.Of(prop).RawEntity,
             Borrowed borrowed => EntityHandle.Of(borrowed).RawEntity,
             Unbound unbound => EntityHandle.Of(unbound).RawEntity,
+            Gauge gauge => EntityHandle.Of(gauge).RawEntity,
+            Signpost signpost => EntityHandle.Of(signpost).RawEntity,
             _ => throw new ArgumentException($"No handle for {shape.GetType().Name}.", nameof(shape))
         };
 

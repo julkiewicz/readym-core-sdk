@@ -93,8 +93,14 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
         var ns = ArchetypeNames.NamespaceOf(symbol);
         var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
 
+        if (model.IsArchetype)
+            found.Add($"{prefix}{symbol.Name}Declared");
+
         if (model.Extends.Count > 0)
             found.Add($"{prefix}{symbol.Name}Extends");
+
+        if (model.Tags.Count > 0)
+            found.Add($"{prefix}{symbol.Name}Tags");
 
         if (model.IndexedBy is not null)
             found.Add($"{prefix}{symbol.Name}Index");

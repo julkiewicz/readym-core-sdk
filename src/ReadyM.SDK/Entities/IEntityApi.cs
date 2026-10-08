@@ -32,6 +32,9 @@ internal interface IEntityApi
     /// </remarks>
     EntityBuffer CollectInScope(RawEntity scope, ComponentSet components);
 
+    /// <summary>The scope holding this entity, one step up, if it is in one.</summary>
+    bool TryGetScope(RawEntity entity, out RawEntity scope);
+
     /// <summary>The entity whose indexed component holds this value, if one does.</summary>
     bool TryFindByIndex<TComponent, TKey>(TKey key, out RawEntity entity)
         where TComponent : struct, IIndexedComponent<TKey>;

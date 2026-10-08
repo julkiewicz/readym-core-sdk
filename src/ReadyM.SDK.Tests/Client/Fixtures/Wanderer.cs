@@ -28,7 +28,7 @@ public readonly partial struct Label
 }
 
 /// Six mixins on one entity, which is as wide as a query goes.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Health))]
 [Include(typeof(Placement))]
 [Include(typeof(Stride))]

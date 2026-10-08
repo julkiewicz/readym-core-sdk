@@ -14,7 +14,7 @@ internal class ClientEntities(EntityStore store, IEntityApi api) : IEntities
     public EntityQuery<T> Query<T>()
         where T : struct, IArchetypeQueryable
         => new(_context);
-    
+
     public World World
     {
         get
@@ -36,7 +36,20 @@ internal class ClientEntities(EntityStore store, IEntityApi api) : IEntities
 #else
     public bool Delete<T>(in T shape) where T : IEntityShape => api.Delete(shape.Handle.RawEntity);
 #endif
+
+    public bool TryGetScope<TShape, TScope>(in TShape shape, out TScope scope)
+#if NET
+        where TShape : struct, IEntityShape, allows ref struct
+#else
+        where TShape : struct, IEntityShape
+#endif
+        where TScope : struct, IArchetypeQueryable, IScope
+        => ScopeLookup.TryFind(api, shape.Handle, out scope);
     
+    public bool TryGetScope<TScope>(in EntityHandle handle, out TScope scope)
+        where TScope : struct, IArchetypeQueryable, IScope
+        => ScopeLookup.TryFind(api, handle, out scope);
+
     public EntityQuery<T1, T2> Query<T1, T2>()
         where T1 : struct, IArchetypeQueryable
         where T2 : struct, IArchetypeMixin
@@ -72,7 +85,7 @@ internal class ClientEntities(EntityStore store, IEntityApi api) : IEntities
         where T6 : struct, IArchetypeMixin
         => new(_context);
 
-    public bool TryLookup<T, TKey>(TKey key, out T shape) 
+    public bool TryLookup<T, TKey>(TKey key, out T shape)
         where T : struct, IArchetypeQueryable, IIndexed<TKey>
     {
         if (IndexRegistry.TryFind<T, TKey>(api, key, out var entity))

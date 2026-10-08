@@ -45,6 +45,9 @@ public static class ServerSdk
 
         ServiceRegistry.RegisterAll(services);
         RpcHandlerRegistry.RegisterAll(services, RpcSide.Server);
+        
+        if (api is Entities.ServerEntityApi server)
+            server.ApplyDeclaredTags();
 
         // TODO: Wire as a standard system somewhere, since this is based on the obsolete ModSystemBase
         ModSystemUpdates.Wire(services);

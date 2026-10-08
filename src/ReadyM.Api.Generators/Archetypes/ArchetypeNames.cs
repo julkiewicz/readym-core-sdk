@@ -23,6 +23,7 @@ internal static class ArchetypeNames
     public const string ExplicitCollectionAttribute = Namespace + ".ExplicitCollectionAttribute";
     public const string ExtendsAttribute = Namespace + ".ExtendsAttribute";
     public const string IndexAttribute = Namespace + ".IndexAttribute";
+    public const string TagAttribute = Namespace + ".TagAttribute";
     public const string ReplicatedAttribute = Namespace + ".ReplicatedAttribute";
 
     public const string PropagatesAttribute = Namespace + ".PropagatesAttribute";

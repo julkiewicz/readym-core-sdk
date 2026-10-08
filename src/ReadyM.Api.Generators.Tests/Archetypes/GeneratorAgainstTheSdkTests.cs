@@ -68,7 +68,7 @@ public class GeneratorAgainstTheSdkTests(ITestOutputHelper output)
             public partial float Spirit { get; set; }
         }
 
-        [Archetype]
+        [Archetype(replicated: false)]
         [Include(typeof(Position))]
         [Include(typeof(Vitals))]
         [Include(typeof(Named))]
@@ -185,6 +185,111 @@ public class GeneratorAgainstTheSdkTests(ITestOutputHelper output)
             Sdk);
 
         AssertNoErrors(result.OutputDiagnostics, "the query does not compile");
+    }
+
+    /// <summary>
+    /// Taking entities out of a chunk loop to act on afterwards, which is the one thing a view
+    /// cannot do by itself: it is a ref struct, so it cannot be put in a list.
+    /// </summary>
+    /// <remarks>
+    /// Written the way a mod writes it, and compiled, because the whole point of Keep is that the
+    /// call site stays short. Collecting used to mean naming the shape a second time through the
+    /// handle, which reads as a cast rather than as taking something out of the loop.
+    /// </remarks>
+    [Theory]
+    [InlineData("Server", "entities.Query<Npc>()", "Npc")]
+    [InlineData("Client", "entities.Query<Npc>()", "Npc")]
+    [InlineData("Server", "entities.Query<Position>()", "Position")]
+    [InlineData("Client", "entities.Query<Position>()", "Position")]
+    public void A_view_keeps_an_entity_past_the_loop(string half, string query, string shape)
+    {
+        var loop =
+            $$"""
+              using System.Collections.Generic;
+
+              namespace Mod;
+
+              public static class Use
+              {
+                  public static List<{{shape}}> Run(ReadyM.SDK.{{half}}.Entities.IEntities entities)
+                  {
+                      var kept = new List<{{shape}}>();
+
+                      foreach (var found in {{query}})
+                          kept.Add(found.Keep());
+
+                      return kept;
+                  }
+              }
+              """;
+
+        var result = SourceGeneratorTestHelper.RunGenerators(
+            [("Declarations.cs", Declarations), ("Use.cs", loop)],
+            [new ArchetypeGenerator(), new ArchetypeMixinGenerator(), new ChunkCombinationGenerator()],
+            output,
+            Sdk);
+
+        AssertNoErrors(result.OutputDiagnostics, "keeping an entity past the loop does not compile");
+    }
+
+    /// <summary>Every view, and each one keeps its own shape rather than some base of it.</summary>
+    /// <remarks>An archetype and a mixin both get a view, so both are asked for here.</remarks>
+    [Theory]
+    [InlineData("Npc")]
+    [InlineData("Position")]
+    public void Every_view_keeps_the_shape_it_views(string shape)
+        => Assert.Contains($"public global::Mod.{shape} Keep()", Generated(Run()));
+
+    /// <summary>
+    /// The shape keeps too, so a loop that hands over the shape rather than a view reads the same.
+    /// </summary>
+    /// <remarks>
+    /// A shape loses its chunk view when an include leaves the slot order unknowable, which the call
+    /// site cannot see. Without this, whether Keep compiles would depend on that.
+    /// </remarks>
+    [Theory]
+    [InlineData("Npc")]
+    [InlineData("Position")]
+    public void A_shape_keeps_as_itself(string shape)
+        => Assert.Contains($"public {shape} Keep() => this;", Generated(Run()));
+
+    /// <summary>Collecting out of a loop compiles, whichever way the loop walks the shape.</summary>
+    /// <remarks>
+    /// Both members are asserted above. A shape that lost its chunk view cannot be staged here, since
+    /// what takes it away is a contributor from an assembly compiled without the server SDK.
+    /// </remarks>
+    [Theory]
+    [InlineData("Server", "Npc")]
+    [InlineData("Client", "Npc")]
+    public void Keeping_compiles_for_a_shape_with_or_without_a_view(string half, string shape)
+    {
+        var loop =
+            $$"""
+              using System.Collections.Generic;
+
+              namespace Mod;
+
+              public static class Use
+              {
+                  public static List<{{shape}}> Run(ReadyM.SDK.{{half}}.Entities.IEntities entities)
+                  {
+                      var kept = new List<{{shape}}>();
+
+                      foreach (var found in entities.Query<{{shape}}>())
+                          kept.Add(found.Keep());
+
+                      return kept;
+                  }
+              }
+              """;
+
+        var result = SourceGeneratorTestHelper.RunGenerators(
+            [("Declarations.cs", Declarations), ("Use.cs", loop)],
+            [new ArchetypeGenerator(), new ArchetypeMixinGenerator(), new ChunkCombinationGenerator()],
+            output,
+            Sdk);
+
+        AssertNoErrors(result.OutputDiagnostics, $"keeping a {shape} does not compile");
     }
 
     private static string Generated(SourceGeneratorTestHelper.GeneratorRunResult result)

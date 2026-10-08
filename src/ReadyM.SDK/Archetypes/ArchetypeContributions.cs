@@ -9,7 +9,8 @@ internal static class ArchetypeContributions
     /// query for the shape finds nothing.
     private static readonly Type[] Core = [typeof(World), typeof(Area), typeof(Player), typeof(Cell)];
 
-    public static IEnumerable<Type> Shapes() => Core.Concat(ArchetypeRegistry.Extended()).Distinct();
+    public static IEnumerable<Type> Shapes()
+        => Core.Concat(ArchetypeRegistry.Declared()).Concat(ArchetypeRegistry.Extended()).Distinct();
 
     /// The components the SDK generated for a shape.
     public static IEnumerable<Type> OwnGenerated(Type shape)

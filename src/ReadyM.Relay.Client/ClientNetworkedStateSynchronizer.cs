@@ -59,7 +59,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
     private readonly INetworkedComponentRegistry _netComponentRegistry;
 
     private readonly SystemGroup _clearDirtySystemGroup;
-    private readonly Dictionary<NetworkId, PlayerId> _pendingOwnershipTransfers = [];
+    private readonly HashSet<NetworkId> _deletesFromServer = [];
 
     protected SystemGroup ReceiveSystemGroup { get; }
 
@@ -132,6 +132,9 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
         // When an ECS change ownership message is received, the client updates the ownership of the entity in its ECS world. No response is sent to the server.
         RelayClient.AddBuiltInMessageHandler(RelayMessageCode.EcsChangeOwnership, OnEcsChangeOwnershipMessageHandler);
 
+        // When an ECS change scope message is received, the client moves an entity it already has into another scope. No response is sent to the server.
+        RelayClient.AddBuiltInMessageHandler(RelayMessageCode.EcsChangeScope, OnEcsChangeScopeMessageHandler);
+
         // When an entity is deleted, we check if the event originated locally on the client. If yes, then a message is
         // sent to the server.
         NetEntity.OnEntityDelete += OnEntityDeleteHandler;
@@ -165,6 +168,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
         RelayClient.RemoveBuiltInMessageHandler(RelayMessageCode.EcsDelta, OnEcsDeltaMessageHandler);
         RelayClient.RemoveBuiltInMessageHandler(RelayMessageCode.EcsSnapshot, OnEcsSnapshotMessageHandler);
         RelayClient.RemoveBuiltInMessageHandler(RelayMessageCode.EcsChangeOwnership, OnEcsChangeOwnershipMessageHandler);
+        RelayClient.RemoveBuiltInMessageHandler(RelayMessageCode.EcsChangeScope, OnEcsChangeScopeMessageHandler);
 
         NetEntity.OnEntityDelete -= OnEntityDeleteHandler;
     }
@@ -178,19 +182,6 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
     // the server.
     [ThreadStatic]
     private static int _skipEcsEventMessages;
-
-    private void ApplyPendingOwnershipTransfer(NetworkId netId)
-    {
-        if (!_pendingOwnershipTransfers.Remove(netId, out var owner))
-            return;
-
-        if (!NetEntity.TryGetEntityByNetworkId(netId, out var entity))
-            return;
-
-        entity.Value.GetComponent<MetadataComponent>().Owner = owner;
-        OnOwnershipChanged(entity.Value);
-        Logger.LogInformation("Applied parked ownership transfer for entity {Id}", netId);
-    }
 
     protected void OnEcsSnapshotMessageHandler(ServerEventHeader header, NetDataReader reader)
     {
@@ -212,7 +203,6 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                     if (!self.NetEntity.TryGetEntityByNetworkId(meta.NetId, out var _))
                     {
                         self.NetEntity.CreateRemoteNetworkedEntity(meta, scopeEntity);
-                        self.ApplyPendingOwnershipTransfer(meta.NetId);
                     }
                     else
                     {
@@ -256,8 +246,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                     }
                     else
                     {
-                        self._pendingOwnershipTransfers[netId] = newOwner;
-                        self.Logger.LogInformation("Parked ownership transfer for not yet created entity: {Id}", netId);
+                        self.Logger.LogInformation("Ignored ownership transfer to {Owner} for entity {Id} that does not exist here yet, its creation carries the current owner", newOwner, netId);
                     }
                 }
             }
@@ -266,6 +255,37 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                 _skipEcsEventMessages--;
             }
         }, this, _receiveSystem.Scheduler.MakeSafe(reader));
+    }
+
+    protected void OnEcsChangeScopeMessageHandler(ServerEventHeader header, NetDataReader reader)
+    {
+        var netId = reader.Get<NetworkId>();
+        var scopeNetId = reader.Get<NetworkId>();
+        _receiveSystem.Scheduler.Schedule(static (_, self, netId0, scopeNetId0) =>
+        {
+            try
+            {
+                _skipEcsEventMessages++;
+                if (!self.NetEntity.TryGetEntityByNetworkId(netId0, out var entity))
+                {
+                    self.Logger.LogWarning("Received change scope event for locally non-existent entity: {Id}", netId0);
+                    return;
+                }
+
+                if (!self.NetEntity.TryGetEntityByNetworkId(scopeNetId0, out var scopeEntity))
+                {
+                    self.Logger.LogWarning("Received change scope event for entity {Id} into locally non-existent scope: {Scope}", netId0, scopeNetId0);
+                    return;
+                }
+
+                // Changing the field directly would not update the scope index
+                entity.Value.AddComponent(new InScopeComponent(scopeEntity.Value));
+            }
+            finally
+            {
+                _skipEcsEventMessages--;
+            }
+        }, this, netId, scopeNetId);
     }
 
     protected void OnEcsDeltaMessageHandler(ServerEventHeader header, NetDataReader reader)
@@ -315,7 +335,6 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
                     if (!self.NetEntity.TryGetEntityByNetworkId(meta.NetId, out var entity))
                     {
                         self.NetEntity.CreateRemoteNetworkedEntity(meta, scopeEntity);
-                        self.ApplyPendingOwnershipTransfer(meta.NetId);
                     }
                     else
                     {
@@ -341,10 +360,11 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
             try
             {
                 _skipEcsEventMessages++;
-                self._pendingOwnershipTransfers.Remove(netId0);
                 if (self.NetEntity.TryGetEntityByNetworkId(netId0, out var entity))
                 {
                     self.Logger.LogDebug("Deleting remote entity: {Id}", netId0);
+                    // The command buffer runs the delete after the skip counter is back to zero
+                    self._deletesFromServer.Add(netId0);
                     cb.DeleteEntity(entity.Value.Id);
                 }
                 else
@@ -362,6 +382,9 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
     // NOTE: We deleted the entity, and we need to message the server about it
     protected void OnEntityDeleteHandler(NetworkId netId, Entity entity)
     {
+        if (_deletesFromServer.Remove(netId))
+            return;
+
         if (_skipEcsEventMessages > 0)
             return;
 

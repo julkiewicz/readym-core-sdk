@@ -7,6 +7,10 @@ namespace ReadyM.SDK.Server;
 /// Tells the server what a mod's shapes add to the archetypes the game registers.
 public static class ServerArchetypes
 {
+    /// <summary>Whether the replication pass owns this component rather than this one.</summary>
+    private static bool Replicates(Type component)
+        => typeof(ReadyM.Api.Multiplayer.ECS.Components.INetworkedComponent).IsAssignableFrom(component);
+
     /// Returns how many components were handed over, which a mod can log to see its shapes arrived.
     public static int ApplyExtensions(IComponentRegistry registry)
     {
@@ -15,6 +19,8 @@ public static class ServerArchetypes
 
         var applied = 0;
 
+        var registered = new HashSet<Type>();
+
         foreach (var shape in ArchetypeContributions.Shapes())
         {
             var contributed = new List<Type>();
@@ -22,7 +28,9 @@ public static class ServerArchetypes
             // What the shape itself brought.
             foreach (var component in ArchetypeContributions.OwnGenerated(shape))
             {
-                host.RegisterLocalComponent(component);
+                if (registered.Add(component) && !Replicates(component))
+                    host.RegisterLocalComponent(component);
+
                 contributed.Add(component);
             }
 

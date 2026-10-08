@@ -4,7 +4,7 @@ using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Archetypes.Core;
 
-[Archetype]
+[Archetype(replicated: true)]
 [ExplicitComponent(typeof(AreaScopeComponent))]
 public readonly partial struct Area : IScope
 {

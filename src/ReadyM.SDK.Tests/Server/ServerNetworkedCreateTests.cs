@@ -11,7 +11,8 @@ namespace ReadyM.SDK.Tests.Server;
 /// </summary>
 /// <remarks>
 /// Read off the fake relay rather than through the SDK, because the SDK names none of it: a mod
-/// asks for an entity of a shape, and what the relay was asked to do follows from the components.
+/// asks for an entity of a shape, and what the relay was asked to do follows from what the
+/// archetype declared.
 /// </remarks>
 public class ServerNetworkedCreateTests : ServerSdkTest
 {
@@ -20,6 +21,7 @@ public class ServerNetworkedCreateTests : ServerSdkTest
         // What a game does for each of its shapes. Beacon replicates, so without this the create is
         // refused rather than landing on an id only this side knows.
         Relay.Bind(typeof(Beacon), Relay.RegisterArchetype(ComponentsOf<Beacon>().Types));
+        Relay.Bind(typeof(Waypoint), Relay.RegisterArchetype(ComponentsOf<Waypoint>().Types));
     }
 
     private static readonly PlayerId Player = new(7);
@@ -40,10 +42,35 @@ public class ServerNetworkedCreateTests : ServerSdkTest
     public void A_shape_with_nothing_to_send_is_created_local()
         => Assert.Null(Relay.NetworkedOf(IdentityOf(Entities.Create<Guard>())));
 
-    /// Beacon carries Telemetry, which replicates, so the entity has to be one the client can name.
+    /// Beacon is declared replicated, so the entity has to be one the client can name.
     [Fact]
     public void A_shape_that_replicates_is_created_networked()
         => Assert.NotNull(Relay.NetworkedOf(IdentityOf(Entities.Create<Beacon>())));
+
+    /// Probe holds what Beacon does and stays on the server, without a binding to say where.
+    [Fact]
+    public void A_local_archetype_stays_local_whatever_it_includes()
+        => Assert.Null(Relay.NetworkedOf(IdentityOf(Entities.Create<Probe>())));
+
+    /// Nothing Waypoint holds is sent, and the entity still is: its presence is the message.
+    [Fact]
+    public void A_replicated_archetype_with_nothing_that_sends_is_networked()
+        => Assert.NotNull(Relay.NetworkedOf(IdentityOf(Entities.Create<Waypoint>())));
+
+    /// A query asks for components, not for how the entity came to have them, so it finds both.
+    [Fact]
+    public void A_query_over_a_replicated_mixin_finds_local_entities_too()
+    {
+        Entities.Create<Beacon>();
+        Entities.Create<Probe>();
+
+        var found = 0;
+
+        foreach (var _ in Entities.Query<Telemetry>())
+            found++;
+
+        Assert.Equal(2, found);
+    }
 
     /// It lands on the archetype the game registered, not on a fresh one only the server knows.
     [Fact]

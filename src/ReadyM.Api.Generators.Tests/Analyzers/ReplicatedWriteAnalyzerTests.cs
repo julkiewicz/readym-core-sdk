@@ -44,7 +44,7 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
             public partial int Cheer { get; set; }
         }
 
-        [Archetype]
+        [Archetype(replicated: false)]
         [Include(typeof(Vitals))]
         [Include(typeof(Mood))]
         public readonly partial struct Npc;

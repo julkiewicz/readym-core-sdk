@@ -42,13 +42,13 @@ public readonly partial struct Scope
 }
 
 /// An archetype over storage it does not own, so it carries no marker.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Metadata))]
 [Include(typeof(Scope))]
 public readonly partial struct NetworkedThing;
 
 /// Mixes core-owned storage with a component of its own.
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Metadata))]
 public readonly partial struct Tracked
 {

@@ -12,7 +12,8 @@ namespace ReadyM.Relay.Server.Sdk.Ecs.Components;
 internal sealed class ModComponentRegistry(
     AotPointers aotPointers,
     ModComponentManager heapManager,
-    ILogger logger) : IComponentRegistry
+    ILogger logger
+) : IComponentRegistry
 {
     private readonly RegisterModComponentDelegate _registerModComponent =
         Marshal.GetDelegateForFunctionPointer<RegisterModComponentDelegate>(aotPointers.RegisterModComponent);
@@ -98,7 +99,7 @@ internal sealed class ModComponentRegistry(
             throw new InvalidOperationException($"{type.FullName} is already registered.");
 
         if (stride > 256)
-            throw new ArgumentException($"{type.Name} is {stride} bytes which exceeds the 256-byte maximum.");
+            logger.LogWarning("Local component {Component} is {Stride} bytes which exceeds 256 bytes", type.FullName, stride);
 
         var registration = heapManager.RegisterLocalComponent<T>();
         _registerModComponent(registration, new NativeString256(typeof(T).FullName, false));
@@ -120,7 +121,7 @@ internal sealed class ModComponentRegistry(
             throw new InvalidOperationException($"{type.FullName} is already registered.");
 
         if (stride > 256)
-            throw new ArgumentException($"{type.Name} is {stride} bytes which exceeds the 256-byte maximum.");
+            logger.LogWarning("Component {Component} is {Stride} bytes which exceeds 256 bytes", type.FullName, stride);
 
         var registration = heapManager.RegisterComponent<T>(delivery);
         _registerModComponent(registration, new NativeString256(typeof(T).FullName, false));

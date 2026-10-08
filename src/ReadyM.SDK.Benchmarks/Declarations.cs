@@ -10,7 +10,7 @@ public readonly partial struct Vitality
     public partial float MaxHp { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Vitality))]
 public readonly partial struct Creep
 {
@@ -66,7 +66,7 @@ public readonly partial struct Morale
     public partial float Spirit { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Stamina))]
 [Include(typeof(Armor))]
 [Include(typeof(Speed))]

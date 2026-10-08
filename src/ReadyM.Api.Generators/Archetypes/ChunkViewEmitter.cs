@@ -8,9 +8,15 @@ namespace ReadyM.Api.Generators.Archetypes;
 /// </summary>
 /// <remarks>
 /// The slots arrive in the order the component set lists them, which is the declaration's own
-/// component first and then one per mixin it includes. That order is only knowable at compile time
-/// while every include contributes exactly one component, which is why an optional mixin or an
-/// included archetype turns the chunk path off for that declaration rather than guessing.
+/// component first and then one per mixin it includes. An included archetype is flattened in the
+/// order its own set lists them, so the order is always knowable here.
+/// <para>
+/// What does turn the path off is a contributor this compilation only sees as metadata whose
+/// accessors take no chunk: that is a declaration from an assembly compiled without the chunk types
+/// in scope, and it has no chunk accessors to read through. Including one mixin like that is enough,
+/// however deep it sits, and the shape is walked by identity instead. See
+/// <c>DeclarationModel.SupportsChunks</c> for the question as it is actually asked.
+/// </para>
 /// </remarks>
 internal static class ChunkViewEmitter
 {
@@ -112,6 +118,13 @@ internal static class ChunkViewEmitter
         writer.Line("/// The way out to anything a chunk view cannot do, such as a structural change after the loop.");
         writer.Line($"public {ArchetypeNames.EntityHandle} Handle");
         writer.Line($"    => _prototype.For(global::System.Runtime.CompilerServices.Unsafe.Add(ref global::System.Runtime.CompilerServices.Unsafe.AsRef(in _entities), _index));");
+        writer.Line();
+        writer.Line("/// This entity as the shape, which is what a view cannot be: one outlives the loop, the other does not.");
+        writer.Line("/// <remarks>");
+        writer.Line("/// For collecting entities to act on afterwards. The shape reads through a handle rather than the");
+        writer.Line("/// chunk, so it costs a lookup per value; inside the loop the view is the cheaper way to read.");
+        writer.Line("/// </remarks>");
+        writer.Line($"public {model.QualifiedName} Keep() => new(Handle);");
     }
 
     private static void EmitAccessors(SourceWriter writer, DeclarationModel model, IReadOnlyList<Slot> slots, bool writes)

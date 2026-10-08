@@ -13,7 +13,7 @@ internal struct TestAreaScopeComponent : IIndexedComponent<int>
 }
 
 /// An archetype declaring itself a scope, which is all IScope asks for.
-[Archetype]
+[Archetype(replicated: false)]
 [ExplicitComponent(typeof(TestAreaScopeComponent))]
 public readonly partial struct TestArea : IScope
 {
@@ -26,11 +26,11 @@ public readonly partial struct Patrol
     public partial int Route { get; set; }
 }
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Health))]
 [Include(typeof(Patrol))]
 public readonly partial struct Guard;
 
-[Archetype]
+[Archetype(replicated: false)]
 [Include(typeof(Health))]
 public readonly partial struct Critter;
