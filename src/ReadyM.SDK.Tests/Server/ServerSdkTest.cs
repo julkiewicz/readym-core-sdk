@@ -30,6 +30,8 @@ public abstract class ServerSdkTest
         Relay.RegisterManaged<TicketedComponent>();
         Relay.RegisterIndexed<RelayNetIdComponent, int>();
         Relay.RegisterIndexed<TestAreaScopeComponent, int>();
+        // Indexed, but registered the way a game that forgot its key would have.
+        Relay.RegisterBlittable<UnkeyedComponent>();
         Relay.RegisterManaged<PatrolComponent>();
         Relay.RegisterManaged<VitalsComponent>();
         Relay.RegisterManaged<NamedComponent>();

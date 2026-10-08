@@ -115,13 +115,12 @@ public class ArchetypeTests : ClientSdkTest
     }
 
     /// <summary>
-    /// Known gap. A default archetype struct has no API link, so asking it anything throws a
-    /// NullReferenceException instead of reporting that it is invalid. TryGetX hands one out on
-    /// failure, so it is reachable from ordinary code.
+    /// A default archetype struct names no entity, so it reports itself invalid rather than throwing.
+    /// TryGetX hands one out on failure, and a stored handle cleared to default reads back as one.
     /// </summary>
     [Fact]
-    public void A_default_archetype_handle_throws_instead_of_reporting_invalid()
+    public void A_default_archetype_handle_reports_invalid()
     {
-        Assert.Throws<NullReferenceException>(() => default(Monster).IsValid);
+        Assert.False(default(Monster).IsValid);
     }
 }

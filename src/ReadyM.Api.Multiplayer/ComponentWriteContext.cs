@@ -31,7 +31,7 @@ public static class ComponentWriteContext
             throw new ArgumentOutOfRangeException(nameof(lastObserved), "Last observed time cannot be greater than current time");
 
         var previous = Current;
-        Current = new ComponentWriteState(Current.AutoMarkApiOnWrite, currentTime, lastObserved, resolver);
+        Current = new ComponentWriteState(false, currentTime, lastObserved, resolver);
         return new Scope(previous);
     }
 

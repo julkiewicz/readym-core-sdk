@@ -13,7 +13,7 @@ namespace ReadyM.SDK.Entities;
 /// Operations are delegated to <see cref="IEntityApi"/> so that the server and the client can implement them differently.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public readonly struct EntityHandle
+public readonly struct EntityHandle : IEquatable<EntityHandle>
 {
     private readonly RawEntity _rawEntity;
     private readonly IEntityApi? _api;
@@ -107,10 +107,10 @@ public readonly struct EntityHandle
         where TComponent : struct, IComponent
         => _api!.Mirrors(_rawEntity, in GetComponent<TComponent>(), field);
 
-    internal bool Allows(Type component, WriteKind kind) 
+    internal bool Allows(Type component, WriteKind kind)
         => _api!.Allows(_rawEntity, component, kind);
 
-    internal bool ShouldApplyToGame(Type component) 
+    internal bool ShouldApplyToGame(Type component)
         => _api!.ShouldApplyToGame(_rawEntity, component);
 
     /// Writes the whole component, which is what moves it in the index kept on it.
@@ -134,4 +134,33 @@ public readonly struct EntityHandle
 
     private ComponentNotFoundException Missing<T>()
         => new($"Entity {_rawEntity.Id} is gone or does not carry {typeof(T).Name}.");
+
+
+    public bool Equals(EntityHandle other)
+    {
+        return _rawEntity.Equals(other._rawEntity) && Equals(_api, other._api);
+    }
+
+    public override bool Equals(object? obj)
+    {
+        return obj is EntityHandle other && Equals(other);
+    }
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            return (_rawEntity.GetHashCode() * 397) ^ (_api != null ? _api.GetHashCode() : 0);
+        }
+    }
+
+    public static bool operator ==(EntityHandle left, EntityHandle right)
+    {
+        return left.Equals(right);
+    }
+
+    public static bool operator !=(EntityHandle left, EntityHandle right)
+    {
+        return !left.Equals(right);
+    }
 }
