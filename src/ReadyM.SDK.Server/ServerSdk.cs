@@ -16,7 +16,8 @@ internal static class ServerSdk
 
     private static readonly ConditionalWeakTable<IComponentRegistry, object> Registered = new();
 
-    /// <summary>Hands the relay every component the loaded shapes replicate or add to an archetype.</summary>
+    /// <summary>Hands the relay every component the loaded shapes replicate or add to an archetype, with the save
+    /// code of the ones they persist.</summary>
     public static void RegisterComponents(IComponentRegistry registry)
     {
         if (Registered.TryGetValue(registry, out _))
@@ -24,6 +25,8 @@ internal static class ServerSdk
 
         Registered.Add(registry, new object());
 
+        // Persistence first: a component's registration is what carries its save code to the server.
+        ServerPersistence.DeclareAll(registry);
         ServerReplication.RegisterAll(registry);
         ServerArchetypes.ApplyExtensions(registry);
     }

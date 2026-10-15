@@ -1,9 +1,11 @@
 ﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Friflo.Engine.ECS;
 using Microsoft.Extensions.Logging;
 using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.Interop;
+using ReadyM.Api.Saves;
 using ReadyM.Relay.Server.Sdk.Interop;
 using Yooni.Native.Container;
 
@@ -26,6 +28,10 @@ internal sealed class ModComponentRegistry(
     // Types this mod has registered. Only a duplicate-registration guard; it says nothing about ids, which
     // the server does not assign until every mod has finished declaring. See ModComponentIds for those.
     private readonly HashSet<Type> _declared = [];
+
+    // What turns a registration into one that carries the component's save code, for each component declared
+    // persisted. Bound to its type when declared, so registering by Type needs no second trip to a generic.
+    private readonly Dictionary<Type, Func<ModComponentInfo, ModComponentInfo>> _persisted = [];
 
     // One recorded action per declared component, replayed for each acceptor. Same device the native
     // registries use: it is the only way back to a typed call from a list of components.
@@ -101,7 +107,7 @@ internal sealed class ModComponentRegistry(
         if (stride > 256)
             logger.LogWarning("Local component {Component} is {Stride} bytes which exceeds 256 bytes", type.FullName, stride);
 
-        var registration = heapManager.RegisterLocalComponent<T>();
+        var registration = WithSave(type, heapManager.RegisterLocalComponent<T>());
         _registerModComponent(registration, new NativeString256(typeof(T).FullName, false));
 
         Collect<T>();
@@ -123,7 +129,7 @@ internal sealed class ModComponentRegistry(
         if (stride > 256)
             logger.LogWarning("Component {Component} is {Stride} bytes which exceeds 256 bytes", type.FullName, stride);
 
-        var registration = heapManager.RegisterComponent<T>(delivery);
+        var registration = WithSave(type, heapManager.RegisterComponent<T>(delivery));
         _registerModComponent(registration, new NativeString256(typeof(T).FullName, false));
 
         logger.LogDebug("Registered component {Component}", type.FullName);
@@ -132,6 +138,23 @@ internal sealed class ModComponentRegistry(
         // ModChangeComponentRegistration, rather than dug out of the type here.
         Collect<T>();
     }
+
+    /// <summary>
+    /// Declares that T is saved with the entities that carry it. Has to come before T is registered: the
+    /// registration is what hands its save code to the server.
+    /// </summary>
+    public void DeclarePersisted<T>() where T : struct, ISavableComponent
+    {
+        if (_declared.Contains(typeof(T)))
+            throw new InvalidOperationException(
+                $"{typeof(T).FullName} was registered before it was declared persisted, so the server has it "
+                + "without its save code.");
+
+        _persisted[typeof(T)] = info => heapManager.AddSave<T>(info);
+    }
+
+    private ModComponentInfo WithSave(Type component, ModComponentInfo info)
+        => _persisted.TryGetValue(component, out var addSave) ? addSave(info) : info;
 
     /// <summary>
     /// Adds components to an archetype the game registered, named by the shape it is declared as so a mod never holds an archetype id.

@@ -10,6 +10,8 @@ using ReadyM.Api.Multiplayer.ConflictResolution;
 using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.Interning;
 using ReadyM.Api.Multiplayer.Interop;
+using ReadyM.Api.Saves;
+using ReadyM.Relay.Server.Sdk.Interop;
 
 namespace ReadyM.Relay.Server.Sdk.Ecs;
 
@@ -38,6 +40,13 @@ internal sealed class ModComponentManager : IDisposable
     internal IChangeTrackingStore? ChangeTracking { get; set; }
 
     internal IInternedStringIndex? InternedStringIndex { get; set; }
+
+    /// The relay's save writer, reader and context. Set once the relay hands them over, which is after the
+    /// components are declared but before anything is saved or loaded.
+    internal RelaySave? Save { get; set; }
+
+    // Save names handed to the relay as raw pointers, freed with the heaps.
+    private readonly List<IntPtr> _saveNames = [];
 
     // The SDK's wire value for Delivery.Reliable; 1 is unreliable
     private const byte ReliableDelivery = 0;
@@ -235,6 +244,42 @@ internal sealed class ModComponentManager : IDisposable
         };
     }
 
+    /// <summary>
+    /// Adds what the relay needs to save and load T to a registration: its own save code, wrapped so the relay
+    /// calls it with nothing but the component's slot, and the name and version its records carry.
+    /// </summary>
+    public ModComponentInfo AddSave<T>(ModComponentInfo info)
+        where T : struct, ISavableComponent
+    {
+        var writeSave = new WriteSaveRecordDelegate((heapSelf, index) =>
+        {
+            var save = SaveOrThrow();
+            HeapOf<T>(heapSelf).GetRef(index).WriteSave(save.Writer, save.Context);
+        });
+
+        var readSave = new ReadSaveRecordDelegate((heapSelf, index) =>
+        {
+            var save = SaveOrThrow();
+            HeapOf<T>(heapSelf).GetRef(index).ReadSave(save.Reader, save.Context);
+        });
+
+        var saveName = Marshal.StringToHGlobalUni(default(T).SaveName);
+        _saveNames.Add(saveName);
+
+        info.WriteSave = _delegateStore.PinDelegate(writeSave);
+        info.ReadSave = _delegateStore.PinDelegate(readSave);
+        info.SaveName = saveName;
+        info.SaveVersion = default(T).SaveVersion;
+        return info;
+    }
+
+    private RelaySave SaveOrThrow()
+        => Save ?? throw new InvalidOperationException(
+            "The relay asked for a mod component's save record before handing over its save writer and reader.");
+
+    private static TypedComponentHeap<T> HeapOf<T>(IntPtr heapSelf) where T : struct
+        => (TypedComponentHeap<T>)GCHandle.FromIntPtr(heapSelf).Target!;
+
     // -------------------------------------------------------------------------
     // Heap factory - called from AOT via function pointer
     // -------------------------------------------------------------------------
@@ -282,6 +327,10 @@ internal sealed class ModComponentManager : IDisposable
         // Dispose delegates first - stops any in-flight AllocHeap calls from
         // writing into heaps we are about to tear down.
         _delegateStore.Dispose();
+
+        foreach (var saveName in _saveNames)
+            Marshal.FreeHGlobal(saveName);
+        _saveNames.Clear();
 
         lock (_heapsLock)
         {

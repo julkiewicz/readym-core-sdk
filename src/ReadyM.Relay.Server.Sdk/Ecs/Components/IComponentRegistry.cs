@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using ReadyM.Api.Multiplayer.ECS.Components;
+using ReadyM.Api.Saves;
 
 namespace ReadyM.Relay.Server.Sdk.Ecs.Components;
 
@@ -25,4 +26,8 @@ public interface IComponentRegistry
     /// <param name="component">The type of the component to register. Must be a struct that implements <see cref="INetworkedComponent"/>.</param>
     /// <param name="delivery">How its changes travel: 0 reliable, 1 unreliable.</param>
     void RegisterComponent(Type component, byte delivery);
+
+    /// Declares that T is saved with the entities that carry it. Declared before T is registered, so its
+    /// registration carries its save code.
+    void DeclarePersisted<T>() where T : struct, ISavableComponent;
 }
