@@ -91,7 +91,7 @@ internal static class ComponentEmitter
             ? ArchetypeNames.Component
             : $"{ArchetypeNames.IndexedComponent}<{index.Type}>");
 
-        using (writer.Braces($"internal struct {name}{contracts}"))
+        using (writer.Braces($"internal partial struct {name}{contracts}"))
         {
             foreach (var accessor in accessors)
                 writer.Line($"public {accessor.Type} {accessor.Field};");

@@ -39,11 +39,14 @@ internal class ArchetypeMixinGenerator : IIncrementalGenerator
             // namespace itself, and two file-scoped namespaces cannot share a file.
             if (generated.Value.Component is { } component)
                 spc.AddSource(component.HintName, component.Source);
+
+            if (generated.Value.Save is { } save)
+                spc.AddSource(save.HintName, save.Source);
         });
     }
 
     private static (string HintName, string Source, ImmutableArray<Diagnostic> Diagnostics,
-        (string HintName, string Source)? Component)? Emit(INamedTypeSymbol? target, Compilation compilation, bool client, CancellationToken ct)
+        (string HintName, string Source)? Component, (string HintName, string Source)? Save)? Emit(INamedTypeSymbol? target, Compilation compilation, bool client, CancellationToken ct)
     {
         if (target is not { ContainingType: null } symbol)
             return null;
@@ -56,7 +59,8 @@ internal class ArchetypeMixinGenerator : IIncrementalGenerator
             .AddRange(QuantizedShapeRules.Check(model))
             .AddRange(CreateHandlerEmitter.Check(model))
             .AddRange(DeleteHandlerEmitter.Check(model))
-            .AddRange(ReplicationRules.CheckPropagation(model));
+            .AddRange(ReplicationRules.CheckPropagation(model))
+            .AddRange(PersistenceRules.Check(model));
         // Accessors reachable from a chunk go on whenever the server SDK is there, because another
         // declaration may include this one. The view itself needs this shape to be walkable.
         var chunks = ChunkNames.Resolve(compilation);
@@ -117,8 +121,10 @@ internal class ArchetypeMixinGenerator : IIncrementalGenerator
         ExtendedMemberEmitter.Emit(writer, model, chunks, client);
         IndexEmitter.Emit(writer, model, compilation);
         ReplicationEmitter.Emit(writer, model, compilation);
+        PersistenceEmitter.Emit(writer, model, compilation);
         NativeInitEmitter.Emit(writer, model, compilation);
 
-        return (ArchetypeNames.HintOf(symbol, "Mixin"), writer.ToString(), problems, replicated);
+        return (ArchetypeNames.HintOf(symbol, "Mixin"), writer.ToString(), problems, replicated,
+            PersistenceEmitter.Component(model, compilation));
     }
 }

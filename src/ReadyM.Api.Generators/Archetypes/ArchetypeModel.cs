@@ -387,6 +387,8 @@ internal sealed class DeclarationModel
         (DeclaredReplicated, var archetypeDelivery) = ReadArchetype(symbol);
         Delivery = DeclaredReplicated is null ? mixinDelivery : archetypeDelivery;
         Propagation = ReadPropagation(symbol);
+        PersistedName = ReadPersistedName(symbol);
+        PersistedVersion = ReadSaveVersion(symbol);
         CreateHandlers = ReadHandlers(symbol, ArchetypeNames.CreateHandlerAttribute);
         DeleteHandlers = ReadHandlers(symbol, ArchetypeNames.DeleteHandlerAttribute);
         Forwards = ReadForwards(symbol, ExplicitComponent, Collections).Concat(CollectionMembers()).ToList();
@@ -523,10 +525,42 @@ internal sealed class DeclarationModel
     /// </remarks>
     public bool RegistersReplication => IsReplicated && EmitsComponent;
 
+    /// The save name [Persisted] gives this shape's component, or null when it is not persisted.
+    public string? PersistedName { get; }
+
+    /// The schema version stamped on the component's save records: [SaveVersion], else 1.
+    public ushort PersistedVersion { get; }
+
+    /// Whether this shape is the one that makes its component savable. Only for a component it had generated: one
+    /// named by [ExplicitComponent] saves through its own ISavableComponent, if at all.
+    public bool RegistersPersistence => PersistedName is { Length: > 0 } && EmitsComponent && Accessors.Count > 0;
+
     public static bool IsNetworkedComponent(INamedTypeSymbol component)
         => component.AllInterfaces.Any(contract =>
             contract.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             == ArchetypeNames.NetworkedComponent);
+
+    private static string? ReadPersistedName(INamedTypeSymbol symbol)
+    {
+        foreach (var attribute in symbol.GetAttributes())
+            if (attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.PersistedAttribute)
+                return attribute.ConstructorArguments.Length > 0 && attribute.ConstructorArguments[0].Value is string name
+                    ? name
+                    : string.Empty;
+
+        return null;
+    }
+
+    private static ushort ReadSaveVersion(INamedTypeSymbol symbol)
+    {
+        foreach (var attribute in symbol.GetAttributes())
+            if (attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.SaveVersionAttribute
+                && attribute.ConstructorArguments.Length > 0
+                && attribute.ConstructorArguments[0].Value is ushort version)
+                return version;
+
+        return 1;
+    }
 
     private static Propagation? ReadPropagation(INamedTypeSymbol symbol)
     {

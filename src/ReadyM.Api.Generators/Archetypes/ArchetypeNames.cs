@@ -25,6 +25,8 @@ internal static class ArchetypeNames
     public const string IndexAttribute = Namespace + ".IndexAttribute";
     public const string TagAttribute = Namespace + ".TagAttribute";
     public const string ReplicatedAttribute = Namespace + ".ReplicatedAttribute";
+    public const string PersistedAttribute = Namespace + ".PersistedAttribute";
+    public const string SaveVersionAttribute = "ReadyM.Api.Saves.SaveVersionAttribute";
 
     public const string PropagatesAttribute = Namespace + ".PropagatesAttribute";
 
@@ -54,6 +56,7 @@ internal static class ArchetypeNames
     public const string Scope = "global::ReadyM.SDK.Archetypes.Scope";
     public const string IndexRegistry = "global::ReadyM.SDK.Archetypes.IndexRegistry";
     public const string ReplicationRegistry = "global::ReadyM.SDK.Archetypes.ReplicationRegistry";
+    public const string PersistenceRegistry = "global::ReadyM.SDK.Archetypes.PersistenceRegistry";
     public const string NativeInitRegistry = "global::ReadyM.SDK.Archetypes.NativeInitRegistry";
 
     public const string WriteKind = "global::ReadyM.SDK.Entities.WriteKind";

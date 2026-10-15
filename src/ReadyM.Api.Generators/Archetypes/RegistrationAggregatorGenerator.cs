@@ -108,6 +108,9 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
         if (model.RegistersReplication)
             found.Add($"{prefix}{symbol.Name}Replication");
 
+        if (model.RegistersPersistence)
+            found.Add($"{prefix}{symbol.Name}Persistence");
+
         if (NativeInitEmitter.Applies(model))
             found.Add($"{prefix}{symbol.Name}NativeInit");
 
