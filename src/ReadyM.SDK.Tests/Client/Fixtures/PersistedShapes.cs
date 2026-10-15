@@ -1,4 +1,3 @@
-using ReadyM.Api.Saves;
 using ReadyM.SDK.Attributes;
 using Yooni.Native.Container;
 
@@ -20,8 +19,7 @@ public readonly partial struct Hoard
 [ArchetypeMixin]
 [Replicated]
 [Propagates(Propagation.OwnershipBased)]
-[Persisted("Test.Stash")]
-[SaveVersion(3)]
+[Persisted("Test.Stash", 3)]
 public readonly partial struct Stash
 {
     public partial int Count { get; set; }

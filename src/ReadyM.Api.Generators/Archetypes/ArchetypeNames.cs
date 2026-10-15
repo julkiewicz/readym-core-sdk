@@ -26,7 +26,6 @@ internal static class ArchetypeNames
     public const string TagAttribute = Namespace + ".TagAttribute";
     public const string ReplicatedAttribute = Namespace + ".ReplicatedAttribute";
     public const string PersistedAttribute = Namespace + ".PersistedAttribute";
-    public const string SaveVersionAttribute = "ReadyM.Api.Saves.SaveVersionAttribute";
 
     public const string PropagatesAttribute = Namespace + ".PropagatesAttribute";
 

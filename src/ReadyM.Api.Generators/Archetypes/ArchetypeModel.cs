@@ -387,8 +387,7 @@ internal sealed class DeclarationModel
         (DeclaredReplicated, var archetypeDelivery) = ReadArchetype(symbol);
         Delivery = DeclaredReplicated is null ? mixinDelivery : archetypeDelivery;
         Propagation = ReadPropagation(symbol);
-        PersistedName = ReadPersistedName(symbol);
-        PersistedVersion = ReadSaveVersion(symbol);
+        (PersistedName, PersistedVersion) = ReadPersisted(symbol);
         CreateHandlers = ReadHandlers(symbol, ArchetypeNames.CreateHandlerAttribute);
         DeleteHandlers = ReadHandlers(symbol, ArchetypeNames.DeleteHandlerAttribute);
         Forwards = ReadForwards(symbol, ExplicitComponent, Collections).Concat(CollectionMembers()).ToList();
@@ -528,7 +527,7 @@ internal sealed class DeclarationModel
     /// The save name [Persisted] gives this shape's component, or null when it is not persisted.
     public string? PersistedName { get; }
 
-    /// The schema version stamped on the component's save records: [SaveVersion], else 1.
+    /// The schema version [Persisted] stamps on the component's save records.
     public ushort PersistedVersion { get; }
 
     /// Whether this shape is the one that makes its component savable. Only for a component it had generated: one
@@ -540,26 +539,21 @@ internal sealed class DeclarationModel
             contract.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             == ArchetypeNames.NetworkedComponent);
 
-    private static string? ReadPersistedName(INamedTypeSymbol symbol)
+    private static (string? Name, ushort Version) ReadPersisted(INamedTypeSymbol symbol)
     {
         foreach (var attribute in symbol.GetAttributes())
-            if (attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.PersistedAttribute)
-                return attribute.ConstructorArguments.Length > 0 && attribute.ConstructorArguments[0].Value is string name
-                    ? name
-                    : string.Empty;
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != ArchetypeNames.PersistedAttribute)
+                continue;
 
-        return null;
-    }
+            var args = attribute.ConstructorArguments;
+            var name = args.Length > 0 && args[0].Value is string given ? given : string.Empty;
+            var version = args.Length > 1 && args[1].Value is ushort stated ? stated : (ushort)1;
 
-    private static ushort ReadSaveVersion(INamedTypeSymbol symbol)
-    {
-        foreach (var attribute in symbol.GetAttributes())
-            if (attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.SaveVersionAttribute
-                && attribute.ConstructorArguments.Length > 0
-                && attribute.ConstructorArguments[0].Value is ushort version)
-                return version;
+            return (name, version);
+        }
 
-        return 1;
+        return (null, 1);
     }
 
     private static Propagation? ReadPropagation(INamedTypeSymbol symbol)
