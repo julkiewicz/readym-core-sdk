@@ -2,7 +2,7 @@ using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Tests.Client.Fixtures;
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [IncludeArchetype(typeof(Creature))]
 [Include(typeof(Health))]
 [Include(typeof(Placement))]

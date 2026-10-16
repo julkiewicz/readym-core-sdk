@@ -96,10 +96,11 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
         if (model.IsArchetype)
             found.Add($"{prefix}{symbol.Name}Declared");
 
-        if (model.Extends.Count > 0)
+        // An archetype's [Extends] and a mixin's [Tag] are errors (ShapeAttributeRules), and nothing is emitted for them
+        if (model.Extends.Count > 0 && !model.IsArchetype)
             found.Add($"{prefix}{symbol.Name}Extends");
 
-        if (model.Tags.Count > 0)
+        if (model.Tags.Count > 0 && model.IsArchetype)
             found.Add($"{prefix}{symbol.Name}Tags");
 
         if (model.IndexedBy is not null)

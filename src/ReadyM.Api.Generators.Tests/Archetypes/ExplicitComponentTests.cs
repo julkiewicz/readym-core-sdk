@@ -168,7 +168,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_type_that_is_not_a_component_is_refused()
         => AssertReports("READYM004", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.NotAComponent))]
             public readonly partial struct Meta
             {
@@ -180,7 +180,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_link_component_is_refused()
         => AssertReports("READYM004", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.LinkedComponent))]
             public readonly partial struct Linked
             {
@@ -191,7 +191,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_property_with_no_matching_member_is_refused()
         => AssertReports("READYM005", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MetaComponent))]
             public readonly partial struct Meta
             {
@@ -202,7 +202,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_setter_over_a_readonly_member_is_refused()
         => AssertReports("READYM006", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MetaComponent))]
             public readonly partial struct Meta
             {
@@ -215,7 +215,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void Matching_members_are_accepted()
         => Assert.Empty(Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MetaComponent))]
             public readonly partial struct Meta
             {
@@ -230,7 +230,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_name_differing_only_in_case_is_accepted()
         => Assert.Empty(Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MetaComponent))]
             public readonly partial struct Meta
             {
@@ -241,7 +241,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_member_named_outright_is_accepted()
         => Assert.Empty(Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MetaComponent))]
             public readonly partial struct Meta
             {
@@ -259,7 +259,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_derived_type_is_accepted()
         => Assert.Empty(Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MappedComponent))]
             public readonly partial struct Mapped
             {
@@ -270,7 +270,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void An_unrelated_type_is_refused()
         => AssertReports("READYM012", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MappedComponent))]
             public readonly partial struct Mapped
             {
@@ -286,7 +286,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void A_derived_type_is_read_with_a_cast()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MappedComponent))]
             public readonly partial struct Mapped
             {
@@ -302,7 +302,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void A_matching_type_is_read_without_a_cast()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.MappedComponent))]
             public readonly partial struct Mapped
             {
@@ -318,7 +318,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void An_unregistered_instantiation_is_refused()
         => AssertReports("READYM013", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.HoldsComponent<global::Core.Prop>))]
             public readonly partial struct Holds
             {
@@ -329,7 +329,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void An_instantiation_an_assembly_registered_is_accepted()
         => Assert.Empty(Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.HoldsComponent<global::Core.Actor>))]
             public readonly partial struct Holds
             {
@@ -344,7 +344,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void An_instantiation_the_component_registered_is_accepted()
         => Assert.Empty(Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.NamesComponent<global::Core.Prop>))]
             public readonly partial struct Names
             {
@@ -357,7 +357,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void The_report_names_the_attribute_to_add()
     {
         var reported = Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.HoldsComponent<global::Core.Prop>))]
             public readonly partial struct Holds
             {
@@ -376,7 +376,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_collection_name_matching_no_member_is_refused()
         => AssertReports("READYM008", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.SequencesComponent))]
             [ExplicitCollection("Finished")]
             public readonly partial struct Sequences;
@@ -386,7 +386,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_collection_name_matching_only_plumbing_is_refused()
         => AssertReports("READYM008", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.SequencesComponent))]
             [ExplicitCollection("Started_SetFromApi")]
             public readonly partial struct Sequences;
@@ -395,7 +395,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_collection_without_an_explicit_component_is_refused()
         => AssertReports("READYM008", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitCollection("Started")]
             public readonly partial struct Sequences;
             """);
@@ -408,7 +408,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void A_borrowed_collection_that_replicates_is_changed_under_the_policy()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             [ExplicitComponent(typeof(global::Core.TrackedComponent))]
             [ExplicitCollection("Started")]
             public readonly partial struct Sequences;
@@ -426,7 +426,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void A_borrowed_collection_is_read_without_asking()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             [ExplicitComponent(typeof(global::Core.TrackedComponent))]
             [ExplicitCollection("Started")]
             public readonly partial struct Sequences;
@@ -440,7 +440,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void A_borrowed_collection_that_does_not_replicate_is_left_alone()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.SequencesComponent))]
             [ExplicitCollection("Started")]
             public readonly partial struct Sequences;
@@ -453,7 +453,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     [Fact]
     public void A_collection_name_that_matches_is_accepted()
         => Assert.Empty(Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.SequencesComponent))]
             [ExplicitCollection("Started")]
             public readonly partial struct Sequences;
@@ -464,7 +464,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void The_report_lands_on_the_attribute()
     {
         var reported = Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.SequencesComponent))]
             [ExplicitCollection("Finished")]
             public readonly partial struct Sequences;
@@ -480,7 +480,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void An_undocumented_value_inherits_the_component_member_docs()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.DocumentedComponent))]
             public readonly partial struct Stock
             {
@@ -496,7 +496,7 @@ public class ExplicitComponentTests(ITestOutputHelper output)
     public void A_documented_value_keeps_its_own_docs()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.DocumentedComponent))]
             public readonly partial struct Stock
             {

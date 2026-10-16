@@ -7,7 +7,7 @@ namespace ReadyM.SDK.Tests.Client;
 
 /// <summary>
 /// A replicated shape written on one side and read on another. The generated component is what
-/// crosses, so this is the whole of what [Replicated] buys once the wire is out of the picture.
+/// crosses, so this is the whole of what replicating buys once the wire is out of the picture.
 /// </summary>
 public class ReplicationRoundTripTests : ClientSdkTest
 {

@@ -8,7 +8,8 @@ internal static class ExtendsEmitter
 {
     public static void Emit(SourceWriter writer, DeclarationModel model, Compilation compilation)
     {
-        if (model.Extends.Count == 0)
+        // On an archetype it is an error (ShapeAttributeRules), so nothing is emitted for it
+        if (model.Extends.Count == 0 || model.IsArchetype)
             return;
 
         var name = model.Name + "Extends";

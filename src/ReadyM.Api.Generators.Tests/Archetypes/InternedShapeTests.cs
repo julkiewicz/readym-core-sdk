@@ -48,8 +48,7 @@ public class InternedShapeTests(ITestOutputHelper output)
     {
         const string shape =
             """
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Gait
             {
                 [Interned] public partial NativeString256 Name { get; set; }
@@ -69,8 +68,7 @@ public class InternedShapeTests(ITestOutputHelper output)
     {
         var generated = Generated(
             """
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Tags
             {
                 [Interned] private partial NativeList<NativeString256> Names { get; set; }
@@ -86,8 +84,7 @@ public class InternedShapeTests(ITestOutputHelper output)
     {
         var generated = Generated(
             """
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Gait
             {
                 public partial NativeString256 Name { get; set; }
@@ -103,7 +100,7 @@ public class InternedShapeTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(Core.NamedComponent))]
             public readonly partial struct Named
             {
@@ -121,7 +118,7 @@ public class InternedShapeTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Gait
             {
                 [Interned] public partial NativeString256 Name { get; set; }
@@ -138,8 +135,7 @@ public class InternedShapeTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Gait
             {
                 [Interned] public partial NativeString256 Name { get; set; }
@@ -154,8 +150,7 @@ public class InternedShapeTests(ITestOutputHelper output)
     {
         var generated = Generated(
             """
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Level
             {
                 [Interned] public partial int Value { get; set; }

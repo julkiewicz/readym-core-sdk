@@ -15,7 +15,7 @@ public sealed partial class Ledger
 /// What a shape lets go of as one of its entities goes. A handler asks the game for what it needs,
 /// the same way a create handler does.
 /// </summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Chalked
 {
     public partial int Chalk { get; set; }
@@ -31,7 +31,7 @@ public readonly partial struct Chalked
     }
 }
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Chalked))]
 public readonly partial struct Crateload;
 
@@ -68,6 +68,6 @@ public sealed partial class Turnstile
 /// Carries the one component Ticketed is recognised by first, and nothing else it is made of. What
 /// rules a shape out cheaply must not let this through.
 /// </summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Registered))]
 public readonly partial struct HalfTicketed;

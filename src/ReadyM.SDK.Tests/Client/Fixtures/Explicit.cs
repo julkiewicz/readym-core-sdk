@@ -24,7 +24,7 @@ internal struct CoreScopeComponent : IComponent
     public int AreaIdentifier;
 }
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 [ExplicitComponent(typeof(CoreMetadataComponent))]
 public readonly partial struct Metadata
 {
@@ -33,7 +33,7 @@ public readonly partial struct Metadata
     public partial string Tag { get; set; }
 }
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 [ExplicitComponent(typeof(CoreScopeComponent))]
 public readonly partial struct Scope
 {
@@ -42,13 +42,13 @@ public readonly partial struct Scope
 }
 
 /// <summary>An archetype over storage it does not own, so it carries no marker.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Metadata))]
 [Include(typeof(Scope))]
 public readonly partial struct NetworkedThing;
 
 /// <summary>Mixes core-owned storage with a component of its own.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Metadata))]
 public readonly partial struct Tracked
 {

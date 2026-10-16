@@ -42,24 +42,24 @@ public class IncludeNameTests(ITestOutputHelper output)
 
     private const string Mixins =
         """
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Health
         {
             public partial float Value { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Mana
         {
             public partial float Value { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         [ExplicitComponent(typeof(Core.SkillsComponent))]
         [ExplicitCollection("Attribute")]
         public readonly partial struct Skills;
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         [ExplicitComponent(typeof(Core.EffectsComponent))]
         [ExplicitCollection("Attribute")]
         public readonly partial struct Effects;
@@ -81,7 +81,7 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         var error = Assert.Single(Report(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             [Include(typeof(Mana))]
             public readonly partial struct Hero;
@@ -99,7 +99,7 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         const string shapes =
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             [Include(typeof(Mana), "Mana")]
             public readonly partial struct Hero;
@@ -115,7 +115,7 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Skills))]
             [Include(typeof(Effects))]
             public readonly partial struct Hero;
@@ -131,7 +131,7 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         const string shapes =
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Skills), "Skill")]
             [Include(typeof(Effects), "Effect")]
             public readonly partial struct Hero;
@@ -150,7 +150,7 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         var error = Assert.Single(Report(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             public readonly partial struct Hero
             {
@@ -168,13 +168,13 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         var input = Run(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Walker;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Caster;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [IncludeArchetype(typeof(Walker))]
             [IncludeArchetype(typeof(Caster))]
             public readonly partial struct Hero;
@@ -188,10 +188,10 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         var error = Assert.Single(Report(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Walker;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Walker))]
             public readonly partial struct Hero;
             """), d => d.Id == "READYM042");
@@ -206,7 +206,7 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         var error = Assert.Single(Report(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [IncludeArchetype(typeof(Health))]
             public readonly partial struct Hero;
             """), d => d.Id == "READYM043");
@@ -220,11 +220,11 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             public readonly partial struct Walker;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [IncludeArchetype(typeof(Walker))]
             [Include(typeof(Mana), "Mana")]
             [Include(typeof(Skills))]
@@ -240,11 +240,11 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             public readonly partial struct Walker;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [IncludeArchetype(typeof(Walker))]
             [Include(typeof(Health))]
             public readonly partial struct Hero;
@@ -273,13 +273,13 @@ public class IncludeNameTests(ITestOutputHelper output)
     {
         const string shapes =
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Walker
             {
                 public partial int Steps { get; set; }
             }
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [IncludeArchetype(typeof(Walker))]
             [Include(typeof(Health))]
             [Include(typeof(Mana), "Mana")]

@@ -15,6 +15,9 @@ internal static class AccessorEmitter
 {
     public static string ClassNameOf(string declaration) => declaration + "Accessors";
 
+    /// <summary>The class inside the accessor class that reaches the shape's computed properties.</summary>
+    public const string ComputedClassName = "Computed";
+
     public static void Emit(
         SourceWriter writer,
         DeclarationModel model,
@@ -28,6 +31,8 @@ internal static class AccessorEmitter
         using (writer.Braces($"{model.Access} static class {ClassNameOf(model.Name)}"))
         {
             writer.Line($"public static {ArchetypeNames.ComponentSet} Components {{ get; }} = {componentSet};");
+
+            EmitComputed(writer, model);
 
             if (!model.HasOwnComponent)
                 return;
@@ -52,6 +57,39 @@ internal static class AccessorEmitter
             foreach (var forward in model.Forwards)
                 if (chunkWrites || forward.Changes is null)
                     ChunkForward(writer, forward, component, chunks);
+        }
+    }
+
+    /// <summary>
+    /// The shape's computed properties, called on an instance of it, for whatever includes or extends the shape. A
+    /// shape compiled into another assembly is read back from here, so its computed properties keep reaching the
+    /// shapes that include it.
+    /// </summary>
+    private static void EmitComputed(SourceWriter writer, DeclarationModel model)
+    {
+        if (model.Computed.Count == 0)
+            return;
+
+        writer.Line();
+
+        using (writer.Braces($"public static class {ComputedClassName}"))
+        {
+            foreach (var computed in model.Computed)
+            {
+                writer.Line($"public static {computed.ReturnType} {computed.Name}({ArchetypeNames.EntityHandle} handle)");
+                writer.Line($"    => new {model.QualifiedName}(handle).{computed.Name};");
+
+                if (!computed.HasSetter)
+                    continue;
+
+                writer.Line();
+
+                using (writer.Braces($"public static void Set{computed.Name}({ArchetypeNames.EntityHandle} handle, {computed.ReturnType} value)"))
+                {
+                    writer.Line($"var shape = new {model.QualifiedName}(handle);");
+                    writer.Line($"shape.{computed.Name} = value;");
+                }
+            }
         }
     }
 
@@ -231,7 +269,13 @@ internal static class AccessorEmitter
     /// What the member is called here, which an include puts its prefix in front of. The accessor
     /// class it is reached through keeps the name the declaring shape gave it.
     /// </param>
-    public static void Forwarded(SourceWriter writer, ForwardModel forward, string accessors, string? name = null, bool hidden = false)
+    public static void Forwarded(
+        SourceWriter writer,
+        ForwardModel forward,
+        string accessors,
+        string? name = null,
+        bool hidden = false,
+        string? docSource = null)
     {
         var called = name ?? forward.Name;
 
@@ -239,6 +283,12 @@ internal static class AccessorEmitter
 
         if (hidden)
             writer.Line(ArchetypeNames.Hidden);
+
+        if (forward.IsComputed)
+        {
+            ComputedProperty(writer, forward, accessors, called, "_handle", docSource);
+            return;
+        }
 
         if (forward.IsProperty)
         {
@@ -249,6 +299,33 @@ internal static class AccessorEmitter
         Marker(writer, forward);
         writer.Line($"public {forward.Declaration(called)}");
         writer.Line($"    => {accessors}.{forward.Name}(_handle{Separator(forward)}{forward.Arguments});");
+    }
+
+    /// <summary>A computed property of an included shape, reached through that shape's accessor class.</summary>
+    internal static void ComputedProperty(
+        SourceWriter writer,
+        ForwardModel forward,
+        string accessors,
+        string called,
+        string handle,
+        string? docSource)
+    {
+        if (docSource is not null)
+            writer.Line($"/// <inheritdoc cref=\"{docSource}\"/>");
+
+        var get = $"{accessors}.{ComputedClassName}.{forward.Name}({handle})";
+
+        if (!forward.HasSetter)
+        {
+            writer.Line($"public {forward.ReturnType} {called} => {get};");
+            return;
+        }
+
+        using (writer.Braces($"public {forward.ReturnType} {called}"))
+        {
+            writer.Line($"get => {get};");
+            writer.Line($"set => {accessors}.{ComputedClassName}.Set{forward.Name}({handle}, value);");
+        }
     }
 
     /// <summary>
@@ -268,7 +345,8 @@ internal static class AccessorEmitter
         string accessors,
         string field,
         string? name = null,
-        bool hidden = false)
+        bool hidden = false,
+        string? docSource = null)
     {
         var called = name ?? forward.Name;
 
@@ -276,6 +354,13 @@ internal static class AccessorEmitter
 
         if (hidden)
             writer.Line(ArchetypeNames.Hidden);
+
+        // Not in the chunk: computed on the shape, through the entity this row is
+        if (forward.IsComputed)
+        {
+            ComputedProperty(writer, forward, accessors, called, "Handle", docSource);
+            return;
+        }
 
         if (forward.IsProperty)
         {

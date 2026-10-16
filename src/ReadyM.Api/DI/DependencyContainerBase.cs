@@ -58,9 +58,18 @@ internal abstract class DependencyContainerBase : IDependencyContainer, IDisposa
             .OrderBy(r => r.FactoryRegistrationOrder)
             .GroupBy(r => r.FactoryRegistrationOrder, (_, r) => r.First());
 
+        // One instance can sit behind several registrations, as a mod's RPC handlers do when it also registers them as
+        // the API they implement. Started twice, they would subscribe to their messages twice.
+        var started = new List<IHostedService>();
+
         foreach (var r in hostedServices)
         {
             var service = (IHostedService)Container.Resolve(r.ServiceType, r.OptionalServiceKey);
+
+            if (started.Any(other => ReferenceEquals(other, service)))
+                continue;
+
+            started.Add(service);
             service.OnScopeStart();
             logger.LogDebug("Started hosted service: {ServiceType}", r.ServiceType.FullName);
         }
