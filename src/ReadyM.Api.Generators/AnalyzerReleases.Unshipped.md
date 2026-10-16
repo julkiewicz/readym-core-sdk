@@ -50,3 +50,6 @@ READYM043 | ReadyM | Error | [IncludeArchetype] names a mixin rather than an arc
 READYM044 | ReadyM | Error | A mod entry point is not declared sealed.
 READYM045 | ReadyM | Error | A mod entry point's Init cannot be called by the loader.
 READYM046 | ReadyM | Error | A replicated shape holds a value of a type the SDK cannot send.
+READYM047 | ReadyM | Error | A shape marks more than one value with [Index].
+READYM048 | ReadyM | Error | [Tag] is put on a mixin rather than an archetype.
+READYM049 | ReadyM | Error | [Extends] is put on an archetype rather than a mixin.

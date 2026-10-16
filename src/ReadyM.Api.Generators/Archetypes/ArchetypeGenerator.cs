@@ -71,6 +71,7 @@ internal class ArchetypeGenerator : IIncrementalGenerator
             .AddRange(ReplicationRules.Check(model))
             .AddRange(InternedShapeRules.Check(model))
             .AddRange(IncludeRules.Check(model))
+            .AddRange(ShapeAttributeRules.Check(model))
             .AddRange(QuantizedShapeRules.Check(model))
             .AddRange(CreateHandlerEmitter.Check(model))
             .AddRange(DeleteHandlerEmitter.Check(model))

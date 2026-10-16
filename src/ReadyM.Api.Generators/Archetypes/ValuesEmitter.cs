@@ -42,8 +42,9 @@ internal static class ValuesEmitter
             {
                 writer.Line();
                 writer.Line($"/// <summary>Names {model.Name}.{accessor.Name}.</summary>");
-                // The value the component is indexed by writes back through the index.
-                var of = accessor.IsIndex ? "OfIndexed" : "Of";
+                // The value the component is indexed by writes back through the index. A second [Index] is an error
+                // (ShapeAttributeRules), and only the first is the index.
+                var of = ReferenceEquals(accessor, model.IndexAccessor) ? "OfIndexed" : "Of";
 
                 writer.Line($"public static {ArchetypeNames.Value}<{model.QualifiedName}, {accessor.Type}> {accessor.Name} {{ get; }}");
                 writer.Line($"    = {ArchetypeNames.Value}.{of}<{model.QualifiedName}, {component}, {accessor.Type}>(");
