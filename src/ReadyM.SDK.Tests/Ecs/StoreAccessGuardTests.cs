@@ -5,8 +5,9 @@ namespace ReadyM.SDK.Tests.Ecs;
 
 /// <summary>
 /// The entity store's access guard. The default is a reader-writer lock: query loops that throw on structural
-/// changes hold a read, structural changes hold a write. The owner-thread guard takes no lock and rejects any
-/// access from a thread other than its owner.
+/// changes hold a read, the guarded structural changes hold a write. The owner-thread guard takes no lock and rejects
+/// a guarded operation from a thread other than its owner; the checked guard takes no lock and runs a caller-supplied
+/// check on every enter.
 /// </summary>
 public class StoreAccessGuardTests
 {
@@ -94,22 +95,6 @@ public class StoreAccessGuardTests
         }
     }
 
-    [Fact]
-    public void The_reader_writer_lock_guard_excludes_a_writer_while_a_reader_holds_it()
-    {
-        var guard = (ReaderWriterLockGuard)StoreAccessGuard.ReaderWriterLock();
-        guard.EnterRead();
-        var writer = Task.Factory.StartNew(() =>
-        {
-            guard.EnterWrite();
-            guard.ExitWrite();
-        }, TaskCreationOptions.LongRunning);
-
-        Assert.False(writer.Wait(Blocked));
-        guard.ExitRead();
-        Assert.True(writer.Wait(Generous));
-    }
-
     // --- the owner-thread guard
 
     [Fact]
@@ -123,22 +108,25 @@ public class StoreAccessGuardTests
     }
 
     [Fact]
-    public void The_owner_thread_guard_takes_no_lock()
+    public void The_owner_thread_guard_rejects_another_thread_at_once_instead_of_making_it_wait()
     {
-        var guard = StoreAccessGuard.OwnerThread();
+        var store = new EntityStore(StoreAccessGuard.OwnerThread());
+        var entity = store.CreateEntity();
+        entity.AddComponent(new Probe { Value = 1 });
 
-        // A reader-writer lock refuses a write to a thread holding a read; with no lock there is nothing to refuse.
-        guard.EnterRead();
-        guard.EnterWrite();
-        guard.ExitWrite();
-        guard.ExitRead();
-
-        // Another thread is rejected at once rather than made to wait for the read held here.
-        guard.EnterRead();
-        var other = Task.Factory.StartNew(guard.EnterWrite, TaskCreationOptions.LongRunning);
-        Assert.True(((IAsyncResult)other).AsyncWaitHandle.WaitOne(Generous));
-        Assert.IsType<InvalidOperationException>(other.Exception?.InnerException);
-        guard.ExitRead();
+        // A query loop is running here; under the lock the other thread would wait for it to end.
+        var loop = store.Query<Probe>().Entities.GetEnumerator();
+        try
+        {
+            Assert.True(loop.MoveNext());
+            var error = RunOnAnotherThread(() => entity.AddComponent(new Marker { Value = 2 }));
+            Assert.IsType<InvalidOperationException>(error);
+        }
+        finally
+        {
+            loop.Dispose();
+        }
+        Assert.False(entity.HasComponent<Marker>());
     }
 
     [Fact]
@@ -193,11 +181,99 @@ public class StoreAccessGuardTests
     {
         var owner = new Thread(() => { });
         var guard = (OwnerThreadGuard)StoreAccessGuard.OwnerThread(owner);
+        var store = new EntityStore(guard);
+        var entity = store.CreateEntity();
 
         Assert.Same(owner, guard.Owner);
-        Assert.Throws<InvalidOperationException>(guard.EnterRead);
-        Assert.Throws<InvalidOperationException>(guard.EnterWrite);
+        Assert.Throws<InvalidOperationException>(() => entity.AddComponent(new Probe { Value = 1 }));
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            foreach (var _ in store.Query<Probe>().Entities) { }
+        });
         Assert.Throws<ArgumentNullException>(() => StoreAccessGuard.OwnerThread(null!));
+    }
+
+    [Fact]
+    public void Creating_and_deleting_entities_are_not_guarded()
+    {
+        // The ECS never guarded entity creation and deletion (with the lock either): only the operations
+        // StoreAccessGuard lists enter a read or a write. Pinned so a change to that is deliberate.
+        var store = new EntityStore(StoreAccessGuard.OwnerThread());
+        var kept = store.CreateEntity();
+        Entity created = default;
+
+        Assert.Null(RunOnAnotherThread(() => created = store.CreateEntity()));
+        Assert.False(created.IsNull);
+        Assert.Null(RunOnAnotherThread(() => kept.DeleteEntity()));
+        Assert.True(kept.IsNull);
+    }
+
+    // --- the checked guard: a caller-supplied check on every enter
+
+    [Fact]
+    public void A_checked_guard_runs_its_check_on_every_read_and_write_enter()
+    {
+        var checks = 0;
+        var store = new EntityStore(StoreAccessGuard.Checked(() => checks++));
+        Assert.IsType<CheckedAccessGuard>(store.AccessGuard);
+        var entity = store.CreateEntity();
+        Assert.Equal(0, checks);
+
+        entity.AddComponent(new Probe { Value = 1 });
+        var afterWrite = checks;
+        Assert.True(afterWrite >= 1);
+
+        foreach (var _ in store.Query<Probe>().Entities) { }
+        Assert.Equal(afterWrite + 1, checks);
+
+        foreach (var _ in store.Query<Probe>().Chunks) { }
+        Assert.Equal(afterWrite + 2, checks);
+
+        entity.RemoveComponent<Probe>();
+        Assert.True(checks > afterWrite + 2);
+    }
+
+    [Fact]
+    public void A_checked_guard_takes_no_lock()
+    {
+        var store = new EntityStore(StoreAccessGuard.Checked(() => { }));
+        var entity = store.CreateEntity();
+        entity.AddComponent(new Probe { Value = 1 });
+
+        foreach (var _ in store.Query<Probe>().Entities)
+        {
+            // No lock to recurse into: the store's own query-loop check is what refuses the change.
+            Assert.Throws<StructuralChangeException>(() => entity.AddComponent(new Marker { Value = 2 }));
+        }
+    }
+
+    [Fact]
+    public void A_throwing_check_propagates_out_of_the_guarded_operation()
+    {
+        var refuse = false;
+        var store = new EntityStore(StoreAccessGuard.Checked(() =>
+        {
+            if (refuse) throw new InvalidOperationException("not the owner");
+        }));
+        var entity = store.CreateEntity();
+        entity.AddComponent(new Probe { Value = 1 });
+        refuse = true;
+
+        var write = Assert.Throws<InvalidOperationException>(() => entity.AddComponent(new Marker { Value = 2 }));
+        Assert.Equal("not the owner", write.Message);
+        Assert.False(entity.HasComponent<Marker>());
+
+        var read = Assert.Throws<InvalidOperationException>(() =>
+        {
+            foreach (var _ in store.Query<Probe>().Entities) { }
+        });
+        Assert.Equal("not the owner", read.Message);
+
+        // A refused read left nothing held: once the check passes again the store works as before.
+        refuse = false;
+        entity.AddComponent(new Marker { Value = 2 });
+        Assert.True(entity.HasComponent<Marker>());
+        Assert.Throws<ArgumentNullException>(() => StoreAccessGuard.Checked(null!));
     }
 
     private static Exception? RunOnAnotherThread(Action action)
