@@ -221,6 +221,13 @@ internal sealed class ForwardModel
         Owns = owns;
     }
 
+    /// <summary>
+    /// A property written with a body on the shape itself. Whatever includes or extends the shape reaches it through
+    /// the shape's accessor class, which calls it on an instance of the shape.
+    /// </summary>
+    public static ForwardModel Computed(string name, string type, bool hasSetter)
+        => new(name, type, [], isProperty: true) { IsComputed = true, HasSetter = hasSetter };
+
     public string Name { get; }
 
     public string ReturnType { get; }
@@ -228,6 +235,12 @@ internal sealed class ForwardModel
     public IReadOnlyList<(string Modifier, string Type, string Name)> Parameters { get; }
 
     public bool IsProperty { get; }
+
+    /// <summary>Whether this is a computed property of the shape rather than a member of its component.</summary>
+    public bool IsComputed { get; private set; }
+
+    /// <summary>Whether a computed property can be assigned too.</summary>
+    public bool HasSetter { get; private set; }
 
     /// <summary>
     /// The Fields entry this member changes, for one that changes anything. A member reached off a
@@ -390,6 +403,7 @@ internal sealed class DeclarationModel
         CreateHandlers = ReadHandlers(symbol, ArchetypeNames.CreateHandlerAttribute);
         DeleteHandlers = ReadHandlers(symbol, ArchetypeNames.DeleteHandlerAttribute);
         Forwards = ReadForwards(symbol, ExplicitComponent, Collections).Concat(CollectionMembers()).ToList();
+        Computed = ReadComputed(symbol);
     }
 
     /// <summary>
@@ -453,6 +467,9 @@ internal sealed class DeclarationModel
 
     /// <summary>Everything those members offer, mirrored onto this shape.</summary>
     public IReadOnlyList<ForwardModel> Forwards { get; }
+
+    /// <summary>Public properties written with a body on this shape, which whatever includes or extends it gets too.</summary>
+    public IReadOnlyList<ForwardModel> Computed { get; }
 
     /// Archetypes this shape is added to when they are created.
     /// <summary>Archetypes this shape is added to on create, and the prefix its members take.</summary>
@@ -743,7 +760,7 @@ internal sealed class DeclarationModel
     public IReadOnlyList<(IncludeModel Include, ForwardModel Forward)> FlattenedForwards()
     {
         var flattened = new List<(IncludeModel, ForwardModel)>();
-        var taken = new HashSet<string>(Forwards.Select(forward => forward.Signature));
+        var taken = new HashSet<string>(Forwards.Concat(Computed).Select(forward => forward.Signature));
 
         // Keyed on what the member ends up called, so a prefix is what keeps two of the same name apart.
 
@@ -760,7 +777,7 @@ internal sealed class DeclarationModel
         {
             var included = For(include.Type);
 
-            foreach (var forward in included.Forwards
+            foreach (var forward in included.Forwards.Concat(included.Computed)
                          .Where(forward => taken.Add(forward.Declaration(include.Named(forward.Name)))))
                 into.Add((include, forward));
 
@@ -838,7 +855,7 @@ internal sealed class DeclarationModel
             Add(PropertyKey(accessor.Name), accessor.Name, $"{QualifiedName}|{accessor.Name}", $"'{Name}' itself", at);
         }
 
-        foreach (var forward in Forwards)
+        foreach (var forward in Forwards.Concat(Computed))
             Add(ForwardKey(forward, forward.Name), forward.Name, $"{QualifiedName}|{ForwardKey(forward, forward.Name)}",
                 $"'{Name}' itself", own);
 
@@ -861,7 +878,7 @@ internal sealed class DeclarationModel
                     Add(PropertyKey(name), name, $"{included.QualifiedName}|{include.Prefix}|{accessor.Name}", from, at);
                 }
 
-                foreach (var forward in included.Forwards)
+                foreach (var forward in included.Forwards.Concat(included.Computed))
                 {
                     var name = include.Named(forward);
                     Add(ForwardKey(forward, name), name, $"{included.QualifiedName}|{include.Prefix}|{ForwardKey(forward, forward.Name)}",
@@ -903,6 +920,60 @@ internal sealed class DeclarationModel
             .OfType<IPropertySymbol>()
             .Where(property => property.IsPartialDefinition)
             .Select(property => new AccessorModel(property, component))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The shape's computed properties: written with a body rather than declared partial, public, and read through a
+    /// public getter. A shape compiled into another assembly lists them in its accessor class instead, where nothing
+    /// generated can be taken for one.
+    /// </summary>
+    private static IReadOnlyList<ForwardModel> ReadComputed(INamedTypeSymbol symbol)
+    {
+        if (symbol.DeclaringSyntaxReferences.IsEmpty)
+            return ComputedFromAccessorClass(symbol);
+
+        return symbol.GetMembers()
+            .OfType<IPropertySymbol>()
+            .Where(property => property is
+            {
+                IsStatic: false,
+                IsIndexer: false,
+                IsPartialDefinition: false,
+                PartialDefinitionPart: null,
+                DeclaredAccessibility: Accessibility.Public,
+                ExplicitInterfaceImplementations.Length: 0,
+                GetMethod.DeclaredAccessibility: Accessibility.Public
+            })
+            .Select(property => ForwardModel.Computed(
+                property.Name,
+                property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false }))
+            .ToList();
+    }
+
+    private static IReadOnlyList<ForwardModel> ComputedFromAccessorClass(INamedTypeSymbol symbol)
+    {
+        var computed = symbol.ContainingNamespace?
+            .GetTypeMembers(AccessorEmitter.ClassNameOf(symbol.Name))
+            .FirstOrDefault()?
+            .GetTypeMembers(AccessorEmitter.ComputedClassName)
+            .FirstOrDefault();
+
+        if (computed is null)
+            return [];
+
+        var methods = computed.GetMembers().OfType<IMethodSymbol>().Where(method => method.IsStatic).ToList();
+        var setters = new HashSet<string>(methods
+            .Where(method => method.Parameters.Length == 2 && method.Name.StartsWith("Set", System.StringComparison.Ordinal))
+            .Select(method => method.Name.Substring(3)));
+
+        return methods
+            .Where(method => method.Parameters.Length == 1)
+            .Select(method => ForwardModel.Computed(
+                method.Name,
+                method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                setters.Contains(method.Name)))
             .ToList();
     }
 

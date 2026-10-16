@@ -10,7 +10,7 @@ internal static class ExtendedMemberEmitter
 {
     public static void Emit(SourceWriter writer, DeclarationModel model, ChunkNames? chunks, bool client = false)
     {
-        if (model.Extends.Count == 0 || (model.Accessors.Count == 0 && model.Forwards.Count == 0))
+        if (model.Extends.Count == 0 || (model.Accessors.Count == 0 && model.Forwards.Count == 0 && model.Computed.Count == 0))
             return;
 
         foreach (var (archetype, prefix) in model.Extends)
@@ -42,6 +42,9 @@ internal static class ExtendedMemberEmitter
 
             foreach (var forward in model.Forwards)
                 Forwarded(writer, model, forward, prefix, handle);
+
+            foreach (var computed in model.Computed)
+                Computed(writer, model, computed, prefix, handle);
         }
     }
 
@@ -69,6 +72,9 @@ internal static class ExtendedMemberEmitter
 
             foreach (var forward in model.Forwards)
                 Forwarded(writer, model, forward, prefix, "view.Handle", remarks);
+
+            foreach (var computed in model.Computed)
+                Computed(writer, model, computed, prefix, "view.Handle", remarks);
         }
     }
 
@@ -162,6 +168,37 @@ internal static class ExtendedMemberEmitter
         AccessorEmitter.Marker(writer, forward);
         writer.Line($"public {forward.Declaration(name)}");
         writer.Line($"    => {call}({handle}{forward.Separator}{forward.Arguments});");
+    }
+
+    /// <summary>
+    /// A computed property of the mixin, reached through its accessor class. A setter is a method, for the reason
+    /// <see cref="Members"/> gives.
+    /// </summary>
+    private static void Computed(
+        SourceWriter writer,
+        DeclarationModel model,
+        ForwardModel computed,
+        string prefix,
+        string handle,
+        string[]? remarks = null)
+    {
+        var name = computed.Named(prefix);
+        var call = $"{model.QualifiedAccessors}.{AccessorEmitter.ComputedClassName}";
+
+        writer.Line();
+        Remarks(writer, remarks);
+
+        if (ArchetypeNames.DocSource(model.Symbol, computed.Name) is { } source)
+            writer.Line($"/// <inheritdoc cref=\"{source}\"/>");
+
+        writer.Line($"public {computed.ReturnType} {name} => {call}.{computed.Name}({handle});");
+
+        if (!computed.HasSetter)
+            return;
+
+        writer.Line();
+        writer.Line($"public void Set{name}({computed.ReturnType} value)");
+        writer.Line($"    => {call}.Set{computed.Name}({handle}, value);");
     }
 
     /// <summary>One remarks block per member, however many notes went into it.</summary>

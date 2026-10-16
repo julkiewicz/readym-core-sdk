@@ -180,7 +180,8 @@ internal class ArchetypeGenerator : IIncrementalGenerator
             AccessorEmitter.Forwarded(writer, forward, model.QualifiedAccessors);
 
         foreach (var (include, forward) in model.FlattenedForwards())
-            AccessorEmitter.Forwarded(writer, forward, include.Accessors, include.Named(forward), include.IsHidden);
+            AccessorEmitter.Forwarded(writer, forward, include.Accessors, include.Named(forward), include.IsHidden,
+                forward.IsComputed ? ArchetypeNames.DocSource(include.Type, forward.Name) : null);
     }
 
     /// <summary>Accessors of everything included, flattened onto the archetype.</summary>
