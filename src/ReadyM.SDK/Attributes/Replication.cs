@@ -1,8 +1,15 @@
 ﻿namespace ReadyM.SDK.Attributes;
 
-/// <summary>Which way a shape's values may travel between the game and the ECS, and who may write them.</summary>
-public enum Propagation
+/// <summary>
+/// Whether a shape's values are sent to the other players, and if so, which way they travel between the game and the
+/// ECS and who may write them.
+/// </summary>
+public enum Replication
 {
+    /// <summary>Not sent. The values stay on the half that wrote them.</summary>
+    /// <example>A map marker each client keeps for itself.</example>
+    None,
+
     /// <summary>The game owns it. It is read into the ECS and replicated, and nothing writes it back.</summary>
     /// <example>A flag that indicates whether an enemy is a boss.</example>
     ToEcsOnly,
@@ -15,7 +22,10 @@ public enum Propagation
     Both,
 
     /// <summary>Only the server sets it. A client reads it and applies it to the game state.</summary>
-    /// <remarks>Use it for server-side configuration replicated to players, or data that cannot be trusted to be sent by the clients (e.g. for cheating prevention).</remarks>
+    /// <remarks>
+    /// Use it for server-side configuration replicated to players, or data that cannot be trusted to be sent by the
+    /// clients (e.g. for cheating prevention).
+    /// </remarks>
     /// <example>Custom rule flags that prohibit using certain abilities.</example>
     ServerAuthoritative,
 

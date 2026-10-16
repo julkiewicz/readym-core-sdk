@@ -25,7 +25,7 @@ public class ShapeAttributeTests(ITestOutputHelper output)
         """
         public struct Watched : Friflo.Engine.ECS.ITag;
 
-        [Archetype(replicated: false)]
+        [Archetype(Networked = false)]
         public readonly partial struct Walker;
         """;
 
@@ -45,7 +45,7 @@ public class ShapeAttributeTests(ITestOutputHelper output)
     {
         var error = Assert.Single(Report(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Ticketed
             {
                 [Index]
@@ -66,7 +66,7 @@ public class ShapeAttributeTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Ticketed
             {
                 [Index]
@@ -86,7 +86,7 @@ public class ShapeAttributeTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Ticketed
             {
                 [Index]
@@ -104,7 +104,7 @@ public class ShapeAttributeTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [Tag(typeof(Watched))]
             public readonly partial struct Health
             {
@@ -124,7 +124,7 @@ public class ShapeAttributeTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Tag(typeof(Watched))]
             public readonly partial struct Hero;
             """);
@@ -137,7 +137,7 @@ public class ShapeAttributeTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Extends(typeof(Walker))]
             public readonly partial struct Hero;
             """);
@@ -154,7 +154,7 @@ public class ShapeAttributeTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [Extends(typeof(Walker))]
             public readonly partial struct Health
             {

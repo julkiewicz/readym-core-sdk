@@ -81,8 +81,7 @@ public class ReplicationTests(ITestOutputHelper output)
 
     private const string ReplicatedShape =
         """
-        [ArchetypeMixin]
-        [Replicated]
+        [ArchetypeMixin(Replication.OwnershipBased)]
         public readonly partial struct Vitals
         {
             public partial int Health { get; set; }
@@ -117,7 +116,7 @@ public class ReplicationTests(ITestOutputHelper output)
     {
         var generated = Generated(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Vitals
             {
                 public partial int Health { get; set; }
@@ -151,7 +150,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void An_unreplicated_shape_names_none()
         => Assert.DoesNotContain("public static class Field", Generated(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Vitals
             {
                 public partial int Health { get; set; }
@@ -169,7 +168,7 @@ public class ReplicationTests(ITestOutputHelper output)
             "public static implicit operator global::ReadyM.SDK.Archetypes.Scope",
             Generated(
                 """
-                [Archetype(replicated: false)]
+                [Archetype(Networked = false)]
                 public readonly partial struct Camp : global::ReadyM.SDK.Archetypes.IScope
                 {
                     public partial int Size { get; set; }
@@ -185,7 +184,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [Theory]
     [InlineData(ReplicatedShape)]
     [InlineData("""
-        [Archetype(replicated: true)]
+        [Archetype]
         public readonly partial struct Crate
         {
             public partial int Size { get; set; }
@@ -254,14 +253,13 @@ public class ReplicationTests(ITestOutputHelper output)
 
     private const string CarryingShape =
         """
-        [ArchetypeMixin]
-        [Replicated]
+        [ArchetypeMixin(Replication.OwnershipBased)]
         public readonly partial struct Vitals
         {
             public partial int Health { get; set; }
         }
 
-        [Archetype(replicated: false)]
+        [Archetype(Networked = false)]
         [Include(typeof(Vitals))]
         public readonly partial struct Fighter;
         """;
@@ -310,19 +308,12 @@ public class ReplicationTests(ITestOutputHelper output)
             "global::ReadyM.Api.Mapping.Tags.IOwnershipBased",
             Generated(
                 """
-                [ArchetypeMixin]
-                [Replicated]
-                [Propagates(Propagation.OwnershipBased)]
+                [ArchetypeMixin(Replication.OwnershipBased)]
                 public readonly partial struct Vitals
                 {
                     public partial int Health { get; set; }
                 }
                 """));
-
-    /// <summary>Saying nothing leaves the component as it was, so no existing shape changes behaviour.</summary>
-    [Fact]
-    public void An_unstated_propagation_says_nothing()
-        => Assert.DoesNotContain("ReadyM.Api.Mapping.Tags.I", Generated(ReplicatedShape));
 
     /// <summary>Nothing sends a local shape's values, so it gets plain accessors, no mask and no tokens.</summary>
     [Fact]
@@ -330,7 +321,7 @@ public class ReplicationTests(ITestOutputHelper output)
     {
         var generated = Generated(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Ambient
             {
                 public partial int Temperature { get; set; }
@@ -342,67 +333,141 @@ public class ReplicationTests(ITestOutputHelper output)
         Assert.DoesNotContain("WriteDelta", generated);
     }
 
-    /// <summary>
-    /// A replicated shape that says nothing about who may write it is the state everything else
-    /// was silently built on, so it is the one the compiler now refuses.
-    /// </summary>
+    /// <summary>A networked archetype's own values are sent only as it says, so it has to say.</summary>
     [Fact]
-    public void A_replicated_shape_must_say_how_it_propagates()
-        => AssertReports("READYM014", ReplicatedShape);
+    public void A_networked_archetype_with_values_must_state_replication()
+        => AssertReports("READYM014", """
+            [Archetype]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """);
 
-    /// <summary>Nothing sends it, so nobody is kept from writing it and there is nothing to state.</summary>
     [Fact]
-    public void A_local_shape_must_not_say_how_it_propagates()
+    public void Stating_none_keeps_a_networked_archetypes_values_local()
+    {
+        var reported = Report("""
+            [Archetype(Replication = Replication.None)]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """);
+
+        Assert.DoesNotContain(reported, d => d.Id == "READYM014");
+        Assert.False(Model("""
+            [Archetype(Replication = Replication.None)]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """).IsReplicated);
+    }
+
+    /// <summary>Nothing of it is sent, so nobody is kept from writing it and there is nothing to state.</summary>
+    [Fact]
+    public void An_archetype_that_is_not_networked_must_not_state_replication()
         => AssertReports("READYM016", """
-            [ArchetypeMixin]
-            [Propagates(Propagation.Both)]
-            public readonly partial struct Ambient
+            [Archetype(Networked = false, Replication = Replication.Both)]
+            public readonly partial struct Region
             {
                 public partial int Temperature { get; set; }
             }
             """);
 
-    /// <summary>It holds nothing of its own, so it can never replicate, so it has nothing to state either.</summary>
+    /// <summary>It holds nothing of its own, so Replication has nothing to decide on it.</summary>
     [Fact]
-    public void An_archetype_that_only_includes_must_not_say_how_it_propagates()
-        => AssertReports("READYM016", """
-            [ArchetypeMixin]
+    public void An_archetype_that_only_includes_must_not_state_replication()
+        => AssertReports("READYM009", """
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Ambient
             {
                 public partial int Temperature { get; set; }
             }
 
-            [Archetype(replicated: false)]
+            [Archetype(Replication = Replication.OwnershipBased)]
             [Include(typeof(Ambient))]
-            [Propagates(Propagation.Both)]
             public readonly partial struct Region;
             """);
 
-    /// <summary>The component a shape does not own carries the contract, and the runtime reads it there.</summary>
+    /// <summary>The component behind the shape decides, so the shape has to say what it decides.</summary>
     [Fact]
-    public void A_shape_over_a_borrowed_component_must_not_state_propagation()
-        => AssertReports("READYM015", """
-            [ArchetypeMixin]
+    public void A_shape_over_a_component_must_state_what_it_does()
+    {
+        var error = Assert.Single(Report("""
+            [ArchetypeMixin(Replication.OwnershipBased)]
             [ExplicitComponent(typeof(global::Core.LocalComponent))]
-            [Propagates(Propagation.OwnershipBased)]
             public readonly partial struct Meta
             {
                 public partial int Value { get; set; }
             }
-            """);
+            """), d => d.Id == "READYM015");
 
-    /// <summary>Even agreeing with it, because two places to say it are two places to change it.</summary>
+        Assert.Equal(DiagnosticSeverity.Error, error.Severity);
+        Assert.Contains("say Replication.None", error.GetMessage());
+    }
+
+    /// <summary>A contract on a component nothing sends does not make it replicate.</summary>
     [Fact]
-    public void Nor_state_the_propagation_the_component_already_carries()
-        => AssertReports("READYM015", """
-            [ArchetypeMixin]
+    public void A_local_component_is_none_whatever_contract_it_carries()
+        => Assert.DoesNotContain(Report("""
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(global::Core.OwnedComponent))]
-            [Propagates(Propagation.OwnershipBased)]
             public readonly partial struct Owned
             {
                 public partial int Value { get; set; }
             }
+            """), d => d.Id == "READYM015");
+
+    /// <summary>The server takes a networked component's changes from its owner unless it says otherwise.</summary>
+    [Fact]
+    public void A_networked_component_without_a_contract_is_ownership_based()
+    {
+        Assert.DoesNotContain(Report($$"""
+            [ArchetypeMixin(Replication.OwnershipBased)]
+            [ExplicitComponent(typeof({{Networked}}))]
+            public readonly partial struct Subject;
+            """), d => d.Id.StartsWith("READYM"));
+
+        var error = Assert.Single(Report($$"""
+            [ArchetypeMixin(Replication.ServerAuthoritative)]
+            [ExplicitComponent(typeof({{Networked}}))]
+            public readonly partial struct Subject;
+            """), d => d.Id == "READYM015");
+
+        Assert.Contains("say Replication.OwnershipBased", error.GetMessage());
+    }
+
+    /// <summary>A networked archetype over a component, with values of its own, states it like any other.</summary>
+    [Fact]
+    public void A_networked_archetype_over_a_component_must_state_it_too()
+        => AssertReports("READYM014", $$"""
+            [Archetype]
+            [ExplicitComponent(typeof({{Networked}}))]
+            public readonly partial struct Region
+            {
+                public partial global::ReadyM.Api.Idents.AreaId AreaId { get; set; }
+            }
             """);
+
+    /// <summary>Only a shape sending values of its own has a Delivery to choose.</summary>
+    [Theory]
+    [InlineData("[ArchetypeMixin(Replication.None, Delivery = Delivery.Unreliable)]\npublic readonly partial struct Subject { public partial int Value { get; set; } }")]
+    [InlineData("[Archetype(Delivery = Delivery.Unreliable)]\npublic readonly partial struct Subject;")]
+    [InlineData("[Archetype(Networked = false, Delivery = Delivery.Unreliable)]\npublic readonly partial struct Subject { public partial int Value { get; set; } }")]
+    public void Delivery_on_a_shape_that_sends_nothing_of_its_own_is_refused(string shape)
+        => AssertReports("READYM050", shape);
+
+    [Fact]
+    public void Delivery_on_a_shape_that_sends_its_values_is_fine()
+        => Assert.DoesNotContain(Report("""
+            [ArchetypeMixin(Replication.OwnershipBased, Delivery = Delivery.Unreliable)]
+            public readonly partial struct Subject
+            {
+                public partial int Value { get; set; }
+            }
+            """), d => d.Id == "READYM050");
 
 
     /// <summary>
@@ -413,7 +478,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_value_whose_field_would_be_a_keyword_is_escaped()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial int Sealed { get; set; }
@@ -431,9 +496,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [Fact]
     public void And_escaped_on_a_shape_that_replicates()
         => Assert.Contains("@sealed", Generated("""
-            [ArchetypeMixin]
-            [Replicated]
-            [Propagates(Propagation.OwnershipBased)]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Subject
             {
                 public partial int Sealed { get; set; }
@@ -451,7 +514,7 @@ public class ReplicationTests(ITestOutputHelper output)
         => Assert.Contains(
             "CreateHandlerRegistry.Register(global::Mod.SubjectAccessors.Components,",
             Generated("""
-                [Archetype(replicated: false)]
+                [Archetype(Networked = false)]
                 public readonly partial struct Subject
                 {
                     [CreateHandler]
@@ -465,7 +528,7 @@ public class ReplicationTests(ITestOutputHelper output)
         => Assert.Contains(
             "Services.Resolve<global::Core.LocalComponent>()",
             Generated("""
-                [ArchetypeMixin]
+                [ArchetypeMixin(Replication.None)]
                 public readonly partial struct Subject
                 {
                     public partial int Value { get; set; }
@@ -479,7 +542,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [Fact]
     public void A_create_handler_returning_something_is_refused()
         => AssertReports("READYM020", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -493,7 +556,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [Fact]
     public void A_shape_declaring_two_create_handlers_is_refused()
         => AssertReports("READYM021", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -512,7 +575,7 @@ public class ReplicationTests(ITestOutputHelper output)
         => Assert.Contains(
             "DeleteHandlerRegistry.Register(global::Mod.SubjectAccessors.Components,",
             Generated("""
-                [Archetype(replicated: false)]
+                [Archetype(Networked = false)]
                 public readonly partial struct Subject
                 {
                     [DeleteHandler]
@@ -525,7 +588,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_shape_may_be_told_about_both_ends()
     {
         var generated = Generated("""
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Subject
             {
                 [CreateHandler]
@@ -543,7 +606,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [Fact]
     public void A_delete_handler_returning_something_is_refused()
         => AssertReports("READYM028", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -556,7 +619,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [Fact]
     public void A_shape_declaring_two_delete_handlers_is_refused()
         => AssertReports("READYM029", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -589,8 +652,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_marker_shape_cannot_replicate()
     {
         var reported = Report("""
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Subject;
             """);
 
@@ -598,64 +660,23 @@ public class ReplicationTests(ITestOutputHelper output)
         Assert.All(reported.Where(d => d.Id == "READYM009"), d => Assert.Equal(DiagnosticSeverity.Error, d.Severity));
     }
 
-    /// <summary>
-    /// Storage that already exists cannot be taught to replicate, so asking is an error rather than
-    /// something quietly ignored.
-    /// The component decides whether it crosses the wire, and this one does not.
-    /// </summary>
+    /// <summary>A marker states None: there is nothing of it to send, and its presence travels with the entity.</summary>
     [Fact]
-    public void A_shape_over_a_local_component_must_not_ask_to_replicate()
-    {
-        var reported = Report("""
-            [ArchetypeMixin]
-            [Replicated]
-            [ExplicitComponent(typeof(global::Core.LocalComponent))]
-            public readonly partial struct Subject
-            {
-                public partial int Value { get; set; }
-            }
-            """);
-
-        Assert.Contains(reported, d => d.Id == "READYM010");
-    }
+    public void A_marker_shape_states_none_without_complaint()
+        => Assert.DoesNotContain(Report("""
+            [ArchetypeMixin(Replication.None)]
+            public readonly partial struct Subject;
+            """), d => d.Id.StartsWith("READYM"));
 
     [Fact]
     public void A_shape_with_values_of_its_own_replicates_without_complaint()
     {
         var reported = Report("""
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
             }
-            """);
-
-        Assert.DoesNotContain(reported, d => d.Id is "READYM009" or "READYM010");
-    }
-
-    /// <summary>Nor when it does, because then the shape is asking for something already true of it.</summary>
-    [Fact]
-    public void Nor_when_the_component_is_already_networked()
-    {
-        var reported = Report($$"""
-            [ArchetypeMixin]
-            [Replicated]
-            [ExplicitComponent(typeof({{Networked}}))]
-            public readonly partial struct Subject;
-            """);
-
-        Assert.Contains(reported, d => d.Id == "READYM010");
-    }
-
-    /// <summary>Saying nothing is how a shape over a networked component replicates, and it still does.</summary>
-    [Fact]
-    public void A_shape_over_a_networked_component_replicates_without_asking()
-    {
-        var reported = Report($$"""
-            [ArchetypeMixin]
-            [ExplicitComponent(typeof({{Networked}}))]
-            public readonly partial struct Subject;
             """);
 
         Assert.DoesNotContain(reported, d => d.Id.StartsWith("READYM"));
@@ -664,56 +685,58 @@ public class ReplicationTests(ITestOutputHelper output)
     // -- what the model decides --------------------------------------------------------------------
 
     [Fact]
-    public void A_shape_that_did_not_ask_does_not_replicate()
+    public void A_shape_stating_none_does_not_replicate()
     {
         var model = Model("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
             }
             """);
 
-        Assert.False(model.HasReplicatedAttribute);
+        Assert.Equal(Replication.None, model.Replication);
         Assert.False(model.IsReplicated);
     }
 
-    /// <summary>Storage that is already networked says so itself, so the shape over it inherits that.</summary>
+    /// <summary>A networked component sends itself, so the shape over it replicates as the component does.</summary>
     [Fact]
-    public void A_networked_component_replicates_without_the_attribute()
+    public void A_networked_component_replicates_as_it_does()
     {
         var model = Model($$"""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             [ExplicitComponent(typeof({{Networked}}))]
             public readonly partial struct Subject;
             """);
 
-        Assert.False(model.HasReplicatedAttribute);
         Assert.True(model.IsReplicated);
     }
 
     /// <summary>
-    /// A marker replicates no values whatever it asks for. The entity still does, which is a
-    /// separate question the runtime reads off the archetype.
+    /// An archetype's entities are networked unless it says otherwise. Its values travel separately: a marker
+    /// replicates none, and the runtime reads whether the entity is networked off the archetype.
     /// </summary>
     [Fact]
-    public void A_marker_shape_does_not_replicate_values_even_when_it_asks()
+    public void An_archetype_is_networked_unless_it_says_otherwise()
     {
         var model = Model("""
-            [Archetype(replicated: true)]
+            [Archetype]
             public readonly partial struct Subject;
             """);
 
-        Assert.True(model.DeclaredReplicated);
+        Assert.True(model.Networked);
         Assert.False(model.IsReplicated);
+        Assert.False(Model("""
+            [Archetype(Networked = false)]
+            public readonly partial struct Subject;
+            """).Networked);
     }
 
     [Fact]
     public void Delivery_is_reliable_unless_the_shape_says_otherwise()
     {
         var model = Model("""
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -728,8 +751,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void Delivery_is_carried_from_the_attribute()
     {
         var model = Model("""
-            [ArchetypeMixin]
-            [Replicated(Delivery.Unreliable)]
+            [ArchetypeMixin(Replication.OwnershipBased, Delivery = Delivery.Unreliable)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -741,23 +763,11 @@ public class ReplicationTests(ITestOutputHelper output)
 
     // -- what an archetype declares ------------------------------------------------------------------
 
-    /// <summary>An archetype says it on [Archetype], so [Replicated] there is a second place to say it.</summary>
-    [Fact]
-    public void An_archetype_must_not_carry_replicated()
-        => AssertReports("READYM036", """
-            [Archetype(replicated: true)]
-            [Replicated]
-            public readonly partial struct Subject
-            {
-                public partial int Value { get; set; }
-            }
-            """);
-
     /// <summary>Furniture's shape: nothing of its own, and still an entity the other side hears about.</summary>
     [Fact]
     public void A_replicated_archetype_holding_no_values_is_fine()
         => Assert.Empty(Report("""
-            [Archetype(replicated: true)]
+            [Archetype]
             public readonly partial struct Subject;
             """));
 
@@ -765,8 +775,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_replicated_archetype_replicates_its_own_values()
     {
         var model = Model("""
-            [Archetype(replicated: true)]
-            [Propagates(Propagation.OwnershipBased)]
+            [Archetype(Replication = Replication.OwnershipBased)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -781,7 +790,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_local_archetype_keeps_its_own_values_local()
     {
         var model = Model("""
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -792,23 +801,11 @@ public class ReplicationTests(ITestOutputHelper output)
         Assert.False(model.RegistersReplication);
     }
 
-    /// <summary>The same rule a replicated mixin is held to: values that are sent need a stated writer.</summary>
-    [Fact]
-    public void A_replicated_archetype_with_values_must_say_how_they_propagate()
-        => AssertReports("READYM014", """
-            [Archetype(replicated: true)]
-            public readonly partial struct Subject
-            {
-                public partial int Value { get; set; }
-            }
-            """);
-
     [Fact]
     public void An_archetype_carries_its_delivery_on_the_attribute()
     {
         var model = Model("""
-            [Archetype(replicated: true, Delivery = Delivery.Unreliable)]
-            [Propagates(Propagation.OwnershipBased)]
+            [Archetype(Replication = Replication.OwnershipBased, Delivery = Delivery.Unreliable)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -825,19 +822,17 @@ public class ReplicationTests(ITestOutputHelper output)
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void An_archetype_set_carries_its_flag(bool replicated)
+    public void An_archetype_set_carries_its_flag(bool networked)
         => Assert.Contains(
-            $"ComponentSet.Archetype({(replicated ? "true" : "false")}, ",
+            $"ComponentSet.Archetype({(networked ? "true" : "false")}, ",
             Generated($$"""
-                [ArchetypeMixin]
-                [Replicated]
-                [Propagates(Propagation.OwnershipBased)]
+                [ArchetypeMixin(Replication.OwnershipBased)]
                 public readonly partial struct Telemetry
                 {
                     public partial int Ticks { get; set; }
                 }
 
-                [Archetype(replicated: {{(replicated ? "true" : "false")}})]
+                [Archetype(Networked = {{(networked ? "true" : "false")}})]
                 [Include(typeof(Telemetry))]
                 public readonly partial struct Subject;
                 """));
@@ -847,7 +842,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_mixin_set_is_not_an_archetype_set()
     {
         var generated = Generated("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial int Value { get; set; }
@@ -867,8 +862,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_replicated_collection_that_is_reachable_as_a_whole_is_refused()
     {
         var reported = Report("""
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Subject
             {
                 public partial global::Yooni.Native.Container.NativeList<int> Items { get; set; }
@@ -882,8 +876,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_private_replicated_collection_is_accepted()
     {
         var reported = Report("""
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Subject
             {
                 private partial global::Yooni.Native.Container.NativeList<int> Items { get; set; }
@@ -900,7 +893,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [Fact]
     public void A_local_shape_cannot_hold_a_collection()
         => AssertReports("READYM018", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial global::Yooni.Native.Container.NativeList<int> Items { get; set; }
@@ -911,7 +904,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [Fact]
     public void Nor_a_private_one()
         => AssertReports("READYM018", """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 private partial global::Yooni.Native.Container.NativeList<int> Items { get; set; }
@@ -925,9 +918,7 @@ public class ReplicationTests(ITestOutputHelper output)
     [InlineData("global::Yooni.Native.Container.NativeList<global::Friflo.Engine.ECS.Entity>")]
     public void A_replicated_shape_cannot_hold_a_value_it_cannot_send(string type)
         => AssertReports("READYM046", $$"""
-            [ArchetypeMixin]
-            [Replicated]
-            [Propagates(Propagation.ServerAuthoritative)]
+            [ArchetypeMixin(Replication.ServerAuthoritative)]
             public readonly partial struct Subject
             {
                 private partial {{type}} Items { get; set; }
@@ -938,7 +929,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_local_shape_can_hold_a_plain_collection()
     {
         var reported = Report("""
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Subject
             {
                 public partial global::System.Collections.Generic.List<int> Items { get; set; }
@@ -952,9 +943,7 @@ public class ReplicationTests(ITestOutputHelper output)
     public void A_replicated_shape_can_hold_what_it_sends()
     {
         var reported = Report("""
-            [ArchetypeMixin]
-            [Replicated]
-            [Propagates(Propagation.ServerAuthoritative)]
+            [ArchetypeMixin(Replication.ServerAuthoritative)]
             public readonly partial struct Subject
             {
                 public partial int Count { get; set; }

@@ -30,7 +30,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
 
         namespace Mod;
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Stamped
         {
             public partial int Mark { get; set; }
@@ -39,7 +39,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
             private void OnCreated() => Mark = 7;
         }
 
-        [Archetype(replicated: false)]
+        [Archetype(Networked = false)]
         [Include(typeof(Stamped))]
         public readonly partial struct Parcel;
 
@@ -100,7 +100,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
 
             namespace Mod;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Subject
             {
                 public partial int Mark { get; set; }
@@ -118,7 +118,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
 
             namespace Mod;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Subject
             {
                 public partial int Mark { get; set; }
@@ -140,7 +140,7 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
 
             namespace Mod;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Subject
             {
                 public partial int Mark { get; set; }

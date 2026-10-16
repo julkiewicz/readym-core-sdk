@@ -5,7 +5,7 @@ using ReadyM.SDK.Attributes;
 namespace ReadyM.SDK.Archetypes.Core;
 
 /// <summary>A scope for one loaded cell of an area, holding what is in it.</summary>
-[Archetype(replicated: true)]
+[Archetype(Replication = Replication.OwnershipBased)]
 [ExplicitComponent(typeof(CellScopeComponent))]
 public readonly partial struct Cell : IScope
 {

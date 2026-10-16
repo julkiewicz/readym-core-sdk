@@ -245,7 +245,7 @@ public class ShapeMappingTests : ClientSdkTest
 
     // -- a value the game owns outright -------------------------------------------------------------
 
-    /// <summary>A value the game owns: no push, which the shape's own Propagation would also say.</summary>
+    /// <summary>A value the game owns: no push, which the shape's own Replication would also say.</summary>
     private static void MappedFromGameOnly()
     {
         var registry = new ShapeMappingRegistry();

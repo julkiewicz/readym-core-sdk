@@ -8,13 +8,13 @@ internal static class PropagationContracts
 {
     private const string Tags = "global::ReadyM.Api.Mapping.Tags.";
 
-    public static string? Of(Propagation? propagation) => propagation switch
+    public static string? Of(Replication? replication) => replication switch
     {
-        Archetypes.Propagation.ToEcsOnly => Tags + "IAlwaysPropagatesToEcsOnly",
-        Archetypes.Propagation.ToGameOnly => Tags + "IAlwaysPropagatesToGameOnly",
-        Archetypes.Propagation.Both => Tags + "IAlwaysPropagates",
-        Archetypes.Propagation.ServerAuthoritative => Tags + "IServerAuthoritative",
-        Archetypes.Propagation.OwnershipBased => Tags + "IOwnershipBased",
+        Replication.ToEcsOnly => Tags + "IAlwaysPropagatesToEcsOnly",
+        Replication.ToGameOnly => Tags + "IAlwaysPropagatesToGameOnly",
+        Replication.Both => Tags + "IAlwaysPropagates",
+        Replication.ServerAuthoritative => Tags + "IServerAuthoritative",
+        Replication.OwnershipBased => Tags + "IOwnershipBased",
         _ => null
     };
 }

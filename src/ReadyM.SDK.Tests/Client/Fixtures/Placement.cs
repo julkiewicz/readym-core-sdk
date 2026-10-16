@@ -2,7 +2,7 @@ using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Tests.Client.Fixtures;
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Placement
 {
     public partial float X { get; set; }

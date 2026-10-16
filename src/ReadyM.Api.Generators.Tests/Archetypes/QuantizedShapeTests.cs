@@ -38,9 +38,7 @@ public class QuantizedShapeTests(ITestOutputHelper output)
 
     private const string ReplicatedMixin =
         """
-        [ArchetypeMixin]
-        [Replicated]
-        [Propagates(Propagation.OwnershipBased)]
+        [ArchetypeMixin(Replication.OwnershipBased)]
         public readonly partial struct Pose
         {
             [Quantize(-1048576f, 1048576f, 24)] public partial Vector3 Position { get; set; }
@@ -83,8 +81,7 @@ public class QuantizedShapeTests(ITestOutputHelper output)
     {
         var generated = Generated(
             """
-            [Archetype(replicated: true)]
-            [Propagates(Propagation.OwnershipBased)]
+            [Archetype(Replication = Replication.OwnershipBased)]
             public readonly partial struct Wolf
             {
                 [Quantize(-1048576f, 1048576f, 24)] public partial Vector3 Position { get; set; }
@@ -119,7 +116,7 @@ public class QuantizedShapeTests(ITestOutputHelper output)
     {
         var reported = Report(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [ExplicitComponent(typeof(Core.PoseComponent))]
             public readonly partial struct Pose
             {
@@ -141,7 +138,7 @@ public class QuantizedShapeTests(ITestOutputHelper output)
     {
         var reported = Report(
             $$"""
-              [ArchetypeMixin]
+              [ArchetypeMixin(Replication.None)]
               public readonly partial struct Blend
               {
                   {{property}}
@@ -164,8 +161,7 @@ public class QuantizedShapeTests(ITestOutputHelper output)
     {
         var generated = Generated(
             """
-            [ArchetypeMixin]
-            [Replicated]
+            [ArchetypeMixin(Replication.OwnershipBased)]
             public readonly partial struct Level
             {
                 [HalfPrecision] public partial int Value { get; set; }

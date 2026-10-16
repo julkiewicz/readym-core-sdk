@@ -32,43 +32,43 @@ public class GeneratorAgainstTheSdkTests(ITestOutputHelper output)
 
         namespace Mod;
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Position
         {
             public partial float X { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Vitals
         {
             public partial int Hp { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Named
         {
             public partial string Label { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Speed
         {
             public partial float Pace { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Wealth
         {
             public partial int Gold { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Mood
         {
             public partial float Spirit { get; set; }
         }
 
-        [Archetype(replicated: false)]
+        [Archetype(Networked = false)]
         [Include(typeof(Position))]
         [Include(typeof(Vitals))]
         [Include(typeof(Named))]

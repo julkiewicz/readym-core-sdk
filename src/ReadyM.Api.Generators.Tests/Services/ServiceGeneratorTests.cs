@@ -21,13 +21,13 @@ public class ServiceGeneratorTests(ITestOutputHelper output)
 
           namespace Mod;
 
-          [Archetype(replicated: false)]
+          [Archetype(Networked = false)]
           public readonly partial struct Subject
           {
               public partial int Mark { get; set; }
           }
 
-          [ArchetypeMixin]
+          [ArchetypeMixin(Replication.None)]
           public readonly partial struct Nothing;
 
           {{service}}

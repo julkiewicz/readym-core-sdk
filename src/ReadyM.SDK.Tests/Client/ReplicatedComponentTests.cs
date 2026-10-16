@@ -5,7 +5,7 @@ using ReadyM.SDK.Tests.Client.Fixtures;
 namespace ReadyM.SDK.Tests.Client;
 
 /// <summary>
-/// A shape marked [Replicated] gets a component that tracks its own changes, and every way of
+/// A shape that replicates gets a component that tracks its own changes, and every way of
 /// writing it has to go through that tracking rather than round it.
 /// </summary>
 public class ReplicatedComponentTests : ClientSdkTest

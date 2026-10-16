@@ -360,11 +360,12 @@ internal sealed class ComponentOwner(IncludeModel? include, bool marker)
 }
 
 /// <summary>
-/// Mirrors <c>ReadyM.SDK.Attributes.Propagation</c>: a generator cannot reference the SDK, and the
+/// Mirrors <c>ReadyM.SDK.Attributes.Replication</c>: a generator cannot reference the SDK, and the
 /// attribute argument arrives as that enum's index, so the order of these has to stay the same.
 /// </summary>
-internal enum Propagation
+internal enum Replication
 {
+    None,
     ToEcsOnly,
     ToGameOnly,
     Both,
@@ -396,10 +397,7 @@ internal sealed class DeclarationModel
         Includes = ReadIncludes(symbol);
         Extends = ReadExtends(symbol);
         Tags = ReadTags(symbol);
-        (HasReplicatedAttribute, var mixinDelivery) = ReadReplication(symbol);
-        (DeclaredReplicated, var archetypeDelivery) = ReadArchetype(symbol);
-        Delivery = DeclaredReplicated is null ? mixinDelivery : archetypeDelivery;
-        Propagation = ReadPropagation(symbol);
+        (Networked, Replication, Delivery, StatesDelivery) = ReadReplication(symbol);
         CreateHandlers = ReadHandlers(symbol, ArchetypeNames.CreateHandlerAttribute);
         DeleteHandlers = ReadHandlers(symbol, ArchetypeNames.DeleteHandlerAttribute);
         Forwards = ReadForwards(symbol, ExplicitComponent, Collections).Concat(CollectionMembers()).ToList();
@@ -493,31 +491,35 @@ internal sealed class DeclarationModel
     public INamedTypeSymbol? ExplicitComponent { get; }
 
     /// <summary>
-    /// Whether [Replicated] is on the declaration. Kept apart from <see cref="IsReplicated"/> so a
-    /// rule can tell asking to replicate from replicating because the component already does.
-    /// </summary>
-    public bool HasReplicatedAttribute { get; }
-
-    /// <summary>
-    /// What [Archetype(replicated: ...)] says, which is whether the archetype's entities get a network
+    /// What [Archetype(Networked = ...)] says, which is whether the archetype's entities get a network
     /// identity. Null for a mixin, and for an archetype whose attribute does not compile.
     /// </summary>
-    public bool? DeclaredReplicated { get; }
+    public bool? Networked { get; }
 
     /// <summary>
-    /// Whether the declaration asks for its values to cross the wire: an archetype by its flag, a
-    /// mixin by [Replicated].
+    /// What the declaration states for Replication: the argument of [ArchetypeMixin], or [Archetype]'s
+    /// named one. Null when it states none, which only an archetype can.
     /// </summary>
-    public bool AsksToReplicate => DeclaredReplicated ?? (!IsArchetype && HasReplicatedAttribute);
+    public Replication? Replication { get; }
 
     /// <summary>
-    /// How its values travel between the game and the ECS, and who may write them. Only a
-    /// replicated shape has any say: a local one is the mod's own business either way.
+    /// Whether the declaration asks for its own values to cross the wire: a replicating Replication, on a
+    /// networked archetype if it is one.
     /// </summary>
-    public Propagation? Propagation { get; }
+    public bool AsksToReplicate
+        => Replication is { } stated && stated != Archetypes.Replication.None && (!IsArchetype || Networked == true);
+
+    /// <summary>
+    /// How its values travel between the game and the ECS, and who may write them, for a shape that
+    /// replicates them. A local one is the mod's own business either way.
+    /// </summary>
+    public Replication? Propagation => AsksToReplicate ? Replication : null;
 
     /// <summary>How this shape's changes travel, when it replicates at all.</summary>
     public Delivery Delivery { get; }
+
+    /// <summary>Whether the declaration names a Delivery at all, which only a shape sending values of its own may.</summary>
+    public bool StatesDelivery { get; }
 
     /// <summary>
     /// Whether this shape's values reach the other side. A shape over a component it borrows takes
@@ -542,60 +544,81 @@ internal sealed class DeclarationModel
 
     public static bool IsNetworkedComponent(INamedTypeSymbol component)
         => component.AllInterfaces.Any(contract =>
-            contract.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-            == ArchetypeNames.NetworkedComponent);
+               contract.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+               == ArchetypeNames.NetworkedComponent)
+           // Declared in the same compilation, the interface is still to be generated
+           || component.GetAttributes().Any(attribute
+               => attribute.AttributeClass?.Name == "DeriveINetworkedComponentAttribute");
 
-    private static Propagation? ReadPropagation(INamedTypeSymbol symbol)
-    {
-        foreach (var attribute in symbol.GetAttributes())
-            if (attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.PropagatesAttribute
-                && attribute.ConstructorArguments.Length > 0
-                && attribute.ConstructorArguments[0].Value is int index)
-                return (Propagation)index;
-
-        return null;
-    }
-
-    private static (bool Present, Delivery Delivery) ReadReplication(INamedTypeSymbol symbol)
+    /// <summary>
+    /// What [Archetype] or [ArchetypeMixin] says about replicating: an archetype through named arguments, Networked
+    /// on unless turned off, and a mixin through its required Replication.
+    /// </summary>
+    private static (bool? Networked, Replication? Replication, Delivery Delivery, bool StatesDelivery) ReadReplication(
+        INamedTypeSymbol symbol)
     {
         foreach (var attribute in symbol.GetAttributes())
         {
-            if (attribute.AttributeClass?.ToDisplayString() != ArchetypeNames.ReplicatedAttribute)
+            var name = attribute.AttributeClass?.ToDisplayString();
+            var isArchetype = name == ArchetypeNames.ArchetypeAttribute;
+
+            if (!isArchetype && name != ArchetypeNames.MixinAttribute)
                 continue;
 
-            var delivery = attribute.ConstructorArguments.Length > 0
-                           && attribute.ConstructorArguments[0].Value is int index
-                ? (Delivery)index
-                : Delivery.Reliable;
-
-            return (true, delivery);
-        }
-
-        return (false, Delivery.Reliable);
-    }
-
-    private static (bool? Replicated, Delivery Delivery) ReadArchetype(INamedTypeSymbol symbol)
-    {
-        foreach (var attribute in symbol.GetAttributes())
-        {
-            if (attribute.AttributeClass?.ToDisplayString() != ArchetypeNames.ArchetypeAttribute)
-                continue;
-
-            bool? replicated = attribute.ConstructorArguments.Length > 0
-                               && attribute.ConstructorArguments[0].Value is bool flag
-                ? flag
+            bool? networked = isArchetype ? true : null;
+            Replication? replication = !isArchetype
+                                       && attribute.ConstructorArguments.Length > 0
+                                       && attribute.ConstructorArguments[0].Value is int stated
+                ? (Replication)stated
                 : null;
-
             var delivery = Delivery.Reliable;
+            var statesDelivery = false;
 
             foreach (var named in attribute.NamedArguments)
-                if (named.Key == "Delivery" && named.Value.Value is int index)
-                    delivery = (Delivery)index;
+            {
+                switch (named.Key)
+                {
+                    case "Networked" when isArchetype && named.Value.Value is bool flag:
+                        networked = flag;
+                        break;
+                    case "Replication" when isArchetype && named.Value.Value is int index:
+                        replication = (Replication)index;
+                        break;
+                    case "Delivery" when named.Value.Value is int index:
+                        delivery = (Delivery)index;
+                        statesDelivery = true;
+                        break;
+                }
+            }
 
-            return (replicated, delivery);
+            return (networked, replication, delivery, statesDelivery);
         }
 
-        return (null, Delivery.Reliable);
+        return (null, null, Delivery.Reliable, false);
+    }
+
+    /// <summary>
+    /// What a component backing a shape does about replicating, in the shape's own terms: not sent, one of the five
+    /// contracts it carries, or owner-written, which is how the server treats a networked component that carries none.
+    /// </summary>
+    public static Replication ReplicationOf(INamedTypeSymbol component)
+    {
+        if (!IsNetworkedComponent(component))
+            return Archetypes.Replication.None;
+
+        foreach (var value in new[]
+                 {
+                     Archetypes.Replication.ToEcsOnly, Archetypes.Replication.ToGameOnly, Archetypes.Replication.Both,
+                     Archetypes.Replication.ServerAuthoritative, Archetypes.Replication.OwnershipBased
+                 })
+        {
+            var contract = PropagationContracts.Of(value);
+
+            if (component.AllInterfaces.Any(i => i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == contract))
+                return value;
+        }
+
+        return Archetypes.Replication.OwnershipBased;
     }
 
     /// <summary>The accessor [Index] marks, for a shape whose component is generated.</summary>

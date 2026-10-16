@@ -30,19 +30,19 @@ public class StructuralChangeInQueryAnalyzerTests(ITestOutputHelper output)
 
         namespace Mod;
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Position
         {
             public partial float X { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Vitals
         {
             public partial int Hp { get; set; }
         }
 
-        [Archetype(replicated: false)]
+        [Archetype(Networked = false)]
         [Include(typeof(Position))]
         [Include(typeof(Vitals))]
         public readonly partial struct Npc

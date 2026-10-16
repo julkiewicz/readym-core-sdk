@@ -2,7 +2,7 @@ using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Tests.Examples.Declarations;
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Vitals
 {
     public partial float Hp { get; set; }

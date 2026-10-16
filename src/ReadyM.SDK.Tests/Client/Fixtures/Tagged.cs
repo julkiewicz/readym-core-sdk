@@ -9,7 +9,7 @@ public readonly struct WatchedTag : ITag;
 public readonly struct SecondTag : ITag;
 
 /// <summary>A shape whose entities carry tags from the moment they exist.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Tag(typeof(WatchedTag))]
 [Tag(typeof(SecondTag))]
 public readonly partial struct Watched
@@ -18,7 +18,7 @@ public readonly partial struct Watched
 }
 
 /// <summary>The same shape without any, so a test can tell tags apart from the archetype.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 public readonly partial struct Unwatched
 {
     public partial int Marker { get; set; }

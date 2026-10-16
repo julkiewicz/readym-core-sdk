@@ -2,7 +2,7 @@ using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Tests.Client.Fixtures;
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Health))]
 [Include(typeof(Placement))]
 public readonly partial struct Chest
@@ -11,7 +11,7 @@ public readonly partial struct Chest
 }
 
 /// <summary>Everything a chest is, plus loot. Composition in place of an optional include.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [IncludeArchetype(typeof(Chest))]
 [Include(typeof(Loot))]
 public readonly partial struct LootedChest;

@@ -75,7 +75,7 @@ internal class ArchetypeGenerator : IIncrementalGenerator
             .AddRange(QuantizedShapeRules.Check(model))
             .AddRange(CreateHandlerEmitter.Check(model))
             .AddRange(DeleteHandlerEmitter.Check(model))
-            .AddRange(ReplicationRules.CheckPropagation(model));
+            .AddRange(ReplicationRules.CheckStated(model));
         // Accessors reachable from a chunk go on whenever the server SDK is there, because another
         // declaration may include this one. The view itself needs this shape to be walkable.
         var chunks = ChunkNames.Resolve(compilation);

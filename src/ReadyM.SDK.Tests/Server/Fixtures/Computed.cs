@@ -3,7 +3,7 @@ using ReadyM.SDK.Attributes;
 namespace ReadyM.SDK.Tests.Server.Fixtures;
 
 /// <summary>Works out what it says from its values, which whatever includes it gets too.</summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Stamina
 {
     public partial int Value { get; set; }
@@ -19,6 +19,6 @@ public readonly partial struct Stamina
     }
 }
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Stamina))]
 public readonly partial struct Runner;

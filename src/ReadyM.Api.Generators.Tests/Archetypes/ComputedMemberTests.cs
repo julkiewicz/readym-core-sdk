@@ -26,7 +26,7 @@ public class ComputedMemberTests(ITestOutputHelper output)
 
         namespace Mod;
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Health
         {
             public partial float Value { get; set; }
@@ -65,7 +65,7 @@ public class ComputedMemberTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             public readonly partial struct Hero;
 
@@ -86,7 +86,7 @@ public class ComputedMemberTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             public readonly partial struct Hero;
 
@@ -117,7 +117,7 @@ public class ComputedMemberTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health), "Main")]
             public readonly partial struct Hero;
 
@@ -135,11 +135,11 @@ public class ComputedMemberTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             public readonly partial struct Walker;
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [IncludeArchetype(typeof(Walker))]
             public readonly partial struct Hero;
 
@@ -157,10 +157,10 @@ public class ComputedMemberTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             public readonly partial struct Walker;
 
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             [Extends(typeof(Walker))]
             public readonly partial struct Stamina
             {
@@ -191,7 +191,7 @@ public class ComputedMemberTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             public readonly partial struct Hero;
             """);
@@ -211,13 +211,13 @@ public class ComputedMemberTests(ITestOutputHelper output)
     {
         var run = Run(
             """
-            [ArchetypeMixin]
+            [ArchetypeMixin(Replication.None)]
             public readonly partial struct Alarm
             {
                 public partial bool IsLow { get; set; }
             }
 
-            [Archetype(replicated: false)]
+            [Archetype(Networked = false)]
             [Include(typeof(Health))]
             [Include(typeof(Alarm))]
             public readonly partial struct Hero;
@@ -246,7 +246,7 @@ public class ComputedMemberTests(ITestOutputHelper output)
         var run = SourceGeneratorTestHelper.RunGenerators(
             [("Shapes.cs", Source(
                 """
-                [Archetype(replicated: false)]
+                [Archetype(Networked = false)]
                 [Include(typeof(Health))]
                 public readonly partial struct Hero;
 

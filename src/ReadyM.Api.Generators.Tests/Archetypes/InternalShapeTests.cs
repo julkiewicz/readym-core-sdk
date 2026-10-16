@@ -24,27 +24,26 @@ public class InternalShapeTests(ITestOutputHelper output)
 
         namespace Mod;
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         internal readonly partial struct Health
         {
             public partial float Value { get; set; }
         }
 
-        [ArchetypeMixin]
-        [Replicated]
+        [ArchetypeMixin(Replication.OwnershipBased)]
         internal readonly partial struct Intents
         {
             public partial global::Yooni.Native.Container.NativeList<int> Entries { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         [Extends(typeof(Player))]
         internal readonly partial struct Wallet
         {
             public partial int Balance { get; set; }
         }
 
-        [Archetype(replicated: true)]
+        [Archetype]
         [Include(typeof(Health))]
         [Include(typeof(Intents))]
         internal readonly partial struct Hero
@@ -52,7 +51,7 @@ public class InternalShapeTests(ITestOutputHelper output)
             [Index] public partial int Number { get; set; }
         }
 
-        [Archetype(replicated: false)]
+        [Archetype(Networked = false)]
         [IncludeArchetype(typeof(Hero))]
         internal readonly partial struct Champion;
         """;
