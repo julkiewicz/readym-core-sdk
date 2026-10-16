@@ -76,6 +76,36 @@ public class ServiceLifetimeTests
         Assert.Equal(3, container.Resolve<Settings>().Difficulty);
     }
 
+    /// <summary>
+    /// A mod registers its RPC handlers again as the API they implement. Started once per registration, they
+    /// subscribed to their messages twice, and the second subscription broke every message after the first.
+    /// </summary>
+    [Fact]
+    public void One_instance_behind_two_registrations_starts_once()
+    {
+        using var container = Filled();
+        var hosted = new Hosted();
+
+        container.RegisterSingleton(hosted);
+        container.RegisterSingleton<IHostedApi, Hosted>(hosted);
+        container.StartHostedServices();
+
+        Assert.Equal(1, hosted.Starts);
+    }
+
+    private interface IHostedApi;
+
+    private sealed class Hosted : IHostedService, IHostedApi
+    {
+        public int Starts { get; private set; }
+
+        public void OnScopeStart() => Starts++;
+
+        public void Dispose()
+        {
+        }
+    }
+
     private static Container Started()
     {
         var container = Filled();
