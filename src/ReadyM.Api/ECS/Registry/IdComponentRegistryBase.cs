@@ -20,10 +20,10 @@ internal abstract class IdComponentRegistryBase<TRegistry, TComponent>(
         return base.RegisterComponentImpl(defaultValue);
     }
 
-    protected override TRegistry RegisterModComponentImpl(ModComponentInfo info, string typeFullName)
+    protected override TRegistry RegisterModComponentImpl(string typeFullName)
     {
         TakeId();
-        return base.RegisterModComponentImpl(info, typeFullName);
+        return base.RegisterModComponentImpl(typeFullName);
     }
 
     private void TakeId()

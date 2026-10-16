@@ -209,3 +209,6 @@ internal unsafe delegate void EntityListCallback(IntPtr entities, int count);
 internal unsafe delegate void QueryInScopeDelegate(int* componentIds, int n, RawEntity scope, EntityListCallback cb);
 
 internal delegate int RegisterModComponentDelegate(ModComponentInfo info, NativeString256 typeFullName);
+
+/// <summary>Hands the relay what it needs to replicate one networked component a mod defines.</summary>
+internal delegate void RegisterModNetworkedComponentDelegate(ModNetworkedComponentInfo info, NativeString256 typeFullName);

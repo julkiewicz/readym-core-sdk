@@ -2,7 +2,10 @@
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Loader;
+using ReadyM.Api.Multiplayer.ECS.Components;
+using ReadyM.Api.Multiplayer.ECS.Registry;
 using ReadyM.Relay.Server.Sdk.Ecs.Components;
+using ReadyM.Relay.Server.Sdk.Ecs.Networked;
 
 namespace ReadyM.Relay.Server.Sdk;
 
@@ -19,6 +22,31 @@ public abstract class ServerModBase
     public void InitializeAot(IComponentRegistry registry)
     {
         RegisterComponents(registry);
+    }
+
+    /// <summary>
+    /// Runs <see cref="RegisterComponents"/> against the networked registry, which takes the networked half of
+    /// what it declares. Storage is handed the method directly, through <see cref="InitializeAot"/>.
+    /// </summary>
+    internal void RegisterNetworkedComponents(INetworkedComponentRegistry registry)
+        => RegisterComponents(new NetworkedComponents(registry));
+
+    /// <summary>The networked half of what a v0 mod declares: its local components are not networked.</summary>
+    private sealed class NetworkedComponents(INetworkedComponentRegistry registry) : IComponentRegistry
+    {
+        public void RegisterLocalComponent<T>() where T : struct
+        {
+        }
+
+        public void RegisterLocalComponent(Type component)
+        {
+        }
+
+        public void RegisterComponent<T>(byte delivery = 0) where T : struct, INetworkedComponent
+            => registry.RegisterComponent<T>(ModDelivery.Of(delivery));
+
+        public void RegisterComponent(Type component, byte delivery)
+            => registry.RegisterComponent(component, ModDelivery.Of(delivery));
     }
 
     public void Initialize(IServerDependencyContainer services, string modDirectory)

@@ -40,6 +40,7 @@ internal sealed class FakeRelay
     private readonly IsEntityAliveDelegate _isEntityAlive;
     private readonly GetComponentIdByNameDelegate _getComponentIdByName;
     private readonly RegisterModComponentDelegate _registerModComponent;
+    private readonly RegisterModNetworkedComponentDelegate _registerModNetworkedComponent;
     private readonly RegisterArchetypeDelegate _registerArchetype;
     private readonly ResolveArchetypeDelegate _resolveArchetype;
     private readonly AddArchetypeTagDelegate _addArchetypeTag;
@@ -81,6 +82,7 @@ internal sealed class FakeRelay
         _isEntityAlive = IsEntityAliveImpl;
         _getComponentIdByName = GetComponentIdByNameImpl;
         _registerModComponent = static (_, _) => -1;
+        _registerModNetworkedComponent = static (_, _) => { };
         _registerArchetype = RegisterArchetypeImpl;
         _resolveArchetype = ResolveArchetypeImpl;
         _addArchetypeTag = AddArchetypeTagImpl;
@@ -173,6 +175,7 @@ internal sealed class FakeRelay
     internal AotPointers Aot => new()
     {
         RegisterModComponent = Marshal.GetFunctionPointerForDelegate(_registerModComponent),
+        RegisterModNetworkedComponent = Marshal.GetFunctionPointerForDelegate(_registerModNetworkedComponent),
         GetComponentIdByName = Marshal.GetFunctionPointerForDelegate(_getComponentIdByName),
         AddArchetypeExtension = IntPtr.Zero
     };

@@ -4,6 +4,7 @@
 public struct AotPointers
 {
     public required IntPtr RegisterModComponent;
+    public required IntPtr RegisterModNetworkedComponent;
     public required IntPtr GetComponentIdByName;
     public required IntPtr AddArchetypeExtension;
 }

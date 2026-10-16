@@ -101,7 +101,7 @@ internal sealed class ModComponentRegistry(
         if (stride > 256)
             logger.LogWarning("Local component {Component} is {Stride} bytes which exceeds 256 bytes", type.FullName, stride);
 
-        var registration = heapManager.RegisterLocalComponent<T>();
+        var registration = heapManager.RegisterComponent<T>();
         _registerModComponent(registration, new NativeString256(typeof(T).FullName, false));
 
         Collect<T>();
@@ -112,6 +112,10 @@ internal sealed class ModComponentRegistry(
     /// Must be called during <c>ServerModBase.Init()</c>, before any entity creation.
     /// Returns the component ID to use in all subsequent <c>Query</c> calls.
     /// </summary>
+    /// <param name="delivery">
+    /// Not read here: this registry holds storage. How the component travels belongs to the networked
+    /// registry, which a mod declares into separately.
+    /// </param>
     public void RegisterComponent<T>(byte delivery = 0) where T : struct, INetworkedComponent
     {
         var type = typeof(T);
@@ -123,7 +127,7 @@ internal sealed class ModComponentRegistry(
         if (stride > 256)
             logger.LogWarning("Component {Component} is {Stride} bytes which exceeds 256 bytes", type.FullName, stride);
 
-        var registration = heapManager.RegisterComponent<T>(delivery);
+        var registration = heapManager.RegisterComponent<T>();
         _registerModComponent(registration, new NativeString256(typeof(T).FullName, false));
 
         logger.LogDebug("Registered component {Component}", type.FullName);

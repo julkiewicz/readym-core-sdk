@@ -13,7 +13,7 @@ internal class DefaultNetworkedComponentJobRegistration(
 {
     private class RegisterJobsCallback(DefaultNetworkedComponentJobRegistration owner, NetworkedComponentJobRegistry jobRegistry) : INetworkedComponentRegistryCallback
     {
-        public void AcceptModComponent(INetworkedComponentRegistry registry, ModComponentInfo info, string typeFullName)
+        public void AcceptModComponent(INetworkedComponentRegistry registry, string typeFullName)
         {
             // Nothing to do here, mod component jobs are registered elsewhere
         }

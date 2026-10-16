@@ -1,8 +1,7 @@
-﻿using System.Diagnostics;
-using System.Reflection;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Friflo.Engine.ECS;
+using LiteNetLib;
 using LiteNetLib.Utils;
 using ReadyM.Api.Interop;
 using ReadyM.Api.Multiplayer;
@@ -17,8 +16,8 @@ namespace ReadyM.Relay.Server.Sdk.Ecs;
 /// CoreCLR-side owner of plugin component type registrations and all per-archetype heaps.
 ///
 /// Lifecycle: one instance per ECS world. Call RegisterComponent&lt;T&gt; for each plugin
-/// component type during initialization, pass the returned PluginComponentRegistration to the
-/// AOT side, then dispose when the world shuts down.
+/// component type during initialization, and RegisterNetworkedComponent&lt;T&gt; for each networked
+/// one, pass what they return to the AOT side, then dispose when the world shuts down.
 ///
 /// The AOT side calls AllocHeap each time a new archetype needs a heap - no coordination
 /// needed from the plugin after registration. All allocated heaps are tracked here and
@@ -39,9 +38,6 @@ internal sealed class ModComponentManager : IDisposable
 
     internal IInternedStringIndex? InternedStringIndex { get; set; }
 
-    // The SDK's wire value for Delivery.Reliable; 1 is unreliable
-    private const byte ReliableDelivery = 0;
-
     // Null when no index was handed over: a default scope would clear whichever index the thread already has
     private InternedStrings.Scope? EnterInternedStrings()
         => InternedStringIndex is { } index ? InternedStrings.Enter(index) : null;
@@ -51,11 +47,11 @@ internal sealed class ModComponentManager : IDisposable
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Registers component type T. Returns a ModComponentInfo to hand to the
+    /// Registers the storage of component type T. Returns a ModComponentInfo to hand to the
     /// AOT relay's RegisterModComponent. The embedded AllocHeap delegate allocates a
     /// fresh TypedComponentHeap&lt;T&gt; each time an archetype needs one.
     /// </summary>
-    public ModComponentInfo RegisterLocalComponent<T>() where T : struct
+    public ModComponentInfo RegisterComponent<T>() where T : struct
     {
         // Bind the factory to this T at registration time. Capturing via method group
         // means each call to RegisterComponent<T> creates an independent delegate instance
@@ -67,47 +63,19 @@ internal sealed class ModComponentManager : IDisposable
         {
             Stride = Unsafe.SizeOf<T>(),
             IsBlittable = IsBlittable<T>() ? (byte)1 : (byte)0,
-            AllocHeap = Marshal.GetFunctionPointerForDelegate(factory),
-            WriteSnapshot = IntPtr.Zero,
-            ReadSnapshot = IntPtr.Zero
+            AllocHeap = Marshal.GetFunctionPointerForDelegate(factory)
         };
     }
 
-    public ModComponentInfo RegisterComponent(Type componentType)
-    {
-        var method = GetType().GetMethod(nameof(RegisterComponent), BindingFlags.Public | BindingFlags.Instance, []);
-        Debug.Assert(method != null, "RegisterComponent method not found");
-
-        var genericMethod = method.MakeGenericMethod(componentType);
-        var result = genericMethod.Invoke(this, []) as ModComponentInfo?;
-        if (result == null)
-            throw new InvalidOperationException($"Failed to register component type {componentType.FullName}");
-
-        return result.Value;
-    }
-
     /// <summary>
-    /// Registers component type T. Returns a PluginComponentRegistration to hand to the
-    /// AOT relay's RegisterPluginComponent. The embedded AllocHeap delegate allocates a
-    /// fresh TypedComponentHeap&lt;T&gt; each time an archetype needs one.
+    /// Registers what the relay needs to replicate networked component type T: callbacks that write and read
+    /// its snapshots and deltas, addressed by heap and index. Returns a ModNetworkedComponentInfo to hand to
+    /// the AOT relay's RegisterModNetworkedComponent. The storage of T is registered separately, through
+    /// <see cref="RegisterComponent{T}"/>.
     /// </summary>
-    public unsafe ModComponentInfo RegisterComponent<T>(byte delivery = 0)
+    public unsafe ModNetworkedComponentInfo RegisterNetworkedComponent<T>(DeliveryMethod delivery)
         where T : struct, INetworkedComponent
     {
-        // A mod component is read here, where no index is entered, so its ids would all read as empty
-        // An id is only readable after the reliable message carrying its string, and an unreliable delta can overtake it
-        if (default(T) is IInternedComponent && delivery != ReliableDelivery)
-            throw new ArgumentException($"{typeof(T).FullName} has a field marked [Interned], which needs reliable delivery", nameof(delivery));
-
-        // Bind the factory to this T at registration time. Capturing via method group
-        // means each call to RegisterComponent<T> creates an independent delegate instance
-        // correctly specialized for that T.
-        var allocHeapDelegate = new AllocHeapDelegate(AllocHeapImpl<T>);
-        var allocHeapDelegatePtr = _delegateStore.PinDelegate(allocHeapDelegate);
-
-        // If T is a networked component, also provide a pointer to the WriteSnapshotJob<T>.Execute method.
-        // This allows the AOT side to call back into managed code to write snapshots of plugin components.
-
         var writer = new NetDataWriter();
         var readBuffer = new byte[1024 * 1024];
         var reader = new NetDataReader(readBuffer);
@@ -221,11 +189,8 @@ internal sealed class ModComponentManager : IDisposable
         });
         var changedFromApiDelegatePtr = _delegateStore.PinDelegate(changedFromApiDelegate);
 
-        return new ModComponentInfo
+        return new ModNetworkedComponentInfo
         {
-            Stride = Unsafe.SizeOf<T>(),
-            IsBlittable = IsBlittable<T>() ? (byte)1 : (byte)0,
-            AllocHeap = allocHeapDelegatePtr,
             WriteSnapshot = writeSnapshotDelegatePtr,
             ReadSnapshot = readSnapshotDelegatePtr,
             WriteDelta = writeDeltaDelegatePtr,

@@ -1,5 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 using ReadyM.Api.DI;
+using ReadyM.Api.Multiplayer.ECS.Registry;
 using ReadyM.Relay.Server.Sdk.Ecs.Components;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Entities;
@@ -16,8 +17,12 @@ internal static class ServerSdk
 
     private static readonly ConditionalWeakTable<IComponentRegistry, object> Registered = new();
 
-    /// <summary>Hands the relay every component the loaded shapes replicate or add to an archetype.</summary>
-    public static void RegisterComponents(IComponentRegistry registry)
+    /// <summary>
+    /// Hands the relay every component the loaded shapes replicate or add to an archetype: their storage
+    /// straight into <paramref name="registry"/>, and the registrations of every other concern into
+    /// <paramref name="services"/>, which builds those registries once all mods have declared.
+    /// </summary>
+    public static void RegisterComponents(IComponentRegistry registry, IDependencyContainer services)
     {
         if (Registered.TryGetValue(registry, out _))
             return;
@@ -26,6 +31,8 @@ internal static class ServerSdk
 
         ServerReplication.RegisterAll(registry);
         ServerArchetypes.ApplyExtensions(registry);
+
+        services.RegisterSingleton<INetworkedComponentRegistration>(new ReplicatedShapeRegistration());
     }
 
     /// <summary>The services and registries a mod resolves out of, done once for the container they share.</summary>

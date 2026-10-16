@@ -4,7 +4,10 @@ using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Server;
 
-/// <summary>Hands the relay every component a mod's shapes replicate.</summary>
+/// <summary>
+/// Declares the storage of every component a mod's shapes replicate. How each travels is the networked
+/// registry's, see <see cref="ReplicatedShapeRegistration"/>.
+/// </summary>
 internal static class ServerReplication
 {
     /// <summary>Returns how many were registered, which a mod can log to see its shapes arrived.</summary>

@@ -1,8 +1,8 @@
 using System;
-using Friflo.Engine.ECS;
 using LiteNetLib;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.Multiplayer.ECS.Components;
+using ReadyM.Api.Multiplayer.Interop;
 
 namespace ReadyM.Api.Multiplayer.ECS.Registry;
 
@@ -11,7 +11,10 @@ internal interface INetworkedComponentRegistry : IComponentRegistryBase<INetwork
     INetworkedComponentRegistry RegisterComponent(Type componentTyp, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered);
     INetworkedComponentRegistry RegisterComponent<T>(DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
         where T : struct, INetworkedComponent;
-    INetworkedComponentRegistry RegisterModComponent(ModComponentInfo info, string typeFullName, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered);
+    INetworkedComponentRegistry RegisterModComponent(ModNetworkedComponentInfo info, string typeFullName);
+
+    /// <summary>What a mod handed over for its networked component, registered under its full type name.</summary>
+    ModNetworkedComponentInfo GetModComponentInfo(string typeFullName);
 
     NetworkedComponentId GetNetworkedComponentId(Type type);
     NetworkedComponentId GetNetworkedComponentId<T>();
