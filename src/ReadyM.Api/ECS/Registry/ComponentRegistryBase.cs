@@ -28,9 +28,22 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
     private readonly HashSet<string> _registeredModComponents = [];
 
     public bool HasComponents
-        => _componentTypes.Count > 0;
+    {
+        get
+        {
+            ThrowIfNotSealed(nameof(HasComponents));
+            return _componentTypes.Count > 0;
+        }
+    }
 
-    public IEnumerable<Type> ComponentTypes => _componentTypes;
+    public IEnumerable<Type> ComponentTypes
+    {
+        get
+        {
+            ThrowIfNotSealed(nameof(ComponentTypes));
+            return _componentTypes;
+        }
+    }
 
     // Registration is a construction-phase activity. Once the constructor returns, a fully built registry
     // exists and anyone holding one is entitled to assume the component set is settled, so a later
@@ -59,6 +72,18 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
             $"{typeof(TRegistry).Name} finished construction, so {what} cannot be registered any more. "
             + "Components are registered by the registrations the registry is built from, and anything "
             + "holding the finished registry is entitled to assume the set is complete.");
+    }
+
+    /// <summary>Guards every read: until sealed, the registry holds only what the registrations so far put in.</summary>
+    protected void ThrowIfNotSealed(string what)
+    {
+        if (_sealed)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"{typeof(TRegistry).Name} is still being constructed, so {what} cannot be read yet.");
     }
 
     /// <summary>
@@ -163,6 +188,8 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
 
     public TRegistry RegisterFilter(IComponentRegistryCallbackBase<TRegistry, TComponent> filter)
     {
+        ThrowIfSealed("a filter");
+
         // NOTE: Order matters
         _filters.Add(filter);
         foreach (var accept in _acceptCallbacks.ToList())
@@ -175,6 +202,8 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
 
     public void Accept(IComponentRegistryCallbackBase<TRegistry, TComponent> callback)
     {
+        ThrowIfNotSealed("its components");
+
         foreach (var accept in _acceptCallbacks)
         {
             accept(callback);
