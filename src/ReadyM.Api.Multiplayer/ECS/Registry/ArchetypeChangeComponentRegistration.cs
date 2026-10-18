@@ -6,7 +6,7 @@ using ReadyM.Api.Multiplayer.ECS.Components;
 namespace ReadyM.Api.Multiplayer.ECS.Registry;
 
 /// <summary>Adds each networked component's change component to its archetypes. Registered on both server sides.</summary>
-internal class ChangeComponentArchetypeRegistration(ServerSideSettings serverSide) : IArchetypeRegistration
+internal class ArchetypeChangeComponentRegistration(ServerSideSettings serverSide) : IArchetypeRegistration
 {
     private class Filter : IArchetypeBuilderCallback
     {
