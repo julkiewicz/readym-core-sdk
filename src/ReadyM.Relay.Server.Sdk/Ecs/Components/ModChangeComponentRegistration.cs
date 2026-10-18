@@ -14,7 +14,7 @@ namespace ReadyM.Relay.Server.Sdk.Ecs.Components;
 /// </para>
 /// <para>
 /// The archetype side does the same thing for the same reason, see
-/// <see cref="ModChangeComponentArchetypeRegistration"/>.
+/// <see cref="ChangeComponentArchetypeRegistration"/>.
 /// </para>
 /// </summary>
 internal sealed class ModChangeComponentRegistration(ServerSideSettings serverSide)

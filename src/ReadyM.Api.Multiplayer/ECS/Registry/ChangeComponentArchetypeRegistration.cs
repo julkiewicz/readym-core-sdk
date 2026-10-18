@@ -1,12 +1,15 @@
-﻿using Friflo.Engine.ECS;
+using Friflo.Engine.ECS;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Multiplayer.ECS.Components;
-using ReadyM.Api.Multiplayer.ECS.Registry;
 
-namespace ReadyM.Relay.Server.Sdk.Ecs.Components;
+namespace ReadyM.Api.Multiplayer.ECS.Registry;
 
-internal class ModChangeComponentArchetypeRegistration(ServerSideSettings serverSide) : IArchetypeRegistration
+/// <summary>
+/// Puts the change component of every networked component on each archetype that carries it. Registered on both
+/// sides of the server: the AOT side's archetypes and the managed mod side's.
+/// </summary>
+internal class ChangeComponentArchetypeRegistration(ServerSideSettings serverSide) : IArchetypeRegistration
 {
     private class Filter : IArchetypeBuilderCallback
     {
@@ -28,7 +31,8 @@ internal class ModChangeComponentArchetypeRegistration(ServerSideSettings server
 
         public void AcceptStrideComponent(ArchetypeBuilder builder, int structIndex, int stride)
         {
-            throw new NotSupportedException("Stride components are not supported on the mod side");
+            // A stride component is a mod component seen from the AOT side. The managed mod side registers this same
+            // filter on its own archetypes, which is where a mod component's change component is put on.
         }
 
         public void AcceptTag<T>(ArchetypeBuilder builder) where T : struct, ITag
@@ -36,7 +40,7 @@ internal class ModChangeComponentArchetypeRegistration(ServerSideSettings server
             // no-op
         }
 
-        public void AcceptTags(ArchetypeBuilder builder, in Tags tags)
+        public void AcceptTags(ArchetypeBuilder builder, in Friflo.Engine.ECS.Tags tags)
         {
             // no-op
         }
