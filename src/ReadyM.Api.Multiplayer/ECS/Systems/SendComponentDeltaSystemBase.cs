@@ -6,34 +6,20 @@ using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.ConflictResolution;
 using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.ECS.Registry;
-using ReadyM.Api.Multiplayer.ECS.Values;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
 
 namespace ReadyM.Api.Multiplayer.ECS.Systems;
 
-internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataComponent, T>
-    where T : struct, INetworkedComponent
+/// <summary>Sends one networked component's deltas: everything that does not need the component's type.</summary>
+internal abstract class SendComponentDeltaSystemBase : QuerySystem<MetadataComponent>
 {
     private readonly INetworkTime _networkTime;
     protected readonly NetworkedComponentId ComponentId;
-    private readonly bool _clearFlags;
-    private readonly QueryCacheHelper<SendContext, Entity?, ArchetypeQuery<MetadataComponent, T>> _queryCache;
 
-    protected SendComponentDeltaSystemBase(INetworkTime networkTime, NetworkedComponentId componentId, bool clearFlags)
+    protected SendComponentDeltaSystemBase(INetworkTime networkTime, NetworkedComponentId componentId)
     {
         ComponentId = componentId;
-        _clearFlags = clearFlags;
         _networkTime = networkTime;
-        _queryCache = new QueryCacheHelper<SendContext, Entity?, ArchetypeQuery<MetadataComponent, T>>(
-            context => context.ScopeEntity,
-            context =>
-            {
-                var filter = new QueryFilter();
-                filter = SetupFilter(filter, context);
-                var query = Query.Store.Query<MetadataComponent, T>(filter);
-                return query;
-            }
-        );
     }
 
     /// <returns>null if unbound, otherwise the max packet size in bytes</returns>
@@ -63,6 +49,18 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
     /// </summary>
     protected virtual void SendToOwner(PlayerId owner, NetDataWriter data, SendContext context) { }
 
+    /// <summary>
+    /// Appends the owner's dirty deltas in the scope to <paramref name="others"/>, and the API-authored ones to
+    /// <paramref name="toOwner"/> too. Returns false when the next delta would not fit under
+    /// <paramref name="maxPacketSize"/>; called again with fresh packets, it continues from there.
+    /// </summary>
+    protected abstract bool WriteDeltas(
+        PlayerId owner,
+        SendContext context,
+        NetDataWriter others,
+        NetDataWriter? toOwner,
+        int? maxPacketSize);
+
     private void CreatePacketHeader(NetDataWriter writer)
     {
         writer.Put((byte)RelayMessageCode.EcsDelta);
@@ -73,11 +71,9 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
     protected override void OnUpdate()
         => OnUpdate(default);
 
-    // ReSharper disable once StaticMemberInGenericType
     [ThreadStatic]
     private static NetDataWriter? _othersWriter;
 
-    // ReSharper disable once StaticMemberInGenericType
     [ThreadStatic]
     private static NetDataWriter? _ownerWriter;
 
@@ -85,34 +81,89 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
     {
         var maxPacketSize = GetMaxPacketSize();
         var owners = SentOwners();
-        var query = _queryCache.GetQuery(context);
 
         for (var ownerIx = 0; ownerIx < 32; ownerIx++)
         {
             if ((owners & (1u << ownerIx)) == 0)
                 continue;
 
-            SendForOwner(new PlayerId((ushort)ownerIx), query, maxPacketSize, context);
+            SendForOwner(new PlayerId((ushort)ownerIx), maxPacketSize, context);
         }
     }
 
-    private void SendForOwner(
-        PlayerId owner,
-        ArchetypeQuery<MetadataComponent, T> query,
-        int? maxPacketSize,
-        SendContext context)
+    private void SendForOwner(PlayerId owner, int? maxPacketSize, SendContext context)
     {
-        // "others" packet: this owner's deltas relayed to everyone else in scope (the normal path).
-        var others = ResetWriter(ref _othersWriter);
-        var othersHeaderSize = others.Length;
-
-        // "owner" packet: API-authored deltas sent back to the owner. Lazily headered only if used,
-        // so it costs nothing on the common path where no component is ChangedFromApi.
+        // "owner" packet: API-authored deltas sent back to the owner.
         var sendApiDeltasToOwner = SendApiDeltasToOwner && owner != PlayerId.Server;
-        NetDataWriter? owned = null;
-        var ownedHeaderSize = 0;
 
-        foreach (var (metaChunk, compChunk, _) in query.Chunks)
+        bool done;
+        do
+        {
+            // "others" packet: this owner's deltas relayed to everyone else in scope (the normal path).
+            var others = ResetWriter(ref _othersWriter);
+            var othersHeaderSize = others.Length;
+
+            var owned = sendApiDeltasToOwner ? ResetWriter(ref _ownerWriter) : null;
+            var ownedHeaderSize = owned?.Length ?? 0;
+
+            done = WriteDeltas(owner, context, others, owned, maxPacketSize);
+
+            if (others.Length > othersHeaderSize)
+                SendExceptOwner(owner, others, context);
+
+            if (owned != null && owned.Length > ownedHeaderSize)
+                SendToOwner(owner, owned, context);
+        }
+        while (!done);
+    }
+
+    private NetDataWriter ResetWriter(ref NetDataWriter? slot)
+    {
+        slot ??= new NetDataWriter();
+        slot.Reset();
+        CreatePacketHeader(slot);
+        return slot;
+    }
+}
+
+/// <summary>Sends one native networked component's deltas: what needs the component's type.</summary>
+internal abstract class SendComponentDeltaSystemBase<T> : SendComponentDeltaSystemBase
+    where T : struct, INetworkedComponent
+{
+    private readonly bool _clearFlags;
+    private readonly QueryCacheHelper<SendContext, Entity?, ArchetypeQuery<MetadataComponent, T>> _queryCache;
+
+    // Dirty entities of the owner to skip, when the last call stopped at the packet size cap
+    private int _resumeAt;
+
+    protected SendComponentDeltaSystemBase(INetworkTime networkTime, NetworkedComponentId componentId, bool clearFlags)
+        : base(networkTime, componentId)
+    {
+        Filter.AllComponents(ComponentTypes.Get<T>());
+        _clearFlags = clearFlags;
+        _queryCache = new QueryCacheHelper<SendContext, Entity?, ArchetypeQuery<MetadataComponent, T>>(
+            context => context.ScopeEntity,
+            context =>
+            {
+                var filter = new QueryFilter();
+                filter = SetupFilter(filter, context);
+                var query = Query.Store.Query<MetadataComponent, T>(filter);
+                return query;
+            }
+        );
+    }
+
+    protected sealed override bool WriteDeltas(
+        PlayerId owner,
+        SendContext context,
+        NetDataWriter others,
+        NetDataWriter? toOwner,
+        int? maxPacketSize)
+    {
+        var seen = 0;
+        var wroteAny = false;
+
+        foreach (var (metaChunk, compChunk, _) in _queryCache.GetQuery(context).Chunks)
         {
             var metaSpan = metaChunk.Span;
             var compSpan = compChunk.Span;
@@ -128,19 +179,37 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
                 if (!comp.IsDirty)
                     continue;
 
-                // API-authored deltas additionally go back to the owner (single scan, no second pass).
-                if (sendApiDeltasToOwner && comp.ChangedFromApi)
-                {
-                    if (owned == null)
-                    {
-                        owned = ResetWriter(ref _ownerWriter);
-                        ownedHeaderSize = owned.Length;
-                    }
+                if (seen++ < _resumeAt)
+                    continue;
 
-                    AppendDelta(owned, meta.NetId, ref comp, maxPacketSize, true, owner, context);
+                var othersStart = others.Length;
+                var toOwnerStart = toOwner?.Length ?? 0;
+
+                // API-authored deltas additionally go back to the owner (single scan, no second pass).
+                var alsoToOwner = toOwner != null && comp.ChangedFromApi;
+                if (alsoToOwner)
+                {
+                    toOwner!.Put(meta.NetId);
+                    comp.WriteDelta(toOwner);
                 }
 
-                AppendDelta(others, meta.NetId, ref comp, maxPacketSize, false, owner, context);
+                others.Put(meta.NetId);
+                comp.WriteDelta(others);
+
+                if (maxPacketSize is { } cap && (others.Length > cap || (alsoToOwner && toOwner!.Length > cap)))
+                {
+                    if (!wroteAny)
+                        throw new InvalidOperationException($"Component {typeof(T).Name} with NetId {meta.NetId} is too large to fit in a packet even by itself. Max packet size is {cap} bytes.");
+
+                    others.SetPosition(othersStart);
+                    toOwner?.SetPosition(toOwnerStart);
+
+                    // Once their flags are cleared, the entities already written are no longer dirty
+                    _resumeAt = _clearFlags ? 0 : seen - 1;
+                    return false;
+                }
+
+                wroteAny = true;
 
                 if (_clearFlags)
                 {
@@ -150,73 +219,7 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
             }
         }
 
-        if (others.Length > othersHeaderSize)
-            SendExceptOwner(owner, others, context);
-
-        if (owned != null && owned.Length > ownedHeaderSize)
-            SendToOwner(owner, owned, context);
-    }
-
-    /// <summary>
-    /// Writes one entity's delta into <paramref name="writer"/>. On a bounded (unreliable) channel,
-    /// if the delta would overflow the packet the buffer is rewound, the partial packet is flushed,
-    /// a fresh header is written, and the delta is retried once. On an unbounded (reliable) channel
-    /// no size cap applies and the delta is written directly (the one-chunk behaviour).
-    /// </summary>
-    private void AppendDelta(
-        NetDataWriter writer,
-        NetworkId netId,
-        ref T comp,
-        int? maxPacketSize,
-        bool sendToOwnerOnFlush,
-        PlayerId owner,
-        SendContext context)
-    {
-        if (maxPacketSize == null)
-        {
-            writer.Put(netId);
-            comp.WriteDelta(writer);
-            return;
-        }
-
-        var cap = maxPacketSize.Value;
-        var retried = false;
-
-        while (true)
-        {
-            var beforePosition = writer.Length;
-
-            writer.Put(netId);
-            comp.WriteDelta(writer);
-
-            if (writer.Length <= cap)
-                return;
-
-            if (retried)
-                throw new InvalidOperationException($"Component {typeof(T).Name} with NetId {netId} is too large to fit in a packet even by itself. Max packet size is {cap} bytes.");
-
-            // Rewind the overflowing delta, flush the partial packet, start a fresh one and retry.
-            writer.SetPosition(beforePosition);
-            if (sendToOwnerOnFlush)
-            {
-                SendToOwner(owner, writer, context);
-            }
-            else
-            {
-                SendExceptOwner(owner, writer, context);
-            }
-
-            writer.Reset();
-            CreatePacketHeader(writer);
-            retried = true;
-        }
-    }
-
-    private NetDataWriter ResetWriter(ref NetDataWriter? slot)
-    {
-        slot ??= new NetDataWriter();
-        slot.Reset();
-        CreatePacketHeader(slot);
-        return slot;
+        _resumeAt = 0;
+        return true;
     }
 }
