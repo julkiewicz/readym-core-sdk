@@ -74,10 +74,7 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
             + "holding the finished registry is entitled to assume the set is complete.");
     }
 
-    /// <summary>
-    /// Guards every read of the registry. A registry that is still being constructed holds only what the registrations
-    /// that ran so far put in, so reading it then would see a set that is not the final one.
-    /// </summary>
+    /// <summary>Guards every read: until sealed, the registry holds only what the registrations so far put in.</summary>
     protected void ThrowIfNotSealed(string what)
     {
         if (_sealed)
@@ -86,8 +83,7 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
         }
 
         throw new InvalidOperationException(
-            $"{typeof(TRegistry).Name} is still being constructed, so {what} cannot be read yet. A registry is read "
-            + "once it is finished, by whatever takes it as a dependency, never by its own registrations.");
+            $"{typeof(TRegistry).Name} is still being constructed, so {what} cannot be read yet.");
     }
 
     /// <summary>

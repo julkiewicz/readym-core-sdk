@@ -65,13 +65,13 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
     }
 
     public NetworkedComponentId GetNetworkedComponentId(Type type)
-        => Entry(type.FullName!).Id;
+        => GetEntry(type.FullName!).Id;
 
     public NetworkedComponentId GetNetworkedComponentId<T>()
-        => Entry(typeof(T).FullName!).Id;
+        => GetEntry(typeof(T).FullName!).Id;
 
     public NetworkedComponentId GetNetworkedComponentId(string typeFullName)
-        => Entry(typeFullName).Id;
+        => GetEntry(typeFullName).Id;
 
     public Type GetComponentType(NetworkedComponentId componentId)
     {
@@ -80,12 +80,12 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
     }
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod<T>()
-        => Entry(typeof(T).FullName!).DeliveryMethod;
+        => GetEntry(typeof(T).FullName!).DeliveryMethod;
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod(string typeFullName)
-        => Entry(typeFullName).DeliveryMethod;
+        => GetEntry(typeFullName).DeliveryMethod;
 
-    private (NetworkedComponentId Id, DeliveryMethod DeliveryMethod) Entry(string typeFullName)
+    private (NetworkedComponentId Id, DeliveryMethod DeliveryMethod) GetEntry(string typeFullName)
     {
         ThrowIfNotSealed(typeFullName);
         return _componentIds[typeFullName];
