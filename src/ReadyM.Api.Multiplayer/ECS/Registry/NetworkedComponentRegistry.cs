@@ -65,22 +65,31 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
     }
 
     public NetworkedComponentId GetNetworkedComponentId(Type type)
-        => _componentIds[type.FullName!].Id;
+        => Entry(type.FullName!).Id;
 
     public NetworkedComponentId GetNetworkedComponentId<T>()
-        => _componentIds[typeof(T).FullName!].Id;
+        => Entry(typeof(T).FullName!).Id;
 
     public NetworkedComponentId GetNetworkedComponentId(string typeFullName)
-        => _componentIds[typeFullName].Id;
+        => Entry(typeFullName).Id;
 
     public Type GetComponentType(NetworkedComponentId componentId)
-        => _netComponentTypes[componentId];
+    {
+        ThrowIfNotSealed($"the type of {componentId}");
+        return _netComponentTypes[componentId];
+    }
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod<T>()
-        => _componentIds[typeof(T).FullName!].DeliveryMethod;
+        => Entry(typeof(T).FullName!).DeliveryMethod;
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod(string typeFullName)
-        => _componentIds[typeFullName].DeliveryMethod;
+        => Entry(typeFullName).DeliveryMethod;
+
+    private (NetworkedComponentId Id, DeliveryMethod DeliveryMethod) Entry(string typeFullName)
+    {
+        ThrowIfNotSealed(typeFullName);
+        return _componentIds[typeFullName];
+    }
 
     // A delta carries only the entities and fields that changed since the previous one, all of it on one channel,
     // and nothing sends it again. Sequenced drops every message but the newest and unordered can apply an older
