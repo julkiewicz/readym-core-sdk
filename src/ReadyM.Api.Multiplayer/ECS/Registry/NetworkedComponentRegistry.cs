@@ -28,7 +28,7 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
         _componentIds.Add(componentType.FullName!, (id, deliveryMethod));
         _netComponentTypes.Add(id, componentType);
 
-        _logger.LogInformation("Registered networked component {Id}: {ComponentType} ({ComponentFullName}) delivery {DeliveryMethod}", id, componentType.Name, componentType.FullName, deliveryMethod);
+        _logger.LogDebug("Registered networked component {Id}: {ComponentType} ({ComponentFullName}) delivery {DeliveryMethod}", id, componentType.Name, componentType.FullName, deliveryMethod);
         return base.RegisterComponentImpl(componentType);
     }
 
@@ -42,8 +42,8 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
         _componentIds.Add(typeof(T).FullName!, (id, deliveryMethod));
         _netComponentTypes.Add(id, typeof(T));
 
-        _logger.LogInformation("Registered networked component {Id}: {ComponentType} ({ComponentFullName}) delivery {DeliveryMethod}", id, typeof(T).Name, typeof(T).FullName, deliveryMethod);
-        return base.RegisterComponentImpl(default(T));
+        _logger.LogDebug("Registered networked component {Id}: {ComponentType} ({ComponentFullName}) delivery {DeliveryMethod}", id, typeof(T).Name, typeof(T).FullName, deliveryMethod);
+        return RegisterComponentImpl(default(T));
     }
 
     /// <summary>
