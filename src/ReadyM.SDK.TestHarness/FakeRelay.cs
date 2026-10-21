@@ -39,7 +39,6 @@ internal sealed class FakeRelay
     private readonly GetComponentSlotDelegate _getComponentSlot;
     private readonly IsEntityAliveDelegate _isEntityAlive;
     private readonly GetComponentIdByNameDelegate _getComponentIdByName;
-    private readonly RegisterModComponentDelegate _registerModComponent;
     private readonly RegisterArchetypeDelegate _registerArchetype;
     private readonly ResolveArchetypeDelegate _resolveArchetype;
     private readonly AddArchetypeTagDelegate _addArchetypeTag;
@@ -80,7 +79,6 @@ internal sealed class FakeRelay
         _getComponentSlot = GetComponentSlotImpl;
         _isEntityAlive = IsEntityAliveImpl;
         _getComponentIdByName = GetComponentIdByNameImpl;
-        _registerModComponent = static (_, _) => -1;
         _registerArchetype = RegisterArchetypeImpl;
         _resolveArchetype = ResolveArchetypeImpl;
         _addArchetypeTag = AddArchetypeTagImpl;
@@ -169,13 +167,6 @@ internal sealed class FakeRelay
 
     /// <summary>Says this game registers an archetype for the shape, the way a game's own bindings do.</summary>
     internal void Bind(Type shape, ArchetypeId archetype) => _boundShapes[shape.FullName!] = archetype;
-
-    internal AotPointers Aot => new()
-    {
-        RegisterModComponent = Marshal.GetFunctionPointerForDelegate(_registerModComponent),
-        GetComponentIdByName = Marshal.GetFunctionPointerForDelegate(_getComponentIdByName),
-        AddArchetypeExtension = IntPtr.Zero
-    };
 
     // -- world building, done by a test rather than across the boundary ------------------------
 
@@ -390,11 +381,11 @@ internal sealed class FakeRelay
 
     /// <summary>The v0 server api bound to this relay, for comparing the two generations.</summary>
     internal EcsApi CreateEcsApi()
-        => new(Pointers, new ModComponentIds(Aot.GetComponentIdByName));
+        => new(Pointers, new ModComponentIds(Pointers.GetComponentIdByName));
 
     /// <summary>The v1 server api bound to this relay, wired the way the mod host wires it.</summary>
     internal ServerEntityApi CreateEntityApi()
-        => new(Pointers, Archetypes, new ModComponentIds(Aot.GetComponentIdByName));
+        => new(Pointers, Archetypes, new ModComponentIds(Pointers.GetComponentIdByName));
 
     /// <summary>The id the relay assigned, for a caller that drives Query itself rather than through the SDK.</summary>
     internal int ComponentId<T>() where T : struct => IdOf(typeof(T));

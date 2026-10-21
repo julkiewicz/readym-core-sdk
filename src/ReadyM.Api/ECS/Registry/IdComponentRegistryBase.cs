@@ -14,10 +14,10 @@ internal abstract class IdComponentRegistryBase<TRegistry, TComponent>(
     protected byte GetNextComponentId()
         => _componentCount;
 
-    protected override TRegistry RegisterComponentImpl<T>(T defaultValue = default)
+    protected override TRegistry RegisterComponentImpl<T>(ValueTuple context, T defaultValue = default)
     {
         TakeId();
-        return base.RegisterComponentImpl(defaultValue);
+        return base.RegisterComponentImpl(context, defaultValue);
     }
 
     protected override TRegistry RegisterModComponentImpl(ModComponentInfo info, string typeFullName)

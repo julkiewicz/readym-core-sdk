@@ -5,6 +5,7 @@
 [assembly: InternalsVisibleTo("ReadyM.Relay.Web")]
 [assembly: InternalsVisibleTo("ReadyM.Relay.Server.Sdk")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Client")]
+[assembly: InternalsVisibleTo("ReadyM.SDK")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Server")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Tests")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.TestHarness")]

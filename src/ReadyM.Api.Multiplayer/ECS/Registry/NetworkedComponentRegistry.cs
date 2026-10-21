@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.Interning;
+using ReadyM.Api.Multiplayer.Interop;
 
 namespace ReadyM.Api.Multiplayer.ECS.Registry;
 
@@ -15,6 +16,7 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
     private readonly ILogger _logger = logger;
     private readonly Dictionary<string, (NetworkedComponentId Id, DeliveryMethod DeliveryMethod)> _componentIds = new();
     private readonly Dictionary<NetworkedComponentId, Type> _netComponentTypes = new();
+    private readonly Dictionary<string, ModNetworkedComponentInfo> _modComponentInfos = new();
 
     public INetworkedComponentRegistry RegisterComponent(Type componentType, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
     {
@@ -51,7 +53,7 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
     /// reaches acceptors through <c>AcceptModComponent</c>.
     /// </summary>
     public INetworkedComponentRegistry RegisterModComponent(
-        ModComponentInfo info,
+        ModNetworkedComponentInfo info,
         string typeFullName,
         DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
     {
@@ -59,9 +61,18 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
 
         var id = new NetworkedComponentId(GetNextComponentId());
         _componentIds.Add(typeFullName, (id, deliveryMethod));
+        _modComponentInfos.Add(typeFullName, info);
 
         _logger.LogInformation("Registered networked mod component {Id}: {ComponentFullName} delivery {DeliveryMethod}", id, typeFullName, deliveryMethod);
-        return RegisterModComponentImpl(info, typeFullName);
+
+        // No networked acceptor reads the storage struct; the networked pointers are read through GetModComponentInfo
+        return RegisterModComponentImpl(default, typeFullName);
+    }
+
+    public ModNetworkedComponentInfo GetModComponentInfo(string typeFullName)
+    {
+        ThrowIfNotSealed(typeFullName);
+        return _modComponentInfos[typeFullName];
     }
 
     public NetworkedComponentId GetNetworkedComponentId(Type type)
@@ -94,7 +105,7 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
     // A delta carries only the entities and fields that changed since the previous one, all of it on one channel,
     // and nothing sends it again. Sequenced drops every message but the newest and unordered can apply an older
     // value over a newer one, either of which leaves the state wrong until that field changes again
-    private static void RequireDeltaSafe(DeliveryMethod deliveryMethod, string component)
+    internal static void RequireDeltaSafe(DeliveryMethod deliveryMethod, string component)
     {
         if (deliveryMethod is DeliveryMethod.Unreliable or DeliveryMethod.ReliableOrdered)
             return;
@@ -107,7 +118,7 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
 
     // An id is only readable after the reliable-ordered message carrying its string, and an unreliable delta can
     // overtake that message
-    private static void RequireInternedSafe(Type componentType, DeliveryMethod deliveryMethod)
+    internal static void RequireInternedSafe(Type componentType, DeliveryMethod deliveryMethod)
     {
         if (deliveryMethod == DeliveryMethod.ReliableOrdered || !typeof(IInternedComponent).IsAssignableFrom(componentType))
             return;

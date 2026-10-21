@@ -209,3 +209,7 @@ internal unsafe delegate void EntityListCallback(IntPtr entities, int count);
 internal unsafe delegate void QueryInScopeDelegate(int* componentIds, int n, RawEntity scope, EntityListCallback cb);
 
 internal delegate int RegisterModComponentDelegate(ModComponentInfo info, NativeString256 typeFullName);
+
+internal delegate void RegisterModNetworkedComponentDelegate(ModNetworkedComponentInfo info, NativeString256 typeFullName, LiteNetLib.DeliveryMethod deliveryMethod);
+
+internal delegate void CompleteModComponentRegistrationDelegate();

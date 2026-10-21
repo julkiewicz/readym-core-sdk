@@ -3,8 +3,8 @@ using Yooni.Native.Container;
 namespace ReadyM.Relay.Server.Sdk.Interop;
 
 /// <exclude/>
-public struct AotInitParams
+/// <remarks>What the managed mod side needs to load the mods.</remarks>
+public struct ModLoadSettings
 {
     public required NativeString256 ModDirectory;
-    public required AotPointers AotPointers;
 }
