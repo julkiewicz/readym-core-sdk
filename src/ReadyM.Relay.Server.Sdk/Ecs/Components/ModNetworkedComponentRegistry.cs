@@ -11,28 +11,26 @@ namespace ReadyM.Relay.Server.Sdk.Ecs.Components;
 /// A list and nothing else; it hands out no ids, those stay the AOT side's.
 /// </summary>
 internal sealed class ModNetworkedComponentRegistry(IEnumerable<INetworkedComponentRegistration> registrations)
-    : ComponentRegistryBase<INetworkedComponentRegistry, INetworkedComponent>(registrations), INetworkedComponentRegistry
+    : ComponentRegistryBase<INetworkedComponentRegistry, INetworkedComponent, DeliveryMethod>(registrations), INetworkedComponentRegistry
 {
     private readonly Dictionary<string, DeliveryMethod> _deliveryMethods = new();
 
     public INetworkedComponentRegistry RegisterComponent<T>(DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
         where T : struct, INetworkedComponent
+        => RegisterComponentImpl(deliveryMethod, default(T));
+
+    public INetworkedComponentRegistry RegisterComponent(Type componentType, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
+        => RegisterComponentImpl(componentType, deliveryMethod);
+
+    /// <summary>Both overloads land here: refuses a delivery method T's deltas cannot survive, then records it.</summary>
+    protected override INetworkedComponentRegistry RegisterComponentImpl<T>(DeliveryMethod deliveryMethod, T defaultValue = default)
     {
         NetworkedComponentRegistry.RequireDeltaSafe(deliveryMethod, typeof(T).FullName!);
         NetworkedComponentRegistry.RequireInternedSafe(typeof(T), deliveryMethod);
+
+        var registry = base.RegisterComponentImpl(deliveryMethod, defaultValue);
         _deliveryMethods.Add(typeof(T).FullName!, deliveryMethod);
-        return RegisterComponentImpl(default(T));
-    }
-
-    public INetworkedComponentRegistry RegisterComponent(Type componentType, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
-    {
-        if (!typeof(INetworkedComponent).IsAssignableFrom(componentType))
-            throw new ArgumentException($"Type {componentType.FullName} does not implement INetworkedComponent", nameof(componentType));
-
-        NetworkedComponentRegistry.RequireDeltaSafe(deliveryMethod, componentType.FullName!);
-        NetworkedComponentRegistry.RequireInternedSafe(componentType, deliveryMethod);
-        _deliveryMethods.Add(componentType.FullName!, deliveryMethod);
-        return RegisterComponentImpl(componentType);
+        return registry;
     }
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod<T>()

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using Friflo.Engine.ECS;
 
 namespace ReadyM.Api.ECS.Registry;
@@ -11,7 +12,9 @@ namespace ReadyM.Api.ECS.Registry;
 // `Accept`. This is not a place to put any specific logic concerning any particular registry.
 // If you're thinking about adding more code here 99% chance you want to do it in that specific registry NOT here.
 // Please consult before making substantial changes here.
-internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponentRegistryBase<TRegistry, TComponent>
+// TContext is whatever a registry registers each component with (a delivery method, say); this class only passes it
+// on, so a registry does its per-component work in one override of RegisterComponentImpl<T>.
+internal abstract class ComponentRegistryBase<TRegistry, TComponent, TContext> : IComponentRegistryBase<TRegistry, TComponent>
     where TRegistry : IComponentRegistryBase<TRegistry, TComponent>
 {
     private readonly List<Action<IComponentRegistryCallbackBase<TRegistry, TComponent>>> _acceptCallbacks = [];
@@ -91,7 +94,7 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
     /// what an acceptor sees is decided by when the acceptor runs, not by when the registration happened.
     /// <see cref="RegisterModComponentImpl"/> is the mod-defined counterpart.
     /// </summary>
-    protected virtual TRegistry RegisterComponentImpl<T>(T defaultValue = default)
+    protected virtual TRegistry RegisterComponentImpl<T>(TContext context, T defaultValue = default)
         where T : struct, TComponent
     {
         if (defaultValue is IDisposable && !defaultValue.Equals(default(T)))
@@ -167,22 +170,33 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
         return (TRegistry)(object)this;
     }
 
-    protected TRegistry RegisterComponentImpl(Type componentType, TComponent? defaultValue = default)
+    /// <summary>
+    /// The by-type form of <see cref="RegisterComponentImpl{T}"/>, which it calls with T bound, so an override sees both.
+    /// </summary>
+    protected TRegistry RegisterComponentImpl(Type componentType, TContext context, TComponent? defaultValue = default)
     {
         if (!typeof(TComponent).IsAssignableFrom(componentType))
             throw new ArgumentException($"Type {componentType.FullName} is not assignable to {typeof(TComponent).FullName}");
         if (!componentType.IsValueType)
             throw new ArgumentException($"Type {componentType.FullName} is not a value type");
 
-        var method = GetType().GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
-            .Single(m => m is { Name: nameof(RegisterComponentImpl), IsGenericMethodDefinition: true });
-        if (method == null)
-            throw new InvalidOperationException($"Could not find RegisterComponent method for type {componentType.FullName}");
-        method = method.MakeGenericMethod(componentType);
+        // Declared here, and invoked on this, so an override of it is the one that runs
+        var method = typeof(ComponentRegistryBase<TRegistry, TComponent, TContext>)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
+            .Single(m => m is { Name: nameof(RegisterComponentImpl), IsGenericMethodDefinition: true })
+            .MakeGenericMethod(componentType);
 
         if (defaultValue == null)
             defaultValue = (TComponent)Activator.CreateInstance(componentType)!;
-        method.Invoke(this, [defaultValue]);
+        // Unwrapped, so a refused registration throws the same by type as by T
+        try
+        {
+            method.Invoke(this, [context, defaultValue]);
+        }
+        catch (TargetInvocationException e) when (e.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(e.InnerException).Throw();
+        }
         return (TRegistry)(object)this;
     }
 
@@ -209,4 +223,18 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent> : IComponen
             accept(callback);
         }
     }
+}
+
+/// <summary>A registry whose components are registered with no context; ValueTuple stands for none.</summary>
+internal abstract class ComponentRegistryBase<TRegistry, TComponent>(
+    IEnumerable<IComponentRegistrationBase<TRegistry, TComponent>> registrations)
+    : ComponentRegistryBase<TRegistry, TComponent, ValueTuple>(registrations)
+    where TRegistry : IComponentRegistryBase<TRegistry, TComponent>
+{
+    protected TRegistry RegisterComponentImpl<T>(T defaultValue = default)
+        where T : struct, TComponent
+        => RegisterComponentImpl(default(ValueTuple), defaultValue);
+
+    protected TRegistry RegisterComponentImpl(Type componentType, TComponent? defaultValue = default)
+        => RegisterComponentImpl(componentType, default(ValueTuple), defaultValue);
 }
