@@ -6,6 +6,7 @@ namespace ReadyM.Relay.Server.Sdk.Ecs.Components;
 /// <summary>Allows registering components with the ECS system, both local and networked.</summary>
 /// <exclude />
 [EditorBrowsable(EditorBrowsableState.Never)]
+[Obsolete("Part of SDK v0. Declare components through shapes ([Archetype], [ArchetypeMixin]) instead.")]
 public interface IComponentRegistry
 {
     /// <summary>Registers a local (not replicated over the network) component type with the ECS system.</summary>

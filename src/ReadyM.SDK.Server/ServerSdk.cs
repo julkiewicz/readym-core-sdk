@@ -14,20 +14,6 @@ internal static class ServerSdk
 {
     private static readonly ConditionalWeakTable<IDependencyContainer, object> Bootstrapped = new();
 
-    private static readonly ConditionalWeakTable<IComponentRegistry, object> Registered = new();
-
-    /// <summary>Hands the relay every component the loaded shapes replicate or add to an archetype.</summary>
-    public static void RegisterComponents(IComponentRegistry registry)
-    {
-        if (Registered.TryGetValue(registry, out _))
-            return;
-
-        Registered.Add(registry, new object());
-
-        ServerReplication.RegisterAll(registry);
-        ServerArchetypes.ApplyExtensions(registry);
-    }
-
     /// <summary>The services and registries a mod resolves out of, done once for the container they share.</summary>
     public static void Use(IDependencyContainer services)
     {

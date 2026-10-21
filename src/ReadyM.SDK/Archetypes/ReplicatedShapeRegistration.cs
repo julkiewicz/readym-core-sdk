@@ -3,10 +3,9 @@ using LiteNetLib;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.ECS.Registry;
-using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Attributes;
 
-namespace ReadyM.SDK.Client;
+namespace ReadyM.SDK.Archetypes;
 
 /// <summary>
 /// Tells the client which components arrive over the wire, taken from the shapes mods declared.

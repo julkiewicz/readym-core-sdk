@@ -1,6 +1,5 @@
 ﻿using ReadyM.SDK.Archetypes;
-using IComponentRegistry = ReadyM.Relay.Server.Sdk.Ecs.Components.IComponentRegistry;
-using HostComponents = ReadyM.Relay.Server.Sdk.Ecs.Components.ModComponentRegistry;
+using ReadyM.Relay.Server.Sdk.Ecs.Components;
 
 namespace ReadyM.SDK.Server;
 
@@ -12,29 +11,18 @@ internal static class ServerArchetypes
         => typeof(ReadyM.Api.Multiplayer.ECS.Components.INetworkedComponent).IsAssignableFrom(component);
 
     /// <summary>Returns how many components were handed over, which a mod can log to see its shapes arrived.</summary>
-    public static int ApplyExtensions(IComponentRegistry registry)
+    public static int ApplyExtensions(ModComponentRegistryFixMe registry)
     {
-        if (registry is not HostComponents host)
-            return 0;
-
         var applied = 0;
-
-        var registered = new HashSet<Type>();
 
         foreach (var shape in ArchetypeContributions.Shapes())
         {
-            foreach (var component in ArchetypeContributions.OwnGenerated(shape))
-            {
-                if (registered.Add(component) && !Replicates(component))
-                    host.RegisterLocalComponent(component);
-            }
-
             var contributed = Contributed(shape);
 
             if (contributed.Count == 0)
                 continue;
 
-            host.AddArchetypeExtensions(shape, contributed);
+            registry.AddArchetypeExtensions(shape, contributed);
             applied += contributed.Count;
         }
 
