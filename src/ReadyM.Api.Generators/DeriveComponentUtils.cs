@@ -262,6 +262,7 @@ internal static class DeriveComponentUtils
             accessorSettings: settings,
             cppSettings: cppSettings,
             interned: AttributeUtils.HasAttribute(memberInfo.Symbol, "InternedAttribute"),
+            exactComparison: AttributeUtils.HasAttribute(memberInfo.Symbol, "ExactComparisonAttribute"),
             quantization: quantization,
             quantizationAttributeCount: quantizationAttributeCount);
     }

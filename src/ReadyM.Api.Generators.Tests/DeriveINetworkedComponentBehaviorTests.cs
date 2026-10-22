@@ -573,6 +573,85 @@ public partial struct FloatComponent : INetworkedComponent
         Assert.True(dirtyAfterSecondLargeChange);
     }
 
+    [Theory]
+    [InlineData("float", 0.0, 0.1)]
+    [InlineData("float", 0.0, 0.01)]
+    [InlineData("float", 0.5, 0.45)]
+    [InlineData("float", 0.1, 0.0)]
+    [InlineData("double", 0.0, 0.1)]
+    [InlineData("double", 0.3, 0.25)]
+    public void ExactComparisonField_StoresAndMarksEveryChange(string typeName, double previous, double next)
+    {
+        var source = $$"""
+using System;
+using ReadyM.Api.Multiplayer.Generators;
+using ReadyM.Api.Multiplayer.ECS.Components;
+using LiteNetLib.Utils;
+
+namespace ReadyM.Api.Generators.Tests.TestTypes;
+
+[DeriveINetworkedComponent]
+public partial struct ExactComponent : INetworkedComponent
+{
+    [ExactComparison]
+    private {{typeName}} _value;
+}
+""";
+
+        var result = SourceGeneratorTestHelper.RunGenerator<DeriveINetworkedComponentGenerator>(source, output);
+        Assert.Empty(result.OutputDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
+
+        var assembly = SourceGeneratorTestHelper.EmitToAssembly(result.OutputCompilation, output);
+        var componentType = assembly.GetType("ReadyM.Api.Generators.Tests.TestTypes.ExactComponent");
+        Assert.NotNull(componentType);
+        var instance = Activator.CreateInstance(componentType)!;
+        var valueProperty = componentType.GetProperty("Value")!;
+        var isDirtyProperty = componentType.GetProperty("IsDirty")!;
+        var clearDirtyMethod = componentType.GetMethod("ClearDirty")!;
+
+        object Typed(double value) => typeName == "float" ? (object)(float)value : value;
+
+        valueProperty.SetValue(instance, Typed(previous));
+        clearDirtyMethod.Invoke(instance, Array.Empty<object>());
+
+        valueProperty.SetValue(instance, Typed(next));
+
+        Assert.Equal(Typed(next), valueProperty.GetValue(instance));
+        Assert.True((bool)isDirtyProperty.GetValue(instance)!);
+
+        clearDirtyMethod.Invoke(instance, Array.Empty<object>());
+        valueProperty.SetValue(instance, Typed(next));
+        Assert.False((bool)isDirtyProperty.GetValue(instance)!);
+    }
+
+    [Theory]
+    [InlineData("private int _value;", "[ExactComparison] only applies to float and double")]
+    [InlineData("[Quantize(0f, 10f, 16)] private float _value;", "[ExactComparison] does not combine with [Quantize], [QuantizeAngle] or [HalfPrecision]")]
+    public void ExactComparisonField_Misused_FailsTheBuild(string field, string expectedError)
+    {
+        var source = $$"""
+using System;
+using ReadyM.Api.Multiplayer.Generators;
+using ReadyM.Api.Multiplayer.ECS.Components;
+using LiteNetLib.Utils;
+
+namespace ReadyM.Api.Generators.Tests.TestTypes;
+
+[DeriveINetworkedComponent]
+public partial struct MisusedComponent : INetworkedComponent
+{
+    [ExactComparison]
+    {{field}}
+}
+""";
+
+        var result = SourceGeneratorTestHelper.RunGenerator<DeriveINetworkedComponentGenerator>(source, output);
+
+        Assert.Contains(
+            result.OutputDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error),
+            d => d.GetMessage().Contains($"Field _value: {expectedError}"));
+    }
+
     [Fact]
     public void ZeroFieldComponent_AllGeneratedMethods_BehaveAsExpected()
     {

@@ -9,6 +9,7 @@ internal sealed class DeriveMemberModel(
     DeriveAccessorMemberSettings accessorSettings,
     DeriveMemberCppSettings cppSettings,
     bool interned,
+    bool exactComparison,
     DeriveQuantization? quantization = null,
     int quantizationAttributeCount = 0)
 {
@@ -18,6 +19,11 @@ internal sealed class DeriveMemberModel(
     public DeriveAccessorMemberSettings AccessorSettings { get; } = accessorSettings;
     public DeriveMemberCppSettings CppSettings { get; } = cppSettings;
     public bool Interned { get; } = interned;
+
+    /// <summary>
+    /// [ExactComparison]: a float or double field treats any change as a change, not only one over 0.1.
+    /// </summary>
+    public bool ExactComparison { get; } = exactComparison;
     public DeriveQuantization? Quantization { get; } = quantization;
 
     /// <summary>

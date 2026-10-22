@@ -76,6 +76,47 @@ public partial struct AppearanceComponent : IComponent
     }
 
     [Fact]
+    public void GeneratedCppFragment_ForExactComparisonFloats_ComparesExactlyAndPlainFloatsKeepTheCutoff()
+    {
+        const string source = """
+using System.Runtime.InteropServices;
+using Friflo.Engine.ECS;
+using ReadyM.Api.Attributes;
+using ReadyM.Api.Multiplayer.Generators;
+
+namespace ReadyM.Api.Generators.Tests.TestTypes;
+
+[DeriveINetworkedComponent(emitDirtyMask: false), NativeComponent]
+[StructLayout(LayoutKind.Sequential)]
+public partial struct ItemDataComponent : IComponent
+{
+    private byte _dirtyMask;
+    private byte _apiMask;
+
+    [ExactComparison]
+    private float _weight;
+    [ExactComparison]
+    private double _precise;
+    private float _health;
+}
+""";
+
+        var result = SourceGeneratorTestHelper.RunGenerator<DeriveCppNativeComponentGenerator>(source, output);
+
+        Assert.Empty(result.OutputDiagnostics.Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error));
+
+        var generatedText = string.Join(
+            Environment.NewLine,
+            result.GeneratedSyntaxTrees.Select(t => t.GetText().ToString()));
+
+        Assert.Contains("if (_weight != value)", generatedText);
+        Assert.Contains("if (_precise != value)", generatedText);
+        Assert.DoesNotContain("std::abs(_weight", generatedText);
+        Assert.DoesNotContain("std::abs(_precise", generatedText);
+        Assert.Contains("if (std::abs(_health - value) > 0.1f)", generatedText);
+    }
+
+    [Fact]
     public void GeneratedCppFragment_ForNativeComponentWithListFields_ContainsExpectedListAccessorsSettersDirtyMaskAndBackingFields()
     {
         const string source = """
