@@ -106,11 +106,6 @@ partial struct {{info.Name}} : INetworkedComponent{{(policy is null ? string.Emp
     #error Field {member.Source.Name}: [Interned] only applies to NativeString256 and NativeList<NativeString256>
 """);
 
-            foreach (var problem in ExactComparisonProblems(member))
-                sb.AppendLine($"""
-    #error Field {member.Source.Name}: {problem}
-""");
-
             foreach (var problem in QuantizationProblems(member))
                 sb.AppendLine($"""
     #error Field {member.Source.Name}: {problem}
@@ -634,18 +629,6 @@ using {ns};
     // A misused quantization attribute is reported as an error and the field falls back to its plain encoding
     private static bool IsQuantized(DeriveMemberModel member)
         => member.Quantization is not null && !QuantizationProblems(member).Any();
-
-    private static IEnumerable<string> ExactComparisonProblems(DeriveMemberModel member)
-    {
-        if (!member.ExactComparison)
-            yield break;
-
-        if (member.Source.Type.SpecialType is not (SpecialType.System_Single or SpecialType.System_Double))
-            yield return "[ExactComparison] only applies to float and double";
-
-        if (member.Quantization is not null)
-            yield return "[ExactComparison] does not combine with [Quantize], [QuantizeAngle] or [HalfPrecision]";
-    }
 
     private static IEnumerable<string> QuantizationProblems(DeriveMemberModel member)
     {

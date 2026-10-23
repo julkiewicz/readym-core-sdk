@@ -76,7 +76,7 @@ public partial struct AppearanceComponent : IComponent
     }
 
     [Fact]
-    public void GeneratedCppFragment_ForExactComparisonFloats_ComparesExactlyAndPlainFloatsKeepTheCutoff()
+    public void GeneratedCppFragment_ForFloatingPointFields_StoresAnyChangeFromZero()
     {
         const string source = """
 using System.Runtime.InteropServices;
@@ -93,11 +93,8 @@ public partial struct ItemDataComponent : IComponent
     private byte _dirtyMask;
     private byte _apiMask;
 
-    [ExactComparison]
     private float _weight;
-    [ExactComparison]
     private double _precise;
-    private float _health;
 }
 """;
 
@@ -109,11 +106,8 @@ public partial struct ItemDataComponent : IComponent
             Environment.NewLine,
             result.GeneratedSyntaxTrees.Select(t => t.GetText().ToString()));
 
-        Assert.Contains("if (_weight != value)", generatedText);
-        Assert.Contains("if (_precise != value)", generatedText);
-        Assert.DoesNotContain("std::abs(_weight", generatedText);
-        Assert.DoesNotContain("std::abs(_precise", generatedText);
-        Assert.Contains("if (std::abs(_health - value) > 0.1f)", generatedText);
+        Assert.Contains("if ((_weight == 0 && value != 0) || std::abs(_weight - value) > 0.1f)", generatedText);
+        Assert.Contains("if ((_precise == 0 && value != 0) || std::abs(_precise - value) > 0.1)", generatedText);
     }
 
     [Fact]
