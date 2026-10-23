@@ -76,7 +76,7 @@ public partial struct AppearanceComponent : IComponent
     }
 
     [Fact]
-    public void GeneratedCppFragment_ForFloatingPointFields_StoresAnyChangeFromZero()
+    public void GeneratedCppFragment_ForFloatingPointFields_StoresAnyChangeFromOrToZero()
     {
         const string source = """
 using System.Runtime.InteropServices;
@@ -106,8 +106,8 @@ public partial struct ItemDataComponent : IComponent
             Environment.NewLine,
             result.GeneratedSyntaxTrees.Select(t => t.GetText().ToString()));
 
-        Assert.Contains("if ((_weight == 0 && value != 0) || std::abs(_weight - value) > 0.1f)", generatedText);
-        Assert.Contains("if ((_precise == 0 && value != 0) || std::abs(_precise - value) > 0.1)", generatedText);
+        Assert.Contains("if ((_weight == 0) != (value == 0) || std::abs(_weight - value) > 0.1f)", generatedText);
+        Assert.Contains("if ((_precise == 0) != (value == 0) || std::abs(_precise - value) > 0.1)", generatedText);
     }
 
     [Fact]

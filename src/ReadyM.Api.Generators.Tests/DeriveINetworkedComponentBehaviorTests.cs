@@ -587,7 +587,7 @@ public partial struct FloatComponent : INetworkedComponent
     [InlineData("float", -0.05)]
     [InlineData("double", 0.1)]
     [InlineData("double", 0.01)]
-    public void FloatingPointField_ChangeFromZero_IsStoredAndMarkedHoweverSmall(string typeName, double next)
+    public void FloatingPointField_ChangeFromOrToZero_IsStoredAndMarkedHoweverSmall(string typeName, double next)
     {
         var source = $$"""
 using System;
@@ -598,7 +598,7 @@ using LiteNetLib.Utils;
 namespace ReadyM.Api.Generators.Tests.TestTypes;
 
 [DeriveINetworkedComponent]
-public partial struct FromZeroComponent : INetworkedComponent
+public partial struct ZeroBoundaryComponent : INetworkedComponent
 {
     private {{typeName}} _value;
 }
@@ -608,7 +608,7 @@ public partial struct FromZeroComponent : INetworkedComponent
         Assert.Empty(result.OutputDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
 
         var assembly = SourceGeneratorTestHelper.EmitToAssembly(result.OutputCompilation, output);
-        var componentType = assembly.GetType("ReadyM.Api.Generators.Tests.TestTypes.FromZeroComponent");
+        var componentType = assembly.GetType("ReadyM.Api.Generators.Tests.TestTypes.ZeroBoundaryComponent");
         Assert.NotNull(componentType);
         var instance = Activator.CreateInstance(componentType)!;
         var valueProperty = componentType.GetProperty("Value")!;
@@ -624,6 +624,12 @@ public partial struct FromZeroComponent : INetworkedComponent
         valueProperty.SetValue(instance, Typed(next));
 
         Assert.Equal(Typed(next), valueProperty.GetValue(instance));
+        Assert.True((bool)isDirtyProperty.GetValue(instance)!);
+
+        clearDirtyMethod.Invoke(instance, Array.Empty<object>());
+        valueProperty.SetValue(instance, Typed(0));
+
+        Assert.Equal(Typed(0), valueProperty.GetValue(instance));
         Assert.True((bool)isDirtyProperty.GetValue(instance)!);
     }
 
