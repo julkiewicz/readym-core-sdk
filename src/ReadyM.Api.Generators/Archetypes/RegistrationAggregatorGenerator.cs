@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -19,10 +20,17 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
     private const string ComponentClassName = "GeneratedComponentRegistrationHelper";
     private const string ReplicationClassName = "GeneratedReplicationRegistrationHelper";
 
-    // Which generated type a registration is listed in
-    private const int Components = 0;
-    private const int Replication = 1;
-    private const int Rest = 2;
+    /// <summary>The registration classes one shape produces, by the generated type that lists them.</summary>
+    private sealed class ShapeNames
+    {
+        public readonly List<string> Components = [];
+        public readonly List<string> Replication = [];
+
+        // FixMe(2026-10-19-twins-scan-sdk): the kinds ShapeRegistrations.RegisterAll still lists, which fill the SDK's
+        // statics: archetypes until 2026-10-18-twins-m4, native init, handlers, mod entries, configs, services and RPC
+        // handlers. Each gets a list and a helper of its own.
+        public readonly List<string> RegisterAllFixMe = [];
+    }
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -62,81 +70,81 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
             static (node, _) => node is ClassDeclarationSyntax,
             ReadRpcHandlers);
 
-        var all = archetypes.Collect().Combine(mixins.Collect())
-            .Combine(services.Collect()).Combine(entries.Collect()).Combine(configs.Collect())
+        var shapes = archetypes.Collect().Combine(mixins.Collect());
+        var others = services.Collect().Combine(entries.Collect()).Combine(configs.Collect())
             .Combine(handlers.Collect()).Combine(legacyHandlers.Collect());
 
-        context.RegisterSourceOutput(all, static (spc, found) =>
+        context.RegisterSourceOutput(shapes.Combine(others), static (spc, found) =>
         {
-            var declared = found.Left.Left;
+            var declared = found.Left.Left.Concat(found.Left.Right).ToList();
+            var other = found.Right;
 
-            var all = declared.Left.Left.Left.Left.Concat(declared.Left.Left.Left.Right)
-                .Concat(declared.Left.Left.Right).Concat(declared.Left.Right).Concat(declared.Right)
-                .Concat(found.Left.Right).Concat(found.Right)
-                .SelectMany(entry => entry)
-                .Distinct()
-                .ToList();
+            var components = Sorted(declared.SelectMany(names => names.Components));
+            var replication = Sorted(declared.SelectMany(names => names.Replication));
 
-            System.Collections.Generic.List<string> NamesOf(int kind) => all
-                .Where(entry => entry.Kind == kind)
-                .Select(entry => entry.Name)
-                .OrderBy(name => name, System.StringComparer.Ordinal)
-                .ToList();
-
-            if (NamesOf(Components) is { Count: > 0 } components)
+            if (components.Count > 0)
                 spc.AddSource($"{Namespace}.{ComponentClassName}.g.cs", EmitHelper(ComponentClassName, components));
 
-            if (NamesOf(Replication) is { Count: > 0 } replication)
+            if (replication.Count > 0)
                 spc.AddSource($"{Namespace}.{ReplicationClassName}.g.cs", EmitHelper(ReplicationClassName, replication));
 
             {
                 // FixMe(2026-10-19-twins-scan-sdk): these kinds still fill the SDK's statics through RegisterAll, and
                 // archetypes until 2026-10-18-twins-m4. Each gets a helper of its own that registers in the container.
-                if (NamesOf(Rest) is { Count: > 0 } rest)
-                    spc.AddSource($"{Namespace}.{ClassName}.g.cs", Emit(rest));
+                var registerAll = Sorted(declared.SelectMany(names => names.RegisterAllFixMe)
+                    .Concat(other.Left.Left.Left.Left.Concat(other.Left.Left.Left.Right).Concat(other.Left.Left.Right)
+                        .Concat(other.Left.Right).Concat(other.Right).SelectMany(names => names)));
+
+                if (registerAll.Count > 0)
+                    spc.AddSource($"{Namespace}.{ClassName}.g.cs", Emit(registerAll));
             }
         });
     }
 
-    /// <summary>The registration classes one declaration produces, by the names that emit them and what lists them.</summary>
-    private static ImmutableArray<(int Kind, string Name)> Read(GeneratorAttributeSyntaxContext context, CancellationToken ct)
+    // Each name once, in ordinal order, so the generated lists do not depend on declaration order
+    private static List<string> Sorted(IEnumerable<string> names)
+        => names.Distinct().OrderBy(name => name, System.StringComparer.Ordinal).ToList();
+
+    /// <summary>The registration classes one shape produces, by the names that emit them.</summary>
+    private static ShapeNames Read(GeneratorAttributeSyntaxContext context, CancellationToken ct)
     {
+        var found = new ShapeNames();
+
         if (context.TargetSymbol is not INamedTypeSymbol { ContainingType: null } symbol)
-            return [];
+            return found;
 
         var model = DeclarationModel.For(symbol);
-        var found = ImmutableArray.CreateBuilder<(int Kind, string Name)>();
         var ns = ArchetypeNames.NamespaceOf(symbol);
         var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
 
         if (ComponentRegistrationEmitter.Applies(model))
-            found.Add((Components, $"{prefix}{ComponentRegistrationEmitter.NameOf(symbol)}"));
+            found.Components.Add($"{prefix}{ComponentRegistrationEmitter.NameOf(symbol)}");
 
         if (model.RegistersReplication)
-            found.Add((Replication, $"{prefix}{symbol.Name}Replication"));
+            found.Replication.Add($"{prefix}{symbol.Name}Replication");
 
         if (model.IsArchetype)
-            found.Add((Rest, $"{prefix}{symbol.Name}Declared"));
+            found.RegisterAllFixMe.Add($"{prefix}{symbol.Name}Declared");
 
         if (model.Extends.Count > 0)
-            found.Add((Rest, $"{prefix}{symbol.Name}Extends"));
+            found.RegisterAllFixMe.Add($"{prefix}{symbol.Name}Extends");
 
         if (model.Tags.Count > 0)
-            found.Add((Rest, $"{prefix}{symbol.Name}Tags"));
+            found.RegisterAllFixMe.Add($"{prefix}{symbol.Name}Tags");
 
         if (NativeInitEmitter.Applies(model))
-            found.Add((Rest, $"{prefix}{symbol.Name}NativeInit"));
+            found.RegisterAllFixMe.Add($"{prefix}{symbol.Name}NativeInit");
 
         // Handlers the shape declared for itself, which sit inside the shape rather than beside it.
         if (CreateHandlerEmitter.Check(model).Length == 0)
             foreach (var handler in model.CreateHandlers)
-                found.Add((Rest, $"{prefix}{symbol.Name}.{handler.Name}Registration"));
+                found.RegisterAllFixMe.Add($"{prefix}{symbol.Name}.{handler.Name}Registration");
 
         if (DeleteHandlerEmitter.Check(model).Length == 0)
             foreach (var handler in model.DeleteHandlers)
-                found.Add((Rest, $"{prefix}{symbol.Name}.{handler.Name}DeleteRegistration"));
+                found.RegisterAllFixMe.Add($"{prefix}{symbol.Name}.{handler.Name}DeleteRegistration");
 
-        return found.ToImmutable();
+        return found;
     }
 
     /// <summary>The registration an RPC class produces, if a generator will complete it.</summary>
@@ -144,7 +152,7 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
     /// Both sides carry the same attribute and only one of the two generators claims a class, but
     /// the registration it writes has the same name either way, so this does not have to know which.
     /// </remarks>
-    private static ImmutableArray<(int Kind, string Name)> ReadRpcHandlers(GeneratorAttributeSyntaxContext context, CancellationToken ct)
+    private static ImmutableArray<string> ReadRpcHandlers(GeneratorAttributeSyntaxContext context, CancellationToken ct)
     {
         if (context.TargetSymbol is not INamedTypeSymbol { ContainingType: null } symbol
             || !ServerRpcModel.Implements(symbol))
@@ -153,11 +161,11 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
         var ns = ArchetypeNames.NamespaceOf(symbol);
         var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
 
-        return [(Rest, $"{prefix}{symbol.Name}.Registration")];
+        return [$"{prefix}{symbol.Name}.Registration"];
     }
 
     /// <summary>The registration a mod's config produces, unless the analyzer refuses the class.</summary>
-    private static ImmutableArray<(int Kind, string Name)> ReadModConfig(GeneratorAttributeSyntaxContext context, CancellationToken ct)
+    private static ImmutableArray<string> ReadModConfig(GeneratorAttributeSyntaxContext context, CancellationToken ct)
     {
         if (context.TargetSymbol is not INamedTypeSymbol { ContainingType: null } symbol)
             return [];
@@ -168,11 +176,11 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
         var ns = ArchetypeNames.NamespaceOf(symbol);
         var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
 
-        return [(Rest, $"{prefix}{symbol.Name}.Registration")];
+        return [$"{prefix}{symbol.Name}.Registration"];
     }
 
     /// <summary>The registration a mod's entry point produces, unless the analyzer refuses the class.</summary>
-    private static ImmutableArray<(int Kind, string Name)> ReadModEntry(GeneratorAttributeSyntaxContext context, CancellationToken ct)
+    private static ImmutableArray<string> ReadModEntry(GeneratorAttributeSyntaxContext context, CancellationToken ct)
     {
         if (context.TargetSymbol is not INamedTypeSymbol { ContainingType: null } symbol)
             return [];
@@ -183,11 +191,11 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
         var ns = ArchetypeNames.NamespaceOf(symbol);
         var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
 
-        return [(Rest, $"{prefix}{symbol.Name}.Registration")];
+        return [$"{prefix}{symbol.Name}.Registration"];
     }
 
     /// <summary>The registration a service produces, unless the analyzer refuses the class.</summary>
-    private static ImmutableArray<(int Kind, string Name)> ReadService(GeneratorAttributeSyntaxContext context, CancellationToken ct)
+    private static ImmutableArray<string> ReadService(GeneratorAttributeSyntaxContext context, CancellationToken ct)
     {
         if (context.TargetSymbol is not INamedTypeSymbol { ContainingType: null } symbol)
             return [];
@@ -198,7 +206,7 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
         var ns = ArchetypeNames.NamespaceOf(symbol);
         var prefix = ns.Length == 0 ? "global::" : $"global::{ns}.";
 
-        return [(Rest, $"{prefix}{symbol.Name}.Registration")];
+        return [$"{prefix}{symbol.Name}.Registration"];
     }
 
     private static string Emit(System.Collections.Generic.IReadOnlyList<string> names)
