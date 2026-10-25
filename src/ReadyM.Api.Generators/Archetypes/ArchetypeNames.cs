@@ -52,8 +52,9 @@ internal static class ArchetypeNames
     /// <summary>Matched against a symbol's ToDisplayString, which carries no global:: prefix.</summary>
     public const string ScopeMarker = "ReadyM.SDK.Archetypes.IScope";
     public const string Scope = "global::ReadyM.SDK.Archetypes.Scope";
-    public const string IndexRegistry = "global::ReadyM.SDK.Archetypes.IndexRegistry";
-    public const string ReplicationRegistry = "global::ReadyM.SDK.Archetypes.ReplicationRegistry";
+    public const string ComponentRegistrationHelper = "global::ReadyM.SDK.Archetypes.ComponentRegistrationHelper";
+    public const string ReplicationRegistrationHelper = "global::ReadyM.SDK.Archetypes.ReplicationRegistrationHelper";
+    public const string DependencyContainer = "global::ReadyM.Api.DI.IDependencyContainer";
     public const string NativeInitRegistry = "global::ReadyM.SDK.Archetypes.NativeInitRegistry";
 
     public const string WriteKind = "global::ReadyM.SDK.Entities.WriteKind";

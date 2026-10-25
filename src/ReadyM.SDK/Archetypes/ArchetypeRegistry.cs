@@ -3,6 +3,8 @@
 namespace ReadyM.SDK.Archetypes;
 
 /// <summary>What each archetype gains from the mods that are loaded, which is what creating one carries.</summary>
+// FixMe(2026-10-18-twins-m4): a stateful static, filled by generated code from module initializers. The shapes, their
+// tags and their extensions become archetype registrations, and this goes.
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class ArchetypeRegistry
 {

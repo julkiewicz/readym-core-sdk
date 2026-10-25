@@ -13,8 +13,6 @@ namespace ReadyM.Relay.Server.Sdk.Ecs.Components;
 internal sealed class ModNetworkedComponentRegistry(IEnumerable<INetworkedComponentRegistration> registrations)
     : ComponentRegistryBase<INetworkedComponentRegistry, INetworkedComponent, DeliveryMethod>(registrations), INetworkedComponentRegistry
 {
-    private readonly Dictionary<string, DeliveryMethod> _deliveryMethods = new();
-
     public INetworkedComponentRegistry RegisterComponent<T>(DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
         where T : struct, INetworkedComponent
         => RegisterComponentImpl(deliveryMethod, default(T));
@@ -28,19 +26,14 @@ internal sealed class ModNetworkedComponentRegistry(IEnumerable<INetworkedCompon
         NetworkedComponentRegistry.RequireDeltaSafe(deliveryMethod, typeof(T).FullName!);
         NetworkedComponentRegistry.RequireInternedSafe(typeof(T), deliveryMethod);
 
-        var registry = base.RegisterComponentImpl(deliveryMethod, defaultValue);
-        _deliveryMethods.Add(typeof(T).FullName!, deliveryMethod);
-        return registry;
+        return base.RegisterComponentImpl(deliveryMethod, defaultValue);
     }
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod<T>()
         => GetNetworkedComponentDeliveryMethod(typeof(T).FullName!);
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod(string typeFullName)
-    {
-        ThrowIfNotSealed(typeFullName);
-        return _deliveryMethods[typeFullName];
-    }
+        => GetContext(typeFullName);
 
     public INetworkedComponentRegistry RegisterModComponent(ModNetworkedComponentInfo info, string typeFullName, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
         => throw OnlyOnTheAotSide(typeFullName);

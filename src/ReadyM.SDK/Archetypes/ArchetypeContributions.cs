@@ -2,6 +2,7 @@
 
 namespace ReadyM.SDK.Archetypes;
 
+// FixMe(2026-10-18-twins-m4): reads the static ArchetypeRegistry. It goes with it.
 internal static class ArchetypeContributions
 {
     /// <summary>

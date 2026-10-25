@@ -129,6 +129,7 @@ internal class ArchetypeGenerator : IIncrementalGenerator
             ValuesEmitter.Emit(writer, model);
             CreateHandlerEmitter.Emit(writer, model, compilation);
             DeleteHandlerEmitter.Emit(writer, model, compilation);
+            IndexEmitter.Emit(writer, model);
         }
 
         if (view is not null)
@@ -142,8 +143,8 @@ internal class ArchetypeGenerator : IIncrementalGenerator
         ExtendsEmitter.Emit(writer, model, compilation);
         TagEmitter.Emit(writer, model, compilation);
         DeclarationEmitter.Emit(writer, model, compilation);
-        IndexEmitter.Emit(writer, model, compilation);
-        ReplicationEmitter.Emit(writer, model, compilation);
+        ComponentRegistrationEmitter.Emit(writer, model);
+        ReplicationEmitter.Emit(writer, model);
         NativeInitEmitter.Emit(writer, model, compilation);
 
         return (ArchetypeNames.HintOf(symbol, "Archetype"), writer.ToString(), problems, replicated);

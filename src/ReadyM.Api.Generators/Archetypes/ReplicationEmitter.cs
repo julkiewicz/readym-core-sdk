@@ -5,7 +5,7 @@ namespace ReadyM.Api.Generators.Archetypes;
 /// <summary>Declares that a shape's component replicates, and how its changes travel.</summary>
 internal static class ReplicationEmitter
 {
-    public static void Emit(SourceWriter writer, DeclarationModel model, Compilation compilation)
+    public static void Emit(SourceWriter writer, DeclarationModel model)
     {
         if (!model.RegistersReplication)
             return;
@@ -15,12 +15,9 @@ internal static class ReplicationEmitter
 
         using (writer.Braces($"internal static class {model.Name}Replication"))
         {
-            if (ExtendsEmitter.HasModuleInitializer(compilation))
-                writer.Line("[global::System.Runtime.CompilerServices.ModuleInitializer]");
-
-            writer.Line("public static void Register()");
-            writer.Line($"    => {ArchetypeNames.ReplicationRegistry}.Register<{model.QualifiedComponent}>(");
-            writer.Line($"        {ArchetypeNames.Delivery}.{model.Delivery});");
+            writer.Line($"public static void Register({ArchetypeNames.DependencyContainer} services)");
+            writer.Line($"    => {ArchetypeNames.ReplicationRegistrationHelper}.Register<{model.QualifiedComponent}>(");
+            writer.Line($"        services, {ArchetypeNames.Delivery}.{model.Delivery});");
         }
     }
 }

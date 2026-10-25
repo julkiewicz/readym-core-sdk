@@ -10,28 +10,26 @@ using ReadyM.Api.Multiplayer.Interop;
 
 namespace ReadyM.Api.Multiplayer.ECS.Registry;
 
+/// <summary>
+/// What is networked about each component. Ids are the base's, in full name order, so the client and the server get the
+/// same ids from the same set of networked components whatever order their registrations ran in.
+/// </summary>
 internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponentRegistration> registrations, ILogger logger)
-    : IdComponentRegistryBase<INetworkedComponentRegistry, INetworkedComponent>(registrations), INetworkedComponentRegistry
+    : IdComponentRegistryBase<INetworkedComponentRegistry, INetworkedComponent, NetworkedComponentContext>(registrations), INetworkedComponentRegistry
 {
+    // An initializer, so it is set before the base constructor hands out the ids
     private readonly ILogger _logger = logger;
-    private readonly Dictionary<string, (NetworkedComponentId Id, DeliveryMethod DeliveryMethod)> _componentIds = new();
-    private readonly Dictionary<NetworkedComponentId, Type> _netComponentTypes = new();
-    private readonly Dictionary<string, ModNetworkedComponentInfo> _modComponentInfos = new();
+
+    protected override void OnIdAssigned(byte id, RegisteredComponent component)
+        => _logger.LogInformation("Registered networked component {Id}: {ComponentFullName} delivery {DeliveryMethod}",
+            new NetworkedComponentId(id), component.TypeFullName, component.Context.DeliveryMethod);
 
     public INetworkedComponentRegistry RegisterComponent(Type componentType, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
     {
-        if (!typeof(INetworkedComponent).IsAssignableFrom(componentType))
-            throw new ArgumentException($"Type {componentType.FullName} does not implement INetworkedComponent", nameof(componentType));
-
         RequireDeltaSafe(deliveryMethod, componentType.FullName!);
         RequireInternedSafe(componentType, deliveryMethod);
 
-        var id = new NetworkedComponentId(GetNextComponentId());
-        _componentIds.Add(componentType.FullName!, (id, deliveryMethod));
-        _netComponentTypes.Add(id, componentType);
-
-        _logger.LogInformation("Registered networked component {Id}: {ComponentType} ({ComponentFullName}) delivery {DeliveryMethod}", id, componentType.Name, componentType.FullName, deliveryMethod);
-        return base.RegisterComponentImpl(componentType);
+        return RegisterComponentImpl(componentType, new NetworkedComponentContext(deliveryMethod, default));
     }
 
     public INetworkedComponentRegistry RegisterComponent<T>(DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
@@ -40,12 +38,7 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
         RequireDeltaSafe(deliveryMethod, typeof(T).FullName!);
         RequireInternedSafe(typeof(T), deliveryMethod);
 
-        var id = new NetworkedComponentId(GetNextComponentId());
-        _componentIds.Add(typeof(T).FullName!, (id, deliveryMethod));
-        _netComponentTypes.Add(id, typeof(T));
-
-        _logger.LogInformation("Registered networked component {Id}: {ComponentType} ({ComponentFullName}) delivery {DeliveryMethod}", id, typeof(T).Name, typeof(T).FullName, deliveryMethod);
-        return base.RegisterComponentImpl(default(T));
+        return RegisterComponentImpl(new NetworkedComponentContext(deliveryMethod, default), default(T));
     }
 
     /// <summary>
@@ -59,48 +52,30 @@ internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponent
     {
         RequireDeltaSafe(deliveryMethod, typeFullName);
 
-        var id = new NetworkedComponentId(GetNextComponentId());
-        _componentIds.Add(typeFullName, (id, deliveryMethod));
-        _modComponentInfos.Add(typeFullName, info);
-
-        _logger.LogInformation("Registered networked mod component {Id}: {ComponentFullName} delivery {DeliveryMethod}", id, typeFullName, deliveryMethod);
-
         // No networked acceptor reads the storage struct; the networked pointers are read through GetModComponentInfo
-        return RegisterModComponentImpl(default, typeFullName);
+        return RegisterModComponentImpl(new NetworkedComponentContext(deliveryMethod, info), default, typeFullName);
     }
 
     public ModNetworkedComponentInfo GetModComponentInfo(string typeFullName)
-    {
-        ThrowIfNotSealed(typeFullName);
-        return _modComponentInfos[typeFullName];
-    }
+        => GetContext(typeFullName).ModComponentInfo;
 
     public NetworkedComponentId GetNetworkedComponentId(Type type)
-        => GetEntry(type.FullName!).Id;
+        => new(GetId(type.FullName!));
 
     public NetworkedComponentId GetNetworkedComponentId<T>()
-        => GetEntry(typeof(T).FullName!).Id;
+        => new(GetId(typeof(T).FullName!));
 
     public NetworkedComponentId GetNetworkedComponentId(string typeFullName)
-        => GetEntry(typeFullName).Id;
+        => new(GetId(typeFullName));
 
     public Type GetComponentType(NetworkedComponentId componentId)
-    {
-        ThrowIfNotSealed($"the type of {componentId}");
-        return _netComponentTypes[componentId];
-    }
+        => RegisteredComponents[componentId.RawValue].Type!;
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod<T>()
-        => GetEntry(typeof(T).FullName!).DeliveryMethod;
+        => GetNetworkedComponentDeliveryMethod(typeof(T).FullName!);
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod(string typeFullName)
-        => GetEntry(typeFullName).DeliveryMethod;
-
-    private (NetworkedComponentId Id, DeliveryMethod DeliveryMethod) GetEntry(string typeFullName)
-    {
-        ThrowIfNotSealed(typeFullName);
-        return _componentIds[typeFullName];
-    }
+        => GetContext(typeFullName).DeliveryMethod;
 
     // A delta carries only the entities and fields that changed since the previous one, all of it on one channel,
     // and nothing sends it again. Sequenced drops every message but the newest and unordered can apply an older
