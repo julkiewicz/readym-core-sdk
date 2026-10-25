@@ -116,7 +116,8 @@ internal class ArchetypeMixinGenerator : IIncrementalGenerator
 
         ExtendsEmitter.Emit(writer, model, compilation);
         ExtendedMemberEmitter.Emit(writer, model, chunks, client);
-        ReplicationEmitter.Emit(writer, model, compilation);
+        ComponentRegistrationEmitter.Emit(writer, model);
+        ReplicationEmitter.Emit(writer, model);
         NativeInitEmitter.Emit(writer, model, compilation);
 
         return (ArchetypeNames.HintOf(symbol, "Mixin"), writer.ToString(), problems, replicated);

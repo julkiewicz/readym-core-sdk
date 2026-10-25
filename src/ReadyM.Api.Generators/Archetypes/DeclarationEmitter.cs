@@ -10,6 +10,8 @@ namespace ReadyM.Api.Generators.Archetypes;
 /// components the host has never heard of until this, and the first query for it asks the host for
 /// an id of a component that was never registered.
 /// </remarks>
+// FixMe(2026-10-18-twins-m4): fills the static ArchetypeRegistry from a module initializer. It registers an archetype
+// registration in the container instead.
 internal static class DeclarationEmitter
 {
     public static void Emit(SourceWriter writer, DeclarationModel model, Compilation compilation)

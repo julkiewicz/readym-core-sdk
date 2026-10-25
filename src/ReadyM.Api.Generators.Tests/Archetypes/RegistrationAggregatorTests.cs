@@ -152,4 +152,39 @@ public class RegistrationAggregatorTests(ITestOutputHelper output)
                 private void Update() { }
             }
             """));
+
+    private const string Replicated = """
+        using ReadyM.SDK.Attributes;
+
+        namespace Mod;
+
+        [ArchetypeMixin]
+        [Replicated]
+        [Propagates(Propagation.OwnershipBased)]
+        public readonly partial struct Gauge
+        {
+            public partial int Level { get; set; }
+        }
+        """;
+
+    // Each concern gets a helper a loader calls with its container; the shapes that bring components are listed once
+    [Fact]
+    public void The_component_helper_lists_every_shape_that_brings_components()
+    {
+        var generated = Generated(Source);
+
+        Assert.Contains("internal static class GeneratedComponentRegistrationHelper", generated);
+        Assert.Contains("global::Mod.StampedComponentRegistrationHelper.Register(services);", generated);
+        Assert.Contains("global::Mod.ParcelComponentRegistrationHelper.Register(services);", generated);
+    }
+
+    [Fact]
+    public void A_replicated_shape_is_listed_by_the_replication_helper_and_not_by_RegisterAll()
+    {
+        var generated = Generated(Replicated);
+
+        Assert.Contains("internal static class GeneratedReplicationRegistrationHelper", generated);
+        Assert.Contains("global::Mod.GaugeReplication.Register(services);", generated);
+        Assert.DoesNotContain("global::Mod.GaugeReplication.Register();", generated);
+    }
 }

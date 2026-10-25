@@ -4,6 +4,8 @@ using Microsoft.CodeAnalysis;
 namespace ReadyM.Api.Generators.Archetypes;
 
 /// <summary>Registers the tags a shape declares, so every entity created as it carries them.</summary>
+// FixMe(2026-10-18-twins-m4): fills the static ArchetypeRegistry from a module initializer. It registers an archetype
+// registration in the container instead.
 internal static class TagEmitter
 {
     public static void Emit(SourceWriter writer, DeclarationModel model, Compilation compilation)
