@@ -103,6 +103,7 @@ internal class ArchetypeMixinGenerator : IIncrementalGenerator
             ValuesEmitter.Emit(writer, model);
             CreateHandlerEmitter.Emit(writer, model, compilation);
             DeleteHandlerEmitter.Emit(writer, model, compilation);
+            IndexEmitter.Emit(writer, model);
         }
 
         if (view is not null)
@@ -115,7 +116,6 @@ internal class ArchetypeMixinGenerator : IIncrementalGenerator
 
         ExtendsEmitter.Emit(writer, model, compilation);
         ExtendedMemberEmitter.Emit(writer, model, chunks, client);
-        IndexEmitter.Emit(writer, model, compilation);
         ReplicationEmitter.Emit(writer, model, compilation);
         NativeInitEmitter.Emit(writer, model, compilation);
 

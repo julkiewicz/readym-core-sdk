@@ -39,9 +39,6 @@ public class GeneratedShapesTests : ClientSdkTest
     [InlineData("WeatherExtends")]
     [InlineData("MusicExtends")]
     [InlineData("ClimateExtends")]
-    [InlineData("RegisteredIndex")]
-    [InlineData("TaggedIndex")]
-    [InlineData("StationIndex")]
     public void It_names_every_registration(string expected)
     {
         var source = EntryPoint.GetMethod("RegisterAll", BindingFlags.Public | BindingFlags.Static);
@@ -84,7 +81,7 @@ public class GeneratedShapesTests : ClientSdkTest
 
     private static IEnumerable<string> RegistrationNames()
         => typeof(CoreArea).Assembly.GetTypes()
-            .Where(type => type.Name.EndsWith("Extends") || type.Name.EndsWith("Index"))
+            .Where(type => type.Name.EndsWith("Extends"))
             .Select(type => type.Name);
 
     // -- what a loader calls -----------------------------------------------------------------------

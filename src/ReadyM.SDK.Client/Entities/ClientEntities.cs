@@ -88,7 +88,10 @@ internal class ClientEntities(EntityStore store, IEntityApi api) : IEntities
     public bool TryLookup<T, TKey>(TKey key, out T shape)
         where T : struct, IArchetypeQueryable, IIndexed<TKey>
     {
-        if (IndexRegistry.TryFind<T, TKey>(api, key, out var entity))
+        // On the shape's own struct type: a constrained call, so nothing is boxed
+        var finder = new EntityApiIndexFinder<TKey>(api);
+
+        if (default(T).TryFind(ref finder, key, out var entity))
         {
             shape = new T { Handle = new EntityHandle(entity, api) };
             return true;
