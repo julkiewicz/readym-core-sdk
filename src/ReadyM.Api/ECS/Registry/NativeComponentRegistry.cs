@@ -12,25 +12,20 @@ namespace ReadyM.Api.ECS.Registry;
 /// </summary>
 internal class NativeComponentRegistry : IdComponentRegistryBase<INativeComponentRegistry, ValueType>, INativeComponentRegistry
 {
-    private readonly Dictionary<string, Type> _types = new();
-
     public NativeComponentRegistry(IEnumerable<INativeComponentRegistration> registrations)
         : base(registrations)
     {
         // Each type's static Id field gets its id once ids exist (still a stateful static)
-        foreach (var entry in _types)
-            entry.Value.GetField("Id", BindingFlags.Static | BindingFlags.Public)?.SetValue(null, GetId(entry.Key));
+        for (var id = 0; id < IdCount; id++)
+            GetRegisteredComponent(id).Type!.GetField("Id", BindingFlags.Static | BindingFlags.Public)?.SetValue(null, (byte)id);
     }
 
     public List<Type> GetComponentTypes()
-        => Enumerable.Range(0, IdCount).Select(id => _types[GetTypeFullName(id)]).ToList();
+        => Enumerable.Range(0, IdCount).Select(id => GetRegisteredComponent(id).Type!).ToList();
 
     public INativeComponentRegistry RegisterComponent<T>(T defaultValue = default) where T : struct
-    {
-        _types.Add(typeof(T).FullName!, typeof(T));
-        return base.RegisterComponentImpl(defaultValue);
-    }
+        => RegisterComponentImpl(defaultValue);
 
     public Type? GetComponentType(int componentId)
-        => componentId >= 0 && componentId < IdCount ? _types[GetTypeFullName(componentId)] : null;
+        => componentId >= 0 && componentId < IdCount ? GetRegisteredComponent(componentId).Type : null;
 }

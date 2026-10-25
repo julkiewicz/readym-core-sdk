@@ -8,19 +8,19 @@ namespace ReadyM.Api.ECS.Registry;
 /// A registry that hands out ids. Every component arrives before it seals, so the ids are handed out then, sorted by
 /// the comparison it is given: never the order Register ran in.
 /// </summary>
-internal abstract class IdComponentRegistryBase<TRegistry, TComponent>
-    : ComponentRegistryBase<TRegistry, TComponent>
+internal abstract class IdComponentRegistryBase<TRegistry, TComponent, TContext>
+    : ComponentRegistryBase<TRegistry, TComponent, TContext>
     where TRegistry : IComponentRegistryBase<TRegistry, TComponent>
 {
     /// <summary>
     /// What one registration passed to the innermost RegisterImpl, which is what the id order compares. A typed
     /// component's default value is left out: no order has a reason to read it.
     /// </summary>
-    public readonly record struct RegisteredComponent(Type? Type, ModComponentInfo ModComponentInfo, string TypeFullName);
+    public readonly record struct RegisteredComponent(
+        Type? Type, TContext Context, ModComponentInfo ModComponentInfo, string TypeFullName);
 
     private readonly List<RegisteredComponent> _registered = [];
     private readonly Dictionary<string, byte> _ids = new();
-    private readonly List<string> _byId = [];
 
     protected IdComponentRegistryBase(
         IEnumerable<IComponentRegistrationBase<TRegistry, TComponent>> registrations,
@@ -30,11 +30,8 @@ internal abstract class IdComponentRegistryBase<TRegistry, TComponent>
         // The base constructor ran every registration and sealed
         _registered.Sort(idOrder);
 
-        foreach (var registered in _registered)
-        {
-            _ids.Add(registered.TypeFullName, (byte)_byId.Count);
-            _byId.Add(registered.TypeFullName);
-        }
+        for (var id = 0; id < _registered.Count; id++)
+            _ids.Add(_registered[id].TypeFullName, (byte)id);
     }
 
     /// <summary>Full name order, ordinal: the default, so the ids do not depend on one machine's registration order.</summary>
@@ -49,7 +46,7 @@ internal abstract class IdComponentRegistryBase<TRegistry, TComponent>
         get
         {
             ThrowIfNotSealed("its ids");
-            return _byId.Count;
+            return _registered.Count;
         }
     }
 
@@ -59,25 +56,26 @@ internal abstract class IdComponentRegistryBase<TRegistry, TComponent>
         return _ids[typeFullName];
     }
 
-    protected string GetTypeFullName(int id)
+    /// <summary>What the component with this id was registered with.</summary>
+    protected RegisteredComponent GetRegisteredComponent(int id)
     {
         ThrowIfNotSealed($"the component of id {id}");
-        return _byId[id];
+        return _registered[id];
     }
 
-    protected override TRegistry RegisterComponentImpl<T>(ValueTuple context, T defaultValue = default)
+    protected override TRegistry RegisterComponentImpl<T>(TContext context, T defaultValue = default)
     {
         ThrowIfFull();
         var registry = base.RegisterComponentImpl(context, defaultValue);
-        _registered.Add(new RegisteredComponent(typeof(T), default, typeof(T).FullName!));
+        _registered.Add(new RegisteredComponent(typeof(T), context, default, typeof(T).FullName!));
         return registry;
     }
 
-    protected override TRegistry RegisterModComponentImpl(ModComponentInfo info, string typeFullName)
+    protected override TRegistry RegisterModComponentImpl(TContext context, ModComponentInfo info, string typeFullName)
     {
         ThrowIfFull();
-        var registry = base.RegisterModComponentImpl(info, typeFullName);
-        _registered.Add(new RegisteredComponent(null, info, typeFullName));
+        var registry = base.RegisterModComponentImpl(context, info, typeFullName);
+        _registered.Add(new RegisteredComponent(null, context, info, typeFullName));
         return registry;
     }
 
@@ -88,4 +86,31 @@ internal abstract class IdComponentRegistryBase<TRegistry, TComponent>
             throw new InvalidOperationException($"Cannot register more than {byte.MaxValue} components");
         }
     }
+}
+
+/// <summary>An id registry whose components are registered with no context; ValueTuple stands for none.</summary>
+internal abstract class IdComponentRegistryBase<TRegistry, TComponent> : IdComponentRegistryBase<TRegistry, TComponent, ValueTuple>
+    where TRegistry : IComponentRegistryBase<TRegistry, TComponent>
+{
+    protected IdComponentRegistryBase(
+        IEnumerable<IComponentRegistrationBase<TRegistry, TComponent>> registrations,
+        Comparison<RegisteredComponent> idOrder)
+        : base(registrations, idOrder)
+    {
+    }
+
+    protected IdComponentRegistryBase(IEnumerable<IComponentRegistrationBase<TRegistry, TComponent>> registrations)
+        : base(registrations)
+    {
+    }
+
+    protected TRegistry RegisterComponentImpl<T>(T defaultValue = default)
+        where T : struct, TComponent
+        => RegisterComponentImpl(default(ValueTuple), defaultValue);
+
+    protected TRegistry RegisterComponentImpl(Type componentType, TComponent? defaultValue = default)
+        => RegisterComponentImpl(componentType, default(ValueTuple), defaultValue);
+
+    protected TRegistry RegisterModComponentImpl(ModComponentInfo info, string typeFullName)
+        => RegisterModComponentImpl(default(ValueTuple), info, typeFullName);
 }

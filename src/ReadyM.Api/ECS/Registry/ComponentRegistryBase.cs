@@ -30,6 +30,10 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent, TContext> :
     private readonly HashSet<Type> _registeredTypes = [];
     private readonly HashSet<string> _registeredModComponents = [];
 
+    // What each component was registered with, by full name; typed and mod components apart, as above
+    private readonly Dictionary<string, TContext> _contexts = new();
+    private readonly Dictionary<string, TContext> _modContexts = new();
+
     public bool HasComponents
     {
         get
@@ -117,6 +121,7 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent, TContext> :
         }
 
         _componentTypes.Add(typeof(T));
+        _contexts.Add(typeof(T).FullName!, context);
 
         var accept = new Action<IComponentRegistryCallbackBase<TRegistry, TComponent>>(callback =>
         {
@@ -137,7 +142,7 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent, TContext> :
     /// deferred action and does no work, so a mod component reaches every acceptor at the same point in the
     /// build as a native one rather than being acted on the moment it arrives.
     /// </summary>
-    protected virtual TRegistry RegisterModComponentImpl(ModComponentInfo info, string typeFullName)
+    protected virtual TRegistry RegisterModComponentImpl(TContext context, ModComponentInfo info, string typeFullName)
     {
         ThrowIfSealed(typeFullName);
 
@@ -156,6 +161,8 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent, TContext> :
                 + "name is the only thing that identifies it.", nameof(typeFullName));
         }
 
+        _modContexts.Add(typeFullName, context);
+
         var accept = new Action<IComponentRegistryCallbackBase<TRegistry, TComponent>>(callback =>
         {
             callback.AcceptModComponent((TRegistry)(object)this, info, typeFullName);
@@ -168,6 +175,13 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent, TContext> :
         }
 
         return (TRegistry)(object)this;
+    }
+
+    /// <summary>What a component was registered with; throws until sealed, as every read does.</summary>
+    protected TContext GetContext(string typeFullName)
+    {
+        ThrowIfNotSealed(typeFullName);
+        return _contexts.TryGetValue(typeFullName, out var context) ? context : _modContexts[typeFullName];
     }
 
     /// <summary>
@@ -237,4 +251,7 @@ internal abstract class ComponentRegistryBase<TRegistry, TComponent>(
 
     protected TRegistry RegisterComponentImpl(Type componentType, TComponent? defaultValue = default)
         => RegisterComponentImpl(componentType, default(ValueTuple), defaultValue);
+
+    protected TRegistry RegisterModComponentImpl(ModComponentInfo info, string typeFullName)
+        => RegisterModComponentImpl(default(ValueTuple), info, typeFullName);
 }
