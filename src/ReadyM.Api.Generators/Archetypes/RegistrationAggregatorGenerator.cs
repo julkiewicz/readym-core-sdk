@@ -70,14 +70,13 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
             static (node, _) => node is ClassDeclarationSyntax,
             ReadRpcHandlers);
 
-        var shapes = archetypes.Collect().Combine(mixins.Collect());
-        var others = services.Collect().Combine(entries.Collect()).Combine(configs.Collect())
-            .Combine(handlers.Collect()).Combine(legacyHandlers.Collect());
+        // Each joined into one flat list as it comes, so the output reads two lists and no nested pairs
+        var shapes = Join(archetypes.Collect(), mixins);
+        var others = Join(Join(Join(Join(Flatten(services), entries), configs), handlers), legacyHandlers);
 
         context.RegisterSourceOutput(shapes.Combine(others), static (spc, found) =>
         {
-            var declared = found.Left.Left.Concat(found.Left.Right).ToList();
-            var other = found.Right;
+            var (declared, otherNames) = found;
 
             var components = Sorted(declared.SelectMany(names => names.Components));
             var replication = Sorted(declared.SelectMany(names => names.Replication));
@@ -91,15 +90,28 @@ internal class RegistrationAggregatorGenerator : IIncrementalGenerator
             {
                 // FixMe(2026-10-19-twins-scan-sdk): these kinds still fill the SDK's statics through RegisterAll, and
                 // archetypes until 2026-10-18-twins-m4. Each gets a helper of its own that registers in the container.
-                var registerAll = Sorted(declared.SelectMany(names => names.RegisterAllFixMe)
-                    .Concat(other.Left.Left.Left.Left.Concat(other.Left.Left.Left.Right).Concat(other.Left.Left.Right)
-                        .Concat(other.Left.Right).Concat(other.Right).SelectMany(names => names)));
+                var registerAll = Sorted(declared.SelectMany(names => names.RegisterAllFixMe).Concat(otherNames));
 
                 if (registerAll.Count > 0)
                     spc.AddSource($"{Namespace}.{ClassName}.g.cs", Emit(registerAll));
             }
         });
     }
+
+    private static IncrementalValueProvider<ImmutableArray<T>> Join<T>(
+        IncrementalValueProvider<ImmutableArray<T>> found, IncrementalValuesProvider<T> more)
+        => found.Combine(more.Collect()).Select(static (pair, _) =>
+        {
+            var (before, after) = pair;
+            return before.AddRange(after);
+        });
+
+    private static IncrementalValueProvider<ImmutableArray<string>> Join(
+        IncrementalValueProvider<ImmutableArray<string>> found, IncrementalValuesProvider<ImmutableArray<string>> more)
+        => Join(found, more.SelectMany(static (names, _) => names));
+
+    private static IncrementalValueProvider<ImmutableArray<string>> Flatten(IncrementalValuesProvider<ImmutableArray<string>> names)
+        => names.SelectMany(static (found, _) => found).Collect();
 
     // Each name once, in ordinal order, so the generated lists do not depend on declaration order
     private static List<string> Sorted(IEnumerable<string> names)
