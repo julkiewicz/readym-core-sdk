@@ -14,19 +14,15 @@ namespace ReadyM.Api.Multiplayer.ECS.Registry;
 /// What is networked about each component. Ids are the base's, in full name order, so the client and the server get the
 /// same ids from the same set of networked components whatever order their registrations ran in.
 /// </summary>
-internal sealed class NetworkedComponentRegistry
-    : IdComponentRegistryBase<INetworkedComponentRegistry, INetworkedComponent, NetworkedComponentContext>, INetworkedComponentRegistry
+internal sealed class NetworkedComponentRegistry(IEnumerable<INetworkedComponentRegistration> registrations, ILogger logger)
+    : IdComponentRegistryBase<INetworkedComponentRegistry, INetworkedComponent, NetworkedComponentContext>(registrations), INetworkedComponentRegistry
 {
-    public NetworkedComponentRegistry(IEnumerable<INetworkedComponentRegistration> registrations, ILogger logger)
-        : base(registrations)
-    {
-        for (var id = 0; id < IdCount; id++)
-        {
-            var registered = GetRegisteredComponent(id);
-            logger.LogInformation("Registered networked component {Id}: {ComponentFullName} delivery {DeliveryMethod}",
-                new NetworkedComponentId((byte)id), registered.TypeFullName, registered.Context.DeliveryMethod);
-        }
-    }
+    // An initializer, so it is set before the base constructor hands out the ids
+    private readonly ILogger _logger = logger;
+
+    protected override void OnIdAssigned(byte id, RegisteredComponent component)
+        => _logger.LogInformation("Registered networked component {Id}: {ComponentFullName} delivery {DeliveryMethod}",
+            new NetworkedComponentId(id), component.TypeFullName, component.Context.DeliveryMethod);
 
     public INetworkedComponentRegistry RegisterComponent(Type componentType, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
     {
@@ -73,7 +69,7 @@ internal sealed class NetworkedComponentRegistry
         => new(GetId(typeFullName));
 
     public Type GetComponentType(NetworkedComponentId componentId)
-        => GetRegisteredComponent(componentId.RawValue).Type!;
+        => RegisteredComponents[componentId.RawValue].Type!;
 
     public DeliveryMethod GetNetworkedComponentDeliveryMethod<T>()
         => GetNetworkedComponentDeliveryMethod(typeof(T).FullName!);

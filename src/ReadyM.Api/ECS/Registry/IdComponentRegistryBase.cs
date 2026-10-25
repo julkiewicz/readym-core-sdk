@@ -31,7 +31,10 @@ internal abstract class IdComponentRegistryBase<TRegistry, TComponent, TContext>
         _registered.Sort(idOrder);
 
         for (var id = 0; id < _registered.Count; id++)
+        {
             _ids.Add(_registered[id].TypeFullName, (byte)id);
+            OnIdAssigned((byte)id, _registered[id]);
+        }
     }
 
     /// <summary>Full name order, ordinal: the default, so the ids do not depend on one machine's registration order.</summary>
@@ -40,27 +43,28 @@ internal abstract class IdComponentRegistryBase<TRegistry, TComponent, TContext>
     {
     }
 
-    /// <summary>How many components have ids.</summary>
-    protected int IdCount
+    /// <summary>Every registered component, in id order: a component's id is its index.</summary>
+    protected IReadOnlyList<RegisteredComponent> RegisteredComponents
     {
         get
         {
             ThrowIfNotSealed("its ids");
-            return _registered.Count;
+            return _registered;
         }
+    }
+
+    /// <summary>
+    /// Runs for every component once ids are handed out, in id order. Called from this constructor, so an override
+    /// reads only fields set by initializers.
+    /// </summary>
+    protected virtual void OnIdAssigned(byte id, RegisteredComponent component)
+    {
     }
 
     protected byte GetId(string typeFullName)
     {
         ThrowIfNotSealed(typeFullName);
         return _ids[typeFullName];
-    }
-
-    /// <summary>What the component with this id was registered with.</summary>
-    protected RegisteredComponent GetRegisteredComponent(int id)
-    {
-        ThrowIfNotSealed($"the component of id {id}");
-        return _registered[id];
     }
 
     protected override TRegistry RegisterComponentImpl<T>(TContext context, T defaultValue = default)

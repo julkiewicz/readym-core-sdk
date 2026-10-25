@@ -10,22 +10,19 @@ namespace ReadyM.Api.ECS.Registry;
 /// The components the native side shares. Ids are the base's, in full name order; the native side takes each one's id
 /// from its place in <see cref="GetComponentTypes"/>, which is in id order.
 /// </summary>
-internal class NativeComponentRegistry : IdComponentRegistryBase<INativeComponentRegistry, ValueType>, INativeComponentRegistry
+internal class NativeComponentRegistry(IEnumerable<INativeComponentRegistration> registrations)
+    : IdComponentRegistryBase<INativeComponentRegistry, ValueType>(registrations), INativeComponentRegistry
 {
-    public NativeComponentRegistry(IEnumerable<INativeComponentRegistration> registrations)
-        : base(registrations)
-    {
-        // Each type's static Id field gets its id once ids exist (still a stateful static)
-        for (var id = 0; id < IdCount; id++)
-            GetRegisteredComponent(id).Type!.GetField("Id", BindingFlags.Static | BindingFlags.Public)?.SetValue(null, (byte)id);
-    }
+    // Each type's static Id field gets its id (still a stateful static)
+    protected override void OnIdAssigned(byte id, RegisteredComponent component)
+        => component.Type!.GetField("Id", BindingFlags.Static | BindingFlags.Public)?.SetValue(null, id);
 
     public List<Type> GetComponentTypes()
-        => Enumerable.Range(0, IdCount).Select(id => GetRegisteredComponent(id).Type!).ToList();
+        => RegisteredComponents.Select(component => component.Type!).ToList();
 
     public INativeComponentRegistry RegisterComponent<T>(T defaultValue = default) where T : struct
         => RegisterComponentImpl(defaultValue);
 
     public Type? GetComponentType(int componentId)
-        => componentId >= 0 && componentId < IdCount ? GetRegisteredComponent(componentId).Type : null;
+        => componentId >= 0 && componentId < RegisteredComponents.Count ? RegisteredComponents[componentId].Type : null;
 }
