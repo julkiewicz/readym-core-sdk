@@ -292,6 +292,41 @@ public class NetworkEventTests(ITestOutputHelper output)
         Assert.True(apply < observe, "Apply runs before Observe");
     }
 
+    private const string TwoValidators = """
+        using ReadyM.SDK.Attributes;
+        using ReadyM.SDK.Events;
+        using Other.Common;
+
+        namespace Other.Server;
+
+        [Service]
+        public partial class Rules
+        {
+            [EventHandler(Stage.Validate)]
+            public void CheckRange(in HitEvent e, EventContext ctx) { }
+
+            [EventHandler(Stage.Validate)]
+            public void CheckArmour(in HitEvent e, EventContext ctx) { }
+        }
+        """;
+
+    /// <summary>
+    /// A refusal stops the rest of its own stage, not just the stages after it, so the guard belongs between the
+    /// handlers rather than only at the end of the stage.
+    /// </summary>
+    [Fact]
+    public void A_refusal_stops_the_rest_of_its_own_stage()
+    {
+        var server = Generated(RunServerWith(TwoValidators));
+
+        var first = server.IndexOf("CheckRange(", StringComparison.Ordinal);
+        var second = server.IndexOf("CheckArmour(", StringComparison.Ordinal);
+        var guard = server.IndexOf("cancellation.IsCancelled", first, StringComparison.Ordinal);
+
+        Assert.True(first >= 0 && second > first, "both validators are dispatched");
+        Assert.True(guard > first && guard < second, "the refusal is checked before the second validator runs");
+    }
+
     /// <summary>A filter is the only stage that may rewrite the event, so it is the only one taking it by ref.</summary>
     [Fact]
     public void Only_a_filter_is_handed_the_event_by_reference()

@@ -42,7 +42,4 @@ public readonly struct EventAudience
 
     /// <summary>Everyone in a cell.</summary>
     public static EventAudience InCell(FullCellId cell) => new(Scope.Cell, default, default, cell);
-
-    /// <summary>Whether this audience includes a player, the raiser included where the scope relays.</summary>
-    public bool Includes(PlayerId player) => throw new NotImplementedException();
 }

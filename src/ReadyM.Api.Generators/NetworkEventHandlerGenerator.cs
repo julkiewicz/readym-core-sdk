@@ -173,15 +173,17 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
 
                 var indent = handler.SkipOnRaiser ? "            " : "        ";
                 sb.AppendLine($"{indent}{Field(handler.Owner)}.{handler.Method.Name}({Arguments(handler)});");
-            }
 
-            if (stage is Stage.Validate or Stage.Filter && onServer && handlers.Any(h => h.Stage == stage))
-            {
-                sb.AppendLine("        if (cancellation.IsCancelled)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            Refuse(in e, ctx, cancellation);");
-                sb.AppendLine("            return;");
-                sb.AppendLine("        }");
+                // A refusal stops the rest of this stage too, so the guard goes after each handler that can
+                // refuse rather than once at the end of the stage.
+                if (onServer && stage is Stage.Validate or Stage.Filter)
+                {
+                    sb.AppendLine("        if (cancellation.IsCancelled)");
+                    sb.AppendLine("        {");
+                    sb.AppendLine("            Refuse(in e, ctx, cancellation);");
+                    sb.AppendLine("            return;");
+                    sb.AppendLine("        }");
+                }
             }
 
             sb.AppendLine();

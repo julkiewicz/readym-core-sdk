@@ -20,18 +20,28 @@ public sealed class EventCancellation
     /// <summary>The manifest id of the mod whose handler refused it.</summary>
     public string StoppedBy { get; private set; } = string.Empty;
 
+    /// <summary>Whose handler is running now, which becomes <see cref="StoppedBy"/> if it refuses.</summary>
+    private string _running = string.Empty;
+
     /// <exclude />
     /// <summary>
     /// Called by generated dispatch before each handler, so a refusal names the mod without the handler saying
     /// so. A mod reads the answer as <see cref="EventContext.StoppedBy"/>.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public void Entering(string mod) => StoppedBy = mod;
+    public void Entering(string mod) => _running = mod;
 
-    /// <summary>Refuses the event. The first refusal wins, since no later handler runs.</summary>
+    /// <summary>
+    /// Refuses the event. The first refusal is the one kept: it is the one the origin is owed, and the handlers
+    /// that would have refused after it never run.
+    /// </summary>
     public void Cancel(object? reason)
     {
+        if (IsCancelled)
+            return;
+
         IsCancelled = true;
         Reason = reason;
+        StoppedBy = _running;
     }
 }
