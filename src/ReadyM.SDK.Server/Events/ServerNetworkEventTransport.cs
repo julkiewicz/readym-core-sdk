@@ -7,7 +7,6 @@ using ReadyM.SDK.Archetypes.Core;
 using ReadyM.SDK.Events;
 using ReadyM.SDK.Server.Entities;
 using Audience = ReadyM.SDK.Attributes.Scope;
-using EntityScope = ReadyM.SDK.Archetypes.Scope;
 
 namespace ReadyM.SDK.Server.Events;
 
@@ -90,37 +89,22 @@ public static class ServerNetworkEventTransport
     }
 
     /// <summary>
-    /// The players in the audience's area or cell. A scope that no longer exists, because the last player in it
-    /// left between the event being raised and it being accepted, leaves nobody to tell rather than throwing.
+    /// The players in the audience's area or cell, as the relay tracks them. A scope nobody is in leaves
+    /// nobody to tell rather than throwing: the last player can leave between a raise and its acceptance.
     /// </summary>
-    /// <remarks>
-    /// This walks the scope tree, which is where the entities an area holds are. A player is not one of them:
-    /// a player entity is created in the server scope and its area is tracked by the relay host, which the SDK
-    /// cannot read. Until the host exposes that membership, an area or cell audience resolves to nobody.
-    /// </remarks>
     private static List<PlayerId> Inside(ServerNetworkEventDispatchBase dispatch, EventAudience audience)
     {
         var players = new List<PlayerId>();
 
-        if (dispatch.Lookup is not { } entities)
+        if (dispatch.Players is not { } relay)
             return players;
 
         if (audience.Kind == Audience.Cell)
-        {
-            if (entities.TryLookup<Cell, FullCellId>(audience.Cell, out var cell))
-                Collect(entities, EntityScope.Of(cell), players);
-        }
-        else if (entities.TryLookup<Area, AreaId>(audience.Area, out var area))
-        {
-            Collect(entities, EntityScope.Of(area), players);
-        }
+            relay.InCell(audience.Cell, players);
+        else
+            relay.InArea(audience.Area, players);
 
         return players;
     }
 
-    private static void Collect(IEntities entities, EntityScope scope, List<PlayerId> players)
-    {
-        foreach (var player in entities.Query<Player>().InScope(scope))
-            players.Add(player.PlayerId);
-    }
 }

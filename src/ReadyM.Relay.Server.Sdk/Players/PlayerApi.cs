@@ -20,6 +20,8 @@ public class PlayerApi : IPlayers
     private readonly IChangeTrackingStore _changeTracking;
     private readonly GetReadyMIdDelegate _getReadyMId;
     private readonly RotateCellMastersDelegate _rotateCellMasters;
+    private readonly GetAreaPlayersDelegate _getAreaPlayers;
+    private readonly GetCellPlayersDelegate _getCellPlayers;
 
     internal PlayerApi(PlayerApiPointers pointers, INetworkTime netTime, IChangeTrackingStore changeTracking)
     {
@@ -28,6 +30,8 @@ public class PlayerApi : IPlayers
         _kickPlayer = Marshal.GetDelegateForFunctionPointer<KickPlayerDelegate>(pointers.KickPlayer);
         _getReadyMId = Marshal.GetDelegateForFunctionPointer<GetReadyMIdDelegate>(pointers.GetReadyMId);
         _rotateCellMasters = Marshal.GetDelegateForFunctionPointer<RotateCellMastersDelegate>(pointers.RotateCellMasters);
+        _getAreaPlayers = Marshal.GetDelegateForFunctionPointer<GetAreaPlayersDelegate>(pointers.GetAreaPlayers);
+        _getCellPlayers = Marshal.GetDelegateForFunctionPointer<GetCellPlayersDelegate>(pointers.GetCellPlayers);
 
         PlayerEventHandlerDelegate bridge = OnPlayerEvent;
         _pinnedDelegateStore.PinDelegate(bridge);
@@ -56,6 +60,45 @@ public class PlayerApi : IPlayers
     /// and every entity in that cell that allows ownership transfer follows to the new master.
     /// </summary>
     public void RotateCellMasters(PlayerId requester) => _rotateCellMasters(requester);
+
+    /// <inheritdoc />
+    public unsafe void InArea(AreaId area, List<PlayerId> into) => Collect(into, (b, c) => _getAreaPlayers(area, b, c));
+
+    /// <inheritdoc />
+    public unsafe void InCell(FullCellId cell, List<PlayerId> into) => Collect(into, (b, c) => _getCellPlayers(cell, b, c));
+
+    /// <summary>A pointer cannot be a generic argument, so the ask has a type of its own.</summary>
+    private unsafe delegate int Ask(PlayerId* buffer, int capacity);
+
+    /// <summary>
+    /// Asks for the players, growing the buffer once if the first ask did not fit. The host answers with the
+    /// count whether or not it wrote anything, so a second ask with that much room always does.
+    /// </summary>
+    private static unsafe void Collect(List<PlayerId> into, Ask ask)
+    {
+        into.Clear();
+
+        const int room = 64;
+        var small = stackalloc PlayerId[room];
+        var found = ask(small, room);
+
+        if (found <= room)
+        {
+            for (var i = 0; i < found; i++)
+                into.Add(small[i]);
+
+            return;
+        }
+
+        var large = new PlayerId[found];
+        fixed (PlayerId* buffer = large)
+        {
+            found = ask(buffer, large.Length);
+        }
+
+        for (var i = 0; i < found && i < large.Length; i++)
+            into.Add(large[i]);
+    }
 
     /// <summary>
     /// Get the id ReadyM assigned to this player's account, or null if this server has not seen them since it started.

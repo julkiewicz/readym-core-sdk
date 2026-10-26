@@ -2,6 +2,7 @@ using LiteNetLib.Utils;
 using ReadyM.Api.DI;
 using ReadyM.Api.Multiplayer.Protocol;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
+using ReadyM.Relay.Server.Sdk.Players;
 using ReadyM.Relay.Server.Sdk.Rpc;
 using ReadyM.SDK.Events;
 using ReadyM.SDK.Server.Entities;
@@ -19,12 +20,14 @@ namespace ReadyM.SDK.Server.Events;
 /// </remarks>
 public abstract class ServerNetworkEventDispatchBase : NetworkEventDispatchCore, IHostedService
 {
-    /// <summary>
-    /// Where the players an accepted event goes to are found. The scopes helper walks upwards from one entity and
-    /// gets by on the raw api, but a fan-out walks downwards from a scope to everyone in it, which is the public
-    /// query surface. Set by the host.
-    /// </summary>
+    /// <summary>Where a global event's recipients are found. Set by the host.</summary>
     internal IEntities? Lookup { get; set; }
+
+    /// <summary>
+    /// Who is in an area or a cell. The scope tree holds the entities a scope holds and a player is not one of
+    /// them: a player entity lives in the server scope and the relay tracks where it is. Set by the host.
+    /// </summary>
+    internal IPlayers? Players { get; set; }
 
     /// <summary>Where an accepted event is fanned out and a refusal is replied. Set by the host.</summary>
     internal RpcApi? Relay { get; set; }
