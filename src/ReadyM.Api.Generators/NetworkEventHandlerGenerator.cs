@@ -126,6 +126,9 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         // By name, so the emitted call reads like the declaration and survives a reorder of the real enum
         var policy = "global::ReadyM.SDK.Attributes.Policy."
                      + (AttributeUtils.EnumMemberName(declaration.ConstructorArguments[1]) ?? "ServerAuthoritative");
+        var manifest = $"global::{declared.ContainingNamespace.ToDisplayString()}.NetworkEventManifest";
+        var reject = declaration.NamedArguments
+            .FirstOrDefault(n => n.Key == "Reject").Value.Value as INamedTypeSymbol;
         var subject = Member(declared, "SubjectAttribute");
         var target = Member(declared, "TargetAttribute");
         var owners = handlers.Select(h => h.Owner).Distinct(SymbolEqualityComparer.Default).ToList();
@@ -136,6 +139,10 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             $"    {o!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {Field(o)}")));
         sb.AppendLine($") : {(onServer ? ServerEvents + ".ServerNetworkEventDispatchBase" : Events + ".NetworkEventDispatchBase")}");
         sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>This event's code on the wire, once the host has placed the mod's block.</summary>");
+        sb.AppendLine("    private static global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code");
+        sb.AppendLine($"        => {manifest}.{declared.Name}Code + {manifest}.Offset;");
+        sb.AppendLine();
 
         var after = handlers.Where(h => h.After is not null).Select(h => $"\"{h.After}\"").Distinct().ToList();
         if (after.Count > 0)
@@ -208,7 +215,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
                 sb.AppendLine();
             }
 
-            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.FanOut(this, {Audience(scope, subject, target)}, Written(in e));");
+            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.FanOut(this, Code, {Audience(scope, subject, target)}, Written(in e));");
         }
 
         sb.AppendLine("    }");
@@ -219,7 +226,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             sb.AppendLine("    /// <summary>A client sends a raised event to the server, the only place it goes.</summary>");
             sb.AppendLine($"    public void Raise({type} e)");
             sb.AppendLine("    {");
-            sb.AppendLine($"        {Events}.NetworkEventTransport.SendToServer(this, Written(in e));");
+            sb.AppendLine($"        {Events}.NetworkEventTransport.SendToServer(this, Code, Written(in e));");
             sb.AppendLine("    }");
         }
 
@@ -228,7 +235,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             sb.AppendLine();
             sb.AppendLine($"    private void Refuse(in {type} e, {Events}.EventContext ctx, {Events}.EventCancellation cancellation)");
             sb.AppendLine("    {");
-            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.Reject(this, ctx.Origin, Written(in e));");
+            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.Reject(this, Code, ctx.Origin, Refused(in e, cancellation));");
             EmitRejected(sb, handlers);
             sb.AppendLine("    }");
         }
@@ -248,8 +255,46 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("        e.Serialize(writer);");
         sb.AppendLine("        return writer;");
         sb.AppendLine("    }");
+
+        if (onServer)
+            EmitRefused(sb, type, reject);
         sb.AppendLine("}");
         sb.AppendLine();
+    }
+
+    /// <summary>
+    /// What a refusal carries back to the origin: the event as it stood when it was refused, the mod that
+    /// refused it, and the reason when the event declared a type for one. The reason gets a presence byte
+    /// because an event may name a reject type and still be cancelled without one.
+    /// </summary>
+    private static void EmitRefused(StringBuilder sb, string type, INamedTypeSymbol? reject)
+    {
+        sb.AppendLine();
+        sb.AppendLine($"    private static NetDataWriter Refused(in {type} e, {Events}.EventCancellation cancellation)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var writer = new NetDataWriter();");
+        sb.AppendLine("        e.Serialize(writer);");
+        sb.AppendLine("        writer.Put(cancellation.StoppedBy);");
+
+        if (reject is not null)
+        {
+            var name = reject.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var value = reject.TypeKind == TypeKind.Enum ? "(int)reason" : "reason";
+
+            sb.AppendLine($"        if (cancellation.Reason is {name} reason)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            writer.Put((byte)1);");
+            sb.AppendLine($"            writer.Put({value});");
+            sb.AppendLine("        }");
+            sb.AppendLine("        else");
+            sb.AppendLine("        {");
+            sb.AppendLine("            writer.Put((byte)0);");
+            sb.AppendLine("        }");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("        return writer;");
+        sb.AppendLine("    }");
     }
 
     private static void EmitRejected(StringBuilder sb, List<Handler> handlers)

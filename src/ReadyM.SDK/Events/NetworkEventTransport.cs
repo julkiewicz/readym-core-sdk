@@ -1,5 +1,8 @@
 using System.ComponentModel;
+using LiteNetLib;
 using LiteNetLib.Utils;
+using ReadyM.Api.Multiplayer.Client;
+using ReadyM.Api.Multiplayer.Protocol.Enums;
 
 namespace ReadyM.SDK.Events;
 
@@ -12,5 +15,20 @@ namespace ReadyM.SDK.Events;
 public static class NetworkEventTransport
 {
     /// <summary>Sends a raised event to the server.</summary>
-    public static void SendToServer(NetworkEventDispatchBase dispatch, NetDataWriter writer) => throw new NotImplementedException();
+    /// <remarks>
+    /// The code travels in the message header rather than in the payload, which is how a client-to-server RPC
+    /// carries it. The server's way back is the other shape, a code byte written into the data, because that is
+    /// what the two sides of the relay already do.
+    /// </remarks>
+    public static void SendToServer(
+        NetworkEventDispatchBase dispatch, RelayMessageCode code, NetDataWriter payload)
+    {
+        if (dispatch.Relay is not { } relay)
+            return;
+
+        var message = RelayMessage.ToServer(code, DeliveryMethod.ReliableOrdered);
+        message.Writer.Put(payload.Data, 0, payload.Length);
+
+        relay.SendMessage(message);
+    }
 }

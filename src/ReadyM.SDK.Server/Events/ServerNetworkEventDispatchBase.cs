@@ -1,5 +1,6 @@
 using ReadyM.Relay.Server.Sdk.Rpc;
 using ReadyM.SDK.Entities;
+using ReadyM.SDK.Server.Entities;
 
 namespace ReadyM.SDK.Server.Events;
 
@@ -16,6 +17,13 @@ public abstract class ServerNetworkEventDispatchBase
 {
     /// <summary>Where entity members are looked up, and where a skipped handler is logged. Set by the host.</summary>
     internal RpcEntities? Entities { get; set; }
+
+    /// <summary>
+    /// Where the players an accepted event goes to are found. The scopes helper walks upwards from one entity and
+    /// gets by on the raw api, but a fan-out walks downwards from a scope to everyone in it, which is the public
+    /// query surface. Set by the host.
+    /// </summary>
+    internal IEntities? Lookup { get; set; }
 
     /// <summary>Where an accepted event is fanned out and a refusal is replied. Set by the host.</summary>
     internal RpcApi? Relay { get; set; }

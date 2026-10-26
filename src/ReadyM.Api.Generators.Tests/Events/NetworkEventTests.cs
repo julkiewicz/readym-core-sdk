@@ -604,7 +604,7 @@ public class NetworkEventTests(ITestOutputHelper output)
         var server = Generated(RunServer());
 
         Assert.Contains($"{ServerScopes}.TryCellOf(this, e.Attacker, out var audience)", server);
-        Assert.Contains($"{ServerTransport}.FanOut(this, {Audience}.InCell(audience)", server);
+        Assert.Contains($"{ServerTransport}.FanOut(this, Code, {Audience}.InCell(audience)", server);
     }
 
     /// <summary>
@@ -619,6 +619,58 @@ public class NetworkEventTests(ITestOutputHelper output)
     [Fact]
     public void A_single_scoped_event_goes_to_the_player_its_target_names()
         => Assert.Contains($"{Audience}.Single(", Generated(RunServerWith(WhisperHandler)));
+
+    // -- what goes on the wire ------------------------------------------------------------------------
+
+    /// <summary>
+    /// The transport is handed the event's code, because a writer full of members says nothing about which
+    /// event it is. The code comes from the manifest the mod's Common project generated, shifted by the block
+    /// the host gave that mod, so two mods loaded together never collide.
+    /// </summary>
+    [Fact]
+    public void The_transport_is_told_which_event_it_is_sending()
+    {
+        var server = Generated(RunServer());
+
+        Assert.Contains(
+            "global::Other.Common.NetworkEventManifest.HitEventCode"
+            + " + global::Other.Common.NetworkEventManifest.Offset",
+            server);
+        Assert.Contains($"{ServerTransport}.FanOut(this, Code, ", server);
+    }
+
+    /// <summary>A client has one destination, so the code is all it adds.</summary>
+    [Fact]
+    public void A_client_names_the_event_it_raises()
+        => Assert.Contains(
+            "global::ReadyM.SDK.Events.NetworkEventTransport.SendToServer(this, Code, ", Generated(RunClient()));
+
+    /// <summary>
+    /// A refusal is not the event: the origin is owed the reason and the mod that gave it, so it travels with
+    /// its own payload rather than the one the fan-out would have sent.
+    /// </summary>
+    [Fact]
+    public void A_refusal_carries_its_reason_and_who_gave_it()
+    {
+        var server = Generated(RunServer());
+
+        Assert.Contains($"{ServerTransport}.Reject(this, Code, ctx.Origin, Refused(in e, cancellation))", server);
+        Assert.Contains("writer.Put(cancellation.StoppedBy);", server);
+        Assert.Contains("cancellation.Reason is global::Other.Common.HitReject reason", server);
+    }
+
+    /// <summary>
+    /// An event may name a reject type and still be cancelled without one, so the reason gets a presence byte
+    /// rather than the reader having to guess whether there is anything left to read.
+    /// </summary>
+    [Fact]
+    public void A_refusal_with_no_reason_still_reads_back()
+    {
+        var server = Generated(RunServer());
+
+        Assert.Contains("writer.Put((byte)1);", server);
+        Assert.Contains("writer.Put((byte)0);", server);
+    }
 
     // -- the policy gate ------------------------------------------------------------------------------
 
