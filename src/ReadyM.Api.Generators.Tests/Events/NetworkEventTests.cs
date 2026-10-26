@@ -718,7 +718,7 @@ public class NetworkEventTests(ITestOutputHelper output)
         var client = Generated(RunClient());
 
         Assert.Contains($"{Frame}.TryRead(reader, out var frame)", client);
-        Assert.Contains("Dispatch(e, frame.Origin, frame.Origin == Me);", client);
+        Assert.Contains("Dispatch(e, frame.Origin, frame.Origin == Me, true);", client);
     }
 
     /// <summary>

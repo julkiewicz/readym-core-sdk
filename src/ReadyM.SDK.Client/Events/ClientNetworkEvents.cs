@@ -13,14 +13,19 @@ namespace ReadyM.SDK.Client.Events;
 /// It needs nothing generated per event, because the event carries its own code and writes its own members. A
 /// mod that raises an event it declares no handler for has no dispatch, and this is why it does not need one.
 /// </remarks>
-internal sealed class ClientNetworkEvents(IRpcClient relay) : INetworkEvents
+internal sealed class ClientNetworkEvents(IRpcClient relay, NetworkEventPredictions predictions) : INetworkEvents
 {
-    public void Raise<T>(T networkEvent) where T : struct, INetworkEvent
+    /// <summary>Set from the client's update, so a guess can run out while nothing answers it.</summary>
+    public double Now { get; set; }
+
+    public INetworkEventRaise Raise<T>(T networkEvent) where T : struct, INetworkEvent
     {
         var payload = new NetDataWriter();
         networkEvent.Serialize(payload);
 
         NetworkEventTransport.SendToServer(relay, networkEvent.Code, payload);
+
+        return predictions.Open(networkEvent.Code, Now);
     }
 
     public void RaiseAs<T>(PlayerId origin, T networkEvent) where T : struct, INetworkEvent

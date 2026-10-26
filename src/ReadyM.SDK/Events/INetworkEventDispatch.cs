@@ -16,5 +16,9 @@ public interface INetworkEventDispatch<T> where T : struct, INetworkEvent
     /// Raises it. A client sends it to the server and runs nothing locally; the server runs the stages here and
     /// fans out what survives them.
     /// </summary>
-    void Raise(T networkEvent, PlayerId origin);
+    /// <param name="vouched">
+    /// The server is raising it for a player rather than taking it off the wire, so the policy is not asked
+    /// again. That is what lets a bot act like a player.
+    /// </param>
+    void Raise(T networkEvent, PlayerId origin, bool vouched);
 }

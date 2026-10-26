@@ -156,7 +156,8 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
-        sb.AppendLine($"    public void Dispatch({type} e, global::ReadyM.Api.Idents.PlayerId origin, bool raisedHere)");
+        sb.AppendLine($"    public void Dispatch("
+                      + $"{type} e, global::ReadyM.Api.Idents.PlayerId origin, bool raisedHere, bool vouched)");
         sb.AppendLine("    {");
         sb.AppendLine($"        var cancellation = new {Events}.EventCancellation();");
         sb.AppendLine($"        var ctx = new {Events}.EventContext(origin, raisedHere, cancellation);");
@@ -168,7 +169,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
                 ? $"{ServerEvents}.ServerNetworkEventPolicy.Allows(this, {policy}, origin)"
                 : $"{ServerEvents}.ServerNetworkEventPolicy.Allows(this, {policy}, e.{subject.Name}, origin)";
 
-            sb.AppendLine($"        if (!{check})");
+            sb.AppendLine($"        if (!vouched && !{check})");
             sb.AppendLine("        {");
             sb.AppendLine("            Refuse(in e, ctx, cancellation);");
             sb.AppendLine("            return;");
@@ -230,8 +231,8 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         if (onServer)
         {
             sb.AppendLine("    /// <summary>The server raising it for itself, or for a player it is acting on behalf of.</summary>");
-            sb.AppendLine($"    public void Raise({type} e, global::ReadyM.Api.Idents.PlayerId origin)");
-            sb.AppendLine("        => Dispatch(e, origin, true);");
+            sb.AppendLine($"    public void Raise({type} e, global::ReadyM.Api.Idents.PlayerId origin, bool vouched)");
+            sb.AppendLine("        => Dispatch(e, origin, true, vouched);");
             sb.AppendLine();
             sb.AppendLine("    /// <summary>Takes this event off the wire. The sender is the origin; the relay vouches for that.</summary>");
             sb.AppendLine("    protected override void Listen() => Hear(Code(), Arrived);");
@@ -242,14 +243,14 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             sb.AppendLine($"        if (!TryRead(reader, out {type} e))");
             sb.AppendLine("            return;");
             sb.AppendLine();
-            sb.AppendLine("        Dispatch(e, header.Sender, false);");
+            sb.AppendLine("        Dispatch(e, header.Sender, false, false);");
             sb.AppendLine("    }");
         }
         else
         {
             sb.AppendLine("    /// <summary>A client sends a raised event to the server, the only place it goes. The");
             sb.AppendLine("    /// origin is whoever the relay says sent it, so the client does not name itself.</summary>");
-            sb.AppendLine($"    public void Raise({type} e, global::ReadyM.Api.Idents.PlayerId origin)");
+            sb.AppendLine($"    public void Raise({type} e, global::ReadyM.Api.Idents.PlayerId origin, bool vouched)");
             sb.AppendLine($"        => {Events}.NetworkEventTransport.SendToServer(this, Code(), Written(in e));");
             sb.AppendLine();
             sb.AppendLine("    /// <summary>Takes this event, or a refusal of one this machine raised, off the wire.</summary>");
@@ -313,6 +314,8 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("        if (frame.Refused)");
         sb.AppendLine("        {");
+        sb.AppendLine("            GuessFailed();");
+        sb.AppendLine();
 
         if (rejected.Count == 0)
         {
@@ -332,7 +335,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("            return;");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        Dispatch(e, frame.Origin, frame.Origin == Me);");
+        sb.AppendLine("        Dispatch(e, frame.Origin, frame.Origin == Me, true);");
         sb.AppendLine("    }");
     }
 

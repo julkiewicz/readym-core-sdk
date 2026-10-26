@@ -21,6 +21,9 @@ public abstract class NetworkEventDispatchBase : NetworkEventDispatchCore, IHost
     /// <summary>Where a raised event is sent, which is only ever the server. Set by the host.</summary>
     internal IRpcClient? Relay { get; set; }
 
+    /// <summary>The guesses this client is holding, so a refusal can take the matching one back. Set by the host.</summary>
+    internal NetworkEventPredictions? Predictions { get; set; }
+
     private Action<ServerEventHeader, NetDataReader>? _listener;
 
     /// <summary>This machine, so a handler can be told whether it raised what just arrived.</summary>
@@ -41,6 +44,9 @@ public abstract class NetworkEventDispatchBase : NetworkEventDispatchCore, IHost
         _listener = arriving;
         relay.AddServerRpcMessageHandler(code, arriving);
     }
+
+    /// <summary>Generated code calls this when a refusal of this event arrives.</summary>
+    protected void GuessFailed() => Predictions?.Refused(Code());
 
     public void OnScopeStart() => Listen();
 

@@ -6,7 +6,8 @@ namespace ReadyM.SDK.Events;
 public interface INetworkEvents
 {
     /// <summary>Raises the event. The origin is this client, or the server.</summary>
-    void Raise<T>(T networkEvent) where T : struct, INetworkEvent;
+    /// <returns>A handle a client may hang a guess on while it waits for the answer.</returns>
+    INetworkEventRaise Raise<T>(T networkEvent) where T : struct, INetworkEvent;
 
     /// <summary>
     /// Server only: raises it as though <paramref name="origin"/> did, so handlers cannot tell it from that

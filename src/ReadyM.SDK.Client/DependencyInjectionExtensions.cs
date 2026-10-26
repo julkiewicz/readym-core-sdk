@@ -73,6 +73,7 @@ internal static class DependencyInjectionExtensions
         container.RegisterSingleton<IEntities, ClientEntities>();
         container.RegisterSingleton<IEntityApi, ClientEntityApi>();
         container.RegisterSingleton<RpcEntities>();
+        container.RegisterSingleton<NetworkEventPredictions>();
         container.RegisterSingleton<INetworkEvents, Events.ClientNetworkEvents>();
 #if NET
         container.RegisterSingleton<IChunkSource, ClientChunkSource>();
