@@ -64,7 +64,7 @@ Accessor methods are generated instead of the standard ones.
 
 A shape with no fields still gets an empty component type generated, so that querying for it is possible.
 
-### Replicated
+### Replicated (outdated)
 
 Whether an entity exists on the other side is decided by its archetype, never by its components:
 
@@ -77,7 +77,7 @@ A query asks for components, so `Query<RefIdMixin>()` finds both kinds.
 An archetype's own values follow its flag, and take their delivery from `[Archetype(..., Delivery = Delivery.Unreliable)]`.
 Putting `[Replicated]` on an archetype is an error (READYM036).
 
-### Propagates
+### Propagates (outdated)
 
 Specifies the ECS-to-Game and Game-to-ECS propagation behavior of the shape.
 The sync between the game state and the ECS is defined in terms of the "Push" and "Pull" operations:
@@ -284,3 +284,4 @@ this client a player id.
 
 A class carrying `[RpcHandlersFor]` is registered as a singleton in DI automatically, the way a
 `[Service]` is.
+

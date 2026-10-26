@@ -124,6 +124,8 @@ internal class ServerRpcContractGenerator : IIncrementalGenerator
 
             if (ServerRpcModel.IsClientToClients(method))
                 ValidateRelayMode(context, method);
+
+            ValidateEntityParameters(context, method);
         }
 
         foreach (var group in allMethods.GroupBy(x => x.Method.Name))
@@ -170,6 +172,28 @@ internal class ServerRpcContractGenerator : IIncrementalGenerator
                 "ServerRpc", DiagnosticSeverity.Error, true),
             method.Locations.FirstOrDefault(),
             method.Name));
+    }
+
+    /// <summary>
+    /// A shape travels as its entity's network id, so one whose entities never get one cannot be sent. Checked here,
+    /// where the contracts and the shapes are, so both halves of a mod see the same error.
+    /// </summary>
+    private static void ValidateEntityParameters(SourceProductionContext context, IMethodSymbol method)
+    {
+        foreach (var parameter in method.Parameters)
+        {
+            if (!RpcEntityParams.IsShape(parameter.Type, out var shape, out _) || RpcEntityParams.CanBeOnTheNetwork(shape))
+                continue;
+
+            context.ReportDiagnostic(Diagnostic.Create(
+                new DiagnosticDescriptor(
+                    "SRPC008", "Entity parameter is never networked",
+                    "Parameter '{0}' of '{1}' is {2}, which never has a network id: use a networked archetype or a "
+                    + "replicated mixin.",
+                    "ServerRpc", DiagnosticSeverity.Error, true),
+                parameter.Locations.FirstOrDefault() ?? method.Locations.FirstOrDefault(),
+                parameter.Name, method.Name, shape.Name));
+        }
     }
 
     private static void ReportIfDuplicateDirection(

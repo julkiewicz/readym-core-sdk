@@ -178,7 +178,7 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
                     ServerRpcModel.RelayModeOf(rpc.PeerToPeer), peerParams);
 
                 EmitReceiveHandlerStub(sb, rpc.Name, peerParams, withSender: true);
-                EmitDispatchBranch(fromClients, rpc.Name, codeRef, peerParams, withSender: true);
+                EmitDispatchBranch(fromClients, className, rpc.Name, codeRef, peerParams, withSender: true);
 
                 Register(initCalls, deinitCalls, codeRef, clientOffset, "Client", "OnClientEvent");
 
@@ -195,7 +195,7 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
                 var responseParams = BuildPayloadParams(rpc.Response);
 
                 EmitReceiveHandlerStub(sb, rpc.Name, responseParams, withSender: false);
-                EmitDispatchBranch(fromServer, rpc.Name, codeRef, responseParams, withSender: false);
+                EmitDispatchBranch(fromServer, className, rpc.Name, codeRef, responseParams, withSender: false);
 
                 Register(initCalls, deinitCalls, codeRef, serverOffset, "Server", "OnServerEvent");
             }
@@ -342,6 +342,7 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
 
     private static void EmitDispatchBranch(
         StringBuilder dispatchBranches,
+        string className,
         string eventName,
         string codeRef,
         List<PayloadParam> payloadParams,
@@ -355,38 +356,71 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
         if (withSender)
             dispatchBranches.AppendLine($"                var {SenderParameterName} = header.Sender;");
 
-        foreach (var p in payloadParams)
-            dispatchBranches.AppendLine(DeserializeStatement(p));
-
         var names = payloadParams.Select(p => p.Name);
         var dispatchArgs = string.Join(", ", withSender ? new[] { SenderParameterName }.Concat(names) : names);
 
-        dispatchBranches.AppendLine($"                RunOnGameThread(() => On{eventName}({dispatchArgs}));");
+        if (!payloadParams.Any(p => p.IsEntity))
+        {
+            foreach (var p in payloadParams)
+                dispatchBranches.AppendLine(DeserializeStatement(p, "reader", "                "));
+
+            dispatchBranches.AppendLine($"                RunOnGameThread(() => On{eventName}({dispatchArgs}));");
+        }
+        else
+        {
+            // Entities are looked up on the game thread, where the world they are in is not changing under the lookup.
+            // The reader is the loop's, so the game thread is handed a copy of what is left of the message to read.
+            var handler = $"{className}.On{eventName}";
+
+            dispatchBranches.AppendLine("                var __payload = reader.GetRemainingBytes();");
+            dispatchBranches.AppendLine("                RunOnGameThread(() =>");
+            dispatchBranches.AppendLine("                {");
+            dispatchBranches.AppendLine("                    var __reader = new NetDataReader(__payload);");
+
+            foreach (var p in payloadParams)
+            {
+                dispatchBranches.AppendLine(p.IsEntity
+                    ? $"                    {ReadEntityStatement(p, handler)}"
+                    : DeserializeStatement(p, "__reader", "                    "));
+            }
+
+            dispatchBranches.AppendLine();
+            dispatchBranches.AppendLine($"                    On{eventName}({dispatchArgs});");
+            dispatchBranches.AppendLine("                });");
+        }
+
         dispatchBranches.AppendLine("                break;");
         dispatchBranches.AppendLine("            }");
     }
 
+    /// <summary>Reads an entity parameter, and skips the handler when the entity it names is not found.</summary>
+    private static string ReadEntityStatement(PayloadParam p, string handler) =>
+        $"if (!{RpcEntityParams.Codec}.{(p.IsOptional ? "TryReadOptional" : "TryRead")}(this, __reader, "
+        + $"out {p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {p.Name}, "
+        + $"\"{handler}\", \"{p.Name}\")) return;";
+
     private static string SerializeStatement(PayloadParam p) =>
-        p.IsSerializablePrimitive ? $"        __writer.Put({p.Name});"
+        p.IsEntity ? $"        {RpcEntityParams.Codec}.{(p.IsOptional ? "WriteOptional" : "Write")}(__writer, {p.Name}, \"{p.Name}\");"
+        : p.IsSerializablePrimitive ? $"        __writer.Put({p.Name});"
         : p.IsNetSerializable ? $"        {p.Name}.Serialize(__writer);"
         : $"        Serializer.SerializeObject(__writer, {p.Name});";
 
-    private static string DeserializeStatement(PayloadParam p)
+    private static string DeserializeStatement(PayloadParam p, string reader, string indent)
     {
         var typeFqn = p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         if (p.IsSerializablePrimitive)
         {
             var getter = SerializationHelper.GetDeserializationMethod(p.Type.SpecialType);
-            return $"                var {p.Name} = reader.{getter}();";
+            return $"{indent}var {p.Name} = {reader}.{getter}();";
         }
 
         if (p.IsNetSerializable)
         {
-            return $"                var {p.Name} = new {typeFqn}();\n"
-                   + $"                {p.Name}.Deserialize(reader);";
+            return $"{indent}var {p.Name} = new {typeFqn}();\n"
+                   + $"{indent}{p.Name}.Deserialize({reader});";
         }
 
-        return $"                var {p.Name} = Serializer.DeserializeObject<{typeFqn}>(reader);";
+        return $"{indent}var {p.Name} = Serializer.DeserializeObject<{typeFqn}>({reader});";
     }
 
     private static string FormatParamList(List<PayloadParam> payloadParams) =>
@@ -399,7 +433,9 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
                 p.Type,
                 p.Name,
                 SerializationHelper.IsSerializablePrimitive(p.Type.SpecialType),
-                SerializationHelper.IsINetSerializable(p.Type)))
+                SerializationHelper.IsINetSerializable(p.Type),
+                RpcEntityParams.IsShape(p.Type, out _, out var optional),
+                optional))
             .ToList();
 
     private sealed class Rpc(string name, IMethodSymbol? request, IMethodSymbol? response, IMethodSymbol? peerToPeer)
@@ -410,11 +446,18 @@ internal class ServerRpcEventGenerator : IIncrementalGenerator
         public IMethodSymbol? PeerToPeer { get; } = peerToPeer;
     }
 
-    private sealed class PayloadParam(ITypeSymbol type, string name, bool isSerializablePrimitive, bool isNetSerializable)
+    private sealed class PayloadParam(
+        ITypeSymbol type, string name, bool isSerializablePrimitive, bool isNetSerializable, bool isEntity, bool isOptional)
     {
         public ITypeSymbol Type { get; } = type;
         public string Name { get; } = name;
         public bool IsSerializablePrimitive { get; } = isSerializablePrimitive;
         public bool IsNetSerializable { get; } = isNetSerializable;
+
+        /// <summary>A shape, which travels as its entity's network id.</summary>
+        public bool IsEntity { get; } = isEntity;
+
+        /// <summary>A nullable shape, which may be sent as null.</summary>
+        public bool IsOptional { get; } = isOptional;
     }
 }
