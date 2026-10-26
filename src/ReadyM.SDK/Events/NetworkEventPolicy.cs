@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using ReadyM.Api.Idents;
 using ReadyM.SDK.Attributes;
 
@@ -7,6 +8,8 @@ namespace ReadyM.SDK.Events;
 /// The authority check generated dispatch runs before any handler. A client that raises what its policy forbids
 /// has the event dropped here, which is where spoofing stops.
 /// </summary>
+/// <exclude />
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class NetworkEventPolicy
 {
     /// <summary>Whether <paramref name="origin"/> was allowed to raise an event about <paramref name="subject"/>.</summary>

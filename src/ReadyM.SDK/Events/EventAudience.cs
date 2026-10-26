@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using ReadyM.Api.Idents;
 using ReadyM.SDK.Attributes;
 
@@ -8,6 +9,8 @@ namespace ReadyM.SDK.Events;
 /// decides the audience from the event's <see cref="Attributes.Scope"/> and sends it on from there, so no event
 /// is ever relayed between peers without the server reading it.
 /// </summary>
+/// <exclude />
+[EditorBrowsable(EditorBrowsableState.Never)]
 public readonly struct EventAudience
 {
     private EventAudience(Scope scope, PlayerId player, AreaId area, FullCellId cell)

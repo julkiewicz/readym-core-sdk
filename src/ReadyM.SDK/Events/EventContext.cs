@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using ReadyM.Api.Idents;
 
 namespace ReadyM.SDK.Events;
@@ -6,6 +7,8 @@ namespace ReadyM.SDK.Events;
 public readonly struct EventContext
 {
     /// <summary>Built by generated code, once per event it dispatches.</summary>
+    /// <exclude />
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public EventContext(PlayerId origin, bool raisedHere, EventCancellation cancellation)
     {
         Origin = origin;
@@ -23,6 +26,8 @@ public readonly struct EventContext
     public bool RaisedHere { get; }
 
     /// <summary>Where a refusal is recorded.</summary>
+    /// <exclude />
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public EventCancellation Cancellation { get; }
 
     /// <summary>On <c>Stage.Rejected</c>, the manifest id of the mod that refused it.</summary>

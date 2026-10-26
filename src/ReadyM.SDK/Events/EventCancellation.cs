@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace ReadyM.SDK.Events;
 
 /// <summary>
@@ -5,6 +7,8 @@ namespace ReadyM.SDK.Events;
 /// which mod refused and why. Generated code reads it; a mod reaches it through
 /// <see cref="EventContext.Cancel{TReason}"/>.
 /// </summary>
+/// <exclude />
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class EventCancellation
 {
     /// <summary>Whether a handler has refused the event.</summary>
@@ -21,7 +25,7 @@ public sealed class EventCancellation
     /// Called by generated dispatch before each handler, so a refusal names the mod without the handler saying
     /// so. A mod reads the answer as <see cref="EventContext.StoppedBy"/>.
     /// </summary>
-    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public void Entering(string mod) => StoppedBy = mod;
 
     /// <summary>Refuses the event. The first refusal wins, since no later handler runs.</summary>

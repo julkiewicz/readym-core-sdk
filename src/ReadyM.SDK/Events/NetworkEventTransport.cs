@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using LiteNetLib.Utils;
 using ReadyM.Api.Idents;
 
@@ -7,6 +8,8 @@ namespace ReadyM.SDK.Events;
 /// What generated event code calls to put an event on the wire. A client sends only to the server; the server
 /// sends an accepted event to the audience its scope named, and a refusal to the origin alone.
 /// </summary>
+/// <exclude />
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class NetworkEventTransport
 {
     /// <summary>Client: sends a raised event to the server, which is the only place it goes.</summary>
