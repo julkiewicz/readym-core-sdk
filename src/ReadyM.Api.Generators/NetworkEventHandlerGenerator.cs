@@ -137,10 +137,15 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine($"{Visibility(owners)} sealed class {declared.Name}Dispatch(");
         sb.AppendLine(string.Join(",\n", owners.Select(o =>
             $"    {o!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {Field(o)}")));
-        sb.AppendLine($") : {(onServer ? ServerEvents + ".ServerNetworkEventDispatchBase" : Events + ".NetworkEventDispatchBase")}");
+        var dispatchBase = onServer
+            ? ServerEvents + ".ServerNetworkEventDispatchBase"
+            : Events + ".NetworkEventDispatchBase";
+
+        sb.AppendLine($") : {dispatchBase}, {Events}.INetworkEventDispatch<{type}>");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>This event's code on the wire, once the host has placed the mod's block.</summary>");
-        sb.AppendLine("    private static global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code");
+        sb.AppendLine($"    {(onServer ? "protected override" : "private static")} "
+                      + "global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code()");
         sb.AppendLine($"        => {manifest}.{declared.Name}Code + {manifest}.Offset;");
         sb.AppendLine();
 
@@ -215,19 +220,37 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
                 sb.AppendLine();
             }
 
-            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.FanOut(this, Code, {Audience(scope, subject, target)}, Written(in e));");
+            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.FanOut(this, Code(), {Audience(scope, subject, target)}, Written(in e));");
         }
 
         sb.AppendLine("    }");
 
-        if (!onServer)
+        sb.AppendLine();
+
+        if (onServer)
         {
+            sb.AppendLine("    /// <summary>The server raising it for itself, or for a player it is acting on behalf of.</summary>");
+            sb.AppendLine($"    public void Raise({type} e, global::ReadyM.Api.Idents.PlayerId origin)");
+            sb.AppendLine("        => Dispatch(e, origin, true);");
             sb.AppendLine();
-            sb.AppendLine("    /// <summary>A client sends a raised event to the server, the only place it goes.</summary>");
-            sb.AppendLine($"    public void Raise({type} e)");
+            sb.AppendLine("    /// <summary>Takes this event off the wire. The sender is the origin; the relay vouches for that.</summary>");
+            sb.AppendLine("    protected override void Listen() => Hear(Code(), Arrived);");
+            sb.AppendLine();
+            sb.AppendLine("    private void Arrived("
+                          + "global::ReadyM.Api.Multiplayer.Protocol.ServerEventHeader header, NetDataReader reader)");
             sb.AppendLine("    {");
-            sb.AppendLine($"        {Events}.NetworkEventTransport.SendToServer(this, Code, Written(in e));");
+            sb.AppendLine($"        if (!TryRead(reader, out {type} e))");
+            sb.AppendLine("            return;");
+            sb.AppendLine();
+            sb.AppendLine("        Dispatch(e, header.Sender, false);");
             sb.AppendLine("    }");
+        }
+        else
+        {
+            sb.AppendLine("    /// <summary>A client sends a raised event to the server, the only place it goes. The");
+            sb.AppendLine("    /// origin is whoever the relay says sent it, so the client does not name itself.</summary>");
+            sb.AppendLine($"    public void Raise({type} e, global::ReadyM.Api.Idents.PlayerId origin)");
+            sb.AppendLine($"        => {Events}.NetworkEventTransport.SendToServer(this, Code(), Written(in e));");
         }
 
         if (onServer)
@@ -235,7 +258,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             sb.AppendLine();
             sb.AppendLine($"    private void Refuse(in {type} e, {Events}.EventContext ctx, {Events}.EventCancellation cancellation)");
             sb.AppendLine("    {");
-            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.Reject(this, Code, ctx.Origin, Refused(in e, cancellation));");
+            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.Reject(this, Code(), ctx.Origin, Refused(in e, cancellation));");
             EmitRejected(sb, handlers);
             sb.AppendLine("    }");
         }
@@ -256,6 +279,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("        return writer;");
         sb.AppendLine("    }");
 
+        EmitRegistration(sb, declared, type, onServer);
         EmitRead(sb, declared, type);
 
         if (onServer)
@@ -265,13 +289,47 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// Puts this dispatch in the container, which is also what starts it listening. A mod names its events and
+    /// its handlers and nothing else, so this runs itself: the mod loader runs it for every assembly it loads,
+    /// and a module initializer runs it where the target has one, so it has to be safe to say twice.
+    /// </summary>
+    private static void EmitRegistration(StringBuilder sb, INamedTypeSymbol declared, string type, bool onServer)
+    {
+        var side = onServer ? "Server" : "Client";
+
+        sb.AppendLine();
+        sb.AppendLine("    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+        sb.AppendLine("    internal static class Registration");
+        sb.AppendLine("    {");
+        sb.AppendLine("        private static bool _registered;");
+        sb.AppendLine();
+        sb.AppendLine("        [global::System.Runtime.CompilerServices.ModuleInitializer]");
+        sb.AppendLine("        public static void Register()");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (_registered)");
+        sb.AppendLine("                return;");
+        sb.AppendLine();
+        sb.AppendLine("            _registered = true;");
+        sb.AppendLine();
+        sb.AppendLine($"            {Events}.NetworkEventRegistry.Declare<{declared.Name}Dispatch, {type}>(");
+        sb.AppendLine($"                global::ReadyM.Api.Multiplayer.RPC.RpcSide.{side});");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+    }
+
+    /// <summary>
     /// Reads an event back off the wire, in the order it wrote itself. Entity members name an id this end may
     /// not have, so a miss drops the whole event: half an event is worse than none, and the sender's own end
     /// has already been told whether it was accepted.
     /// </summary>
     private static void EmitRead(StringBuilder sb, INamedTypeSymbol declared, string type)
     {
-        var members = declared.GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsStatic).ToList();
+        // Settable only: an event's own members all have a setter, and what the generator added to the struct
+        // beside them, its code, does not. Reading that back would mean assigning it.
+        var members = declared.GetMembers()
+            .OfType<IPropertySymbol>()
+            .Where(p => !p.IsStatic && p.SetMethod is not null)
+            .ToList();
 
         sb.AppendLine();
         sb.AppendLine($"    private bool TryRead(NetDataReader reader, out {type} e)");

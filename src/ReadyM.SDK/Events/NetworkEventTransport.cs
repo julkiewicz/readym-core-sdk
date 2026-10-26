@@ -23,9 +23,16 @@ public static class NetworkEventTransport
     public static void SendToServer(
         NetworkEventDispatchBase dispatch, RelayMessageCode code, NetDataWriter payload)
     {
-        if (dispatch.Relay is not { } relay)
-            return;
+        if (dispatch.Relay is { } relay)
+            SendToServer(relay, code, payload);
+    }
 
+    /// <summary>
+    /// The same send, for a mod that raises an event it declares no handler for. It has no dispatch of its own,
+    /// since nothing was generated for it, and needs none: a client has one destination.
+    /// </summary>
+    public static void SendToServer(IRpcClient relay, RelayMessageCode code, NetDataWriter payload)
+    {
         var message = RelayMessage.ToServer(code, DeliveryMethod.ReliableOrdered);
         message.Writer.Put(payload.Data, 0, payload.Length);
 

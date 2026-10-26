@@ -116,6 +116,10 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public partial struct {declared.Symbol.Name} : {Marker}");
         sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>This event's code on the wire, once the host has placed its mod's block.</summary>");
+        sb.AppendLine("    public global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code");
+        sb.AppendLine($"        => {ManifestClassName}.{declared.Symbol.Name}Code + {ManifestClassName}.Offset;");
+        sb.AppendLine();
         sb.AppendLine("    /// <summary>Writes this event's members, in the order they are declared.</summary>");
         sb.AppendLine("    public void Serialize(NetDataWriter writer)");
         sb.AppendLine("    {");
@@ -200,7 +204,7 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
                 ? AttributeUtils.EnumArgument(declaration.ConstructorArguments[1], Policy.ServerAuthoritative)
                 : Policy.ServerAuthoritative;
 
-            Members = [.. symbol.GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsStatic)];
+            Members = [.. symbol.GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsStatic && p.SetMethod is not null)];
             Subjects = [.. Members.Where(m => Marked(m, "SubjectAttribute"))];
             Target = Members.FirstOrDefault(m => Marked(m, "TargetAttribute"));
             ScopeMember = Members.FirstOrDefault(m => Marked(m, "AreaAttribute") || Marked(m, "CellAttribute"));

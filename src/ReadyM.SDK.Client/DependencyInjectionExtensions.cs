@@ -9,6 +9,7 @@ using ReadyM.SDK.Client.Mapping;
 using ReadyM.SDK.Client.Entities;
 using ReadyM.SDK.Entities;
 using ReadyM.Api.Multiplayer.RPC;
+using ReadyM.SDK.Events;
 #if NET
 using ReadyM.SDK.Chunks;
 using ReadyM.SDK.Client.Chunks;
@@ -62,6 +63,7 @@ internal static class DependencyInjectionExtensions
     {
         ServiceRegistry.RegisterAll(container);
         RpcHandlerRegistry.RegisterAll(container, RpcSide.Client);
+        NetworkEventRegistry.RegisterAll(container, RpcSide.Client);
     }
 
     public static void RegisterReadyMSdk(this IDependencyContainer container)
@@ -71,6 +73,7 @@ internal static class DependencyInjectionExtensions
         container.RegisterSingleton<IEntities, ClientEntities>();
         container.RegisterSingleton<IEntityApi, ClientEntityApi>();
         container.RegisterSingleton<RpcEntities>();
+        container.RegisterSingleton<INetworkEvents, Events.ClientNetworkEvents>();
 #if NET
         container.RegisterSingleton<IChunkSource, ClientChunkSource>();
 #endif

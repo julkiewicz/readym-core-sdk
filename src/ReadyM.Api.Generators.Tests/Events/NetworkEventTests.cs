@@ -604,7 +604,7 @@ public class NetworkEventTests(ITestOutputHelper output)
         var server = Generated(RunServer());
 
         Assert.Contains($"{ServerScopes}.TryCellOf(this, e.Attacker, out var audience)", server);
-        Assert.Contains($"{ServerTransport}.FanOut(this, Code, {Audience}.InCell(audience)", server);
+        Assert.Contains($"{ServerTransport}.FanOut(this, Code(), {Audience}.InCell(audience)", server);
     }
 
     /// <summary>
@@ -636,14 +636,14 @@ public class NetworkEventTests(ITestOutputHelper output)
             "global::Other.Common.NetworkEventManifest.HitEventCode"
             + " + global::Other.Common.NetworkEventManifest.Offset",
             server);
-        Assert.Contains($"{ServerTransport}.FanOut(this, Code, ", server);
+        Assert.Contains($"{ServerTransport}.FanOut(this, Code(), ", server);
     }
 
     /// <summary>A client has one destination, so the code is all it adds.</summary>
     [Fact]
     public void A_client_names_the_event_it_raises()
         => Assert.Contains(
-            "global::ReadyM.SDK.Events.NetworkEventTransport.SendToServer(this, Code, ", Generated(RunClient()));
+            "global::ReadyM.SDK.Events.NetworkEventTransport.SendToServer(this, Code(), ", Generated(RunClient()));
 
     /// <summary>
     /// A refusal is not the event: the origin is owed the reason and the mod that gave it, so it travels with
@@ -654,7 +654,7 @@ public class NetworkEventTests(ITestOutputHelper output)
     {
         var server = Generated(RunServer());
 
-        Assert.Contains($"{ServerTransport}.Reject(this, Code, ctx.Origin, Refused(in e, cancellation))", server);
+        Assert.Contains($"{ServerTransport}.Reject(this, Code(), ctx.Origin, Refused(in e, cancellation))", server);
         Assert.Contains("writer.Put(cancellation.StoppedBy);", server);
         Assert.Contains("cancellation.Reason is global::Other.Common.HitReject reason", server);
     }
