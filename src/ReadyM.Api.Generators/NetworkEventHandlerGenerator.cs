@@ -131,7 +131,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         var owners = handlers.Select(h => h.Owner).Distinct(SymbolEqualityComparer.Default).ToList();
 
         sb.AppendLine($"/// <summary>Runs this mod's handlers for {declared.Name}, in stage order.</summary>");
-        sb.AppendLine($"public sealed class {declared.Name}Dispatch(");
+        sb.AppendLine($"{Visibility(owners)} sealed class {declared.Name}Dispatch(");
         sb.AppendLine(string.Join(",\n", owners.Select(o =>
             $"    {o!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {Field(o)}")));
         sb.AppendLine($") : {(onServer ? ServerEvents + ".ServerNetworkEventDispatchBase" : Events + ".NetworkEventDispatchBase")}");
@@ -289,6 +289,25 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             location));
 
     /// <summary>One <c>[EventHandler]</c> method, with what its attribute and its signature said.</summary>
+    /// <summary>
+    /// Dispatch takes its handlers as constructor parameters, so it can be no more accessible than the least
+    /// accessible of them. A mod that keeps a handler class to itself, which is the normal thing to do since
+    /// nothing outside the mod calls it, gets an internal dispatcher. Its own generated registration is in the
+    /// same assembly, so that is all it needs.
+    /// </summary>
+    private static string Visibility(List<ISymbol?> owners)
+        => owners.All(PubliclyVisible) ? "public" : "internal";
+
+    /// <summary>Whether a type and everything it is nested in are public.</summary>
+    private static bool PubliclyVisible(ISymbol? symbol)
+    {
+        for (var current = symbol; current is INamedTypeSymbol type; current = type.ContainingType)
+            if (type.DeclaredAccessibility != Accessibility.Public)
+                return false;
+
+        return true;
+    }
+
     private sealed class Handler
     {
         private Handler(INamedTypeSymbol owner, IMethodSymbol method) => (Owner, Method) = (owner, method);

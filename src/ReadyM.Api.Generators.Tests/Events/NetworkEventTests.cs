@@ -277,6 +277,14 @@ public class NetworkEventTests(ITestOutputHelper output)
     [Fact]
     public void A_client_with_handlers_compiles() => AssertCompiles(RunClient());
 
+    /// <summary>
+    /// Dispatch takes its handlers as constructor parameters, so a public dispatch over a handler the mod keeps
+    /// to itself does not compile. Mods write internal handler classes as a matter of course.
+    /// </summary>
+    [Fact]
+    public void A_handler_the_mod_keeps_to_itself_compiles()
+        => AssertCompiles(RunServerWith(InternalHandler));
+
     [Fact]
     public void The_policy_is_checked_before_any_handler_runs()
     {
@@ -491,6 +499,22 @@ public class NetworkEventTests(ITestOutputHelper output)
         {
             [EventHandler(Stage.Apply)]
             public void Write(in AuditEvent e) { }
+        }
+        """;
+
+    /// <summary>Nothing outside a mod calls its handlers, so a mod is free to keep the class to itself.</summary>
+    private const string InternalHandler = """
+        using ReadyM.SDK.Attributes;
+        using ReadyM.SDK.Events;
+        using Other.Common;
+
+        namespace Other.Server;
+
+        [Service]
+        internal sealed partial class Bookkeeper
+        {
+            [EventHandler(Stage.Apply)]
+            public void Note(in HitEvent e) { }
         }
         """;
 
