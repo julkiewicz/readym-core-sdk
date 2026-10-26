@@ -230,6 +230,16 @@ public class NetworkEventTests(ITestOutputHelper output)
             public partial struct Subjectless { public int What { get; set; } }
             """);
 
+    /// <summary>The counterpart to NEVT004: a policy that checks nothing needs nothing to check.</summary>
+    [Fact]
+    public void A_policy_that_checks_nobody_needs_no_subject()
+        => AssertNoError("""
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkEvent(Scope.Global, Policy.Anyone)]
+            public partial struct Shout { public int What { get; set; } }
+            """);
+
     [Fact]
     public void Two_subjects_are_an_error()
         => AssertError("NEVT005", """
@@ -461,6 +471,12 @@ public class NetworkEventTests(ITestOutputHelper output)
 
     private const string Transport = "global::ReadyM.SDK.Events.NetworkEventTransport";
 
+    private const string ServerTransport = "global::ReadyM.SDK.Server.Events.ServerNetworkEventTransport";
+
+    private const string ServerScopes = "global::ReadyM.SDK.Server.Events.ServerNetworkEventScopes";
+
+    private const string ServerPolicy = "global::ReadyM.SDK.Server.Events.ServerNetworkEventPolicy";
+
     private const string Audience = "global::ReadyM.SDK.Events.EventAudience";
 
     private const string AuditHandler = """
@@ -478,6 +494,34 @@ public class NetworkEventTests(ITestOutputHelper output)
         }
         """;
 
+    /// <summary>Kept apart from the shared events so adding it cannot shift what the other tests read.</summary>
+    private const string OpenEvent = """
+        using ReadyM.SDK.Attributes;
+
+        namespace Other.Common;
+
+        [NetworkEvent(Scope.Global, Policy.Anyone)]
+        public partial struct ShoutEvent
+        {
+            public int Line { get; set; }
+        }
+        """;
+
+    private const string OpenHandler = """
+        using ReadyM.SDK.Attributes;
+        using ReadyM.SDK.Events;
+        using Other.Common;
+
+        namespace Other.Server;
+
+        [Service]
+        public partial class Crier
+        {
+            [EventHandler(Stage.Apply)]
+            public void Heard(in ShoutEvent e) { }
+        }
+        """;
+
     private const string WhisperHandler = """
         using ReadyM.SDK.Attributes;
         using ReadyM.SDK.Events;
@@ -492,6 +536,17 @@ public class NetworkEventTests(ITestOutputHelper output)
             public void Deliver(in WhisperEvent e) { }
         }
         """;
+
+    /// <summary>
+    /// Dispatch derives from its own side's base, which is how the seams reach the world and the relay through a
+    /// typed this. A client dispatcher deriving from the server's would only show up as a mod failing to build.
+    /// </summary>
+    [Fact]
+    public void A_dispatcher_derives_from_its_own_sides_base()
+    {
+        Assert.Contains(") : global::ReadyM.SDK.Server.Events.ServerNetworkEventDispatchBase", Generated(RunServer()));
+        Assert.Contains(") : global::ReadyM.SDK.Events.NetworkEventDispatchBase", Generated(RunClient()));
+    }
 
     /// <summary>
     /// A client never sends an event to a peer. It goes to the server, which is what lets the server validate,
@@ -516,16 +571,62 @@ public class NetworkEventTests(ITestOutputHelper output)
         var server = Generated(RunServerWith(AuditHandler));
 
         Assert.Contains("Write(in ", server);
-        Assert.DoesNotContain($"{Transport}.FanOut", server);
+        Assert.DoesNotContain($"{ServerTransport}.FanOut", server);
     }
 
     [Fact]
     public void A_cell_scoped_event_goes_to_the_cell_its_subject_is_in()
-        => Assert.Contains($"{Transport}.FanOut(this, {Audience}.InCell(", Generated(RunServer()));
+    {
+        var server = Generated(RunServer());
+
+        Assert.Contains($"{ServerScopes}.TryCellOf(this, e.Attacker, out var audience)", server);
+        Assert.Contains($"{ServerTransport}.FanOut(this, {Audience}.InCell(audience)", server);
+    }
+
+    /// <summary>
+    /// A subject that is in no cell leaves the event with no audience. One bad event must not take the server
+    /// down, so the lookup is try-shaped and dispatch drops it, the way a failed shape lookup skips an RPC
+    /// handler.
+    /// </summary>
+    [Fact]
+    public void An_event_whose_subject_has_no_cell_is_dropped_rather_than_thrown()
+        => Assert.Contains($"if (!{ServerScopes}.TryCellOf(", Generated(RunServer()));
 
     [Fact]
     public void A_single_scoped_event_goes_to_the_player_its_target_names()
         => Assert.Contains($"{Audience}.Single(", Generated(RunServerWith(WhisperHandler)));
+
+    // -- the policy gate ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The gate runs on the server before any handler, and reads the subject the declaration named. A client
+    /// that raises what its policy forbids is refused here, which is the only place it can be.
+    /// </summary>
+    [Fact]
+    public void The_subject_is_checked_against_the_policy_before_any_handler_runs()
+        => Assert.Contains(
+            $"{ServerPolicy}.Allows(this, global::ReadyM.SDK.Attributes.Policy.SubjectOwner, e.Attacker, origin)",
+            Generated(RunServer()));
+
+    /// <summary>
+    /// By name, not by ordinal. A generator cannot reference the SDK, so it mirrors Policy; emitting the number
+    /// would silently re-point every declaration the moment a member is inserted into the real enum, which is
+    /// what inserting Anyone at the top of it would have done.
+    /// </summary>
+    [Fact]
+    public void The_policy_is_emitted_by_name_so_reordering_the_enum_cannot_change_it()
+    {
+        var server = Generated(RunServer());
+
+        Assert.DoesNotContain("(global::ReadyM.SDK.Attributes.Policy)", server);
+    }
+
+    /// <summary>An event anyone may raise still passes through the gate, which lets everyone through.</summary>
+    [Fact]
+    public void An_event_anyone_may_raise_is_still_checked_against_the_policy()
+        => Assert.Contains(
+            "global::ReadyM.SDK.Attributes.Policy.Anyone",
+            Generated(RunServerWith(OpenHandler, OpenEvent)));
 
     /// <summary>A refusal is a reply, so it goes to the origin and never to the audience.</summary>
     [Fact]
@@ -533,7 +634,7 @@ public class NetworkEventTests(ITestOutputHelper output)
     {
         var server = Generated(RunServer());
 
-        Assert.Contains($"{Transport}.Reject(this, ", server);
+        Assert.Contains($"{ServerTransport}.Reject(this, ", server);
     }
 
     // -- helpers --------------------------------------------------------------------------------------
@@ -550,6 +651,10 @@ public class NetworkEventTests(ITestOutputHelper output)
 
         Assert.Contains(diagnostics, d => d.Id == id && d.Severity == DiagnosticSeverity.Error);
     }
+
+    private void AssertNoError(string events)
+        => Assert.Empty(RunCommon(events).CompilationDiagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error));
 
     private void AssertServerError(string id, string handlers)
     {
@@ -576,10 +681,10 @@ public class NetworkEventTests(ITestOutputHelper output)
     private SourceGeneratorTestHelper.GeneratorRunResult RunServer(string handlers = ServerHandlers)
         => RunServerWith(handlers);
 
-    private SourceGeneratorTestHelper.GeneratorRunResult RunServerWith(string handlers)
+    private SourceGeneratorTestHelper.GeneratorRunResult RunServerWith(string handlers, string events = Events)
         => SourceGeneratorTestHelper.RunGenerators(
             [("Referee.cs", handlers)], [new NetworkEventHandlerGenerator()], output, Server,
-            alsoReferenceMetadata: [RunCommon().OutputCompilation.ToMetadataReference()]);
+            alsoReferenceMetadata: [RunCommon(events).OutputCompilation.ToMetadataReference()]);
 
     private SourceGeneratorTestHelper.GeneratorRunResult RunClient(string handlers = ClientHandlers)
         => SourceGeneratorTestHelper.RunGenerators(

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -193,11 +193,11 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
             Symbol = symbol;
 
             Scope = declaration.ConstructorArguments.Length > 0
-                ? (Scope)System.Convert.ToInt32(declaration.ConstructorArguments[0].Value)
+                ? AttributeUtils.EnumArgument(declaration.ConstructorArguments[0], Scope.Server)
                 : Scope.Server;
 
             Policy = declaration.ConstructorArguments.Length > 1
-                ? (Policy)System.Convert.ToInt32(declaration.ConstructorArguments[1].Value)
+                ? AttributeUtils.EnumArgument(declaration.ConstructorArguments[1], Policy.ServerAuthoritative)
                 : Policy.ServerAuthoritative;
 
             Members = [.. symbol.GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsStatic)];
@@ -234,9 +234,10 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
         Cell,
     }
 
-    /// <summary>Mirrors <c>ReadyM.SDK.Attributes.Policy</c>.</summary>
+    /// <summary>Mirrors <c>ReadyM.SDK.Attributes.Policy</c>. Read by name, so the order here is cosmetic.</summary>
     private enum Policy
     {
+        Anyone,
         SubjectOwner,
         CellMaster,
         AreaMaster,

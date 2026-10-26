@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -20,6 +20,9 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
     private const string EventAttribute = "ReadyM.SDK.Attributes.NetworkEventAttribute";
     private const string HandlerAttribute = "EventHandlerAttribute";
     private const string Events = "global::ReadyM.SDK.Events";
+
+    /// <summary>The server's own seams: ownership, scopes and the fan-out all live where that state is.</summary>
+    private const string ServerEvents = "global::ReadyM.SDK.Server.Events";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -118,8 +121,11 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         var type = declared.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var declaration = declared.GetAttributes()
             .First(a => a.AttributeClass?.ToDisplayString() == EventAttribute);
-        var scope = (Scope)System.Convert.ToInt32(declaration.ConstructorArguments[0].Value);
-        var policy = System.Convert.ToInt32(declaration.ConstructorArguments[1].Value);
+        var scope = AttributeUtils.EnumArgument(declaration.ConstructorArguments[0], Scope.Server);
+
+        // By name, so the emitted call reads like the declaration and survives a reorder of the real enum
+        var policy = "global::ReadyM.SDK.Attributes.Policy."
+                     + (AttributeUtils.EnumMemberName(declaration.ConstructorArguments[1]) ?? "ServerAuthoritative");
         var subject = Member(declared, "SubjectAttribute");
         var target = Member(declared, "TargetAttribute");
         var owners = handlers.Select(h => h.Owner).Distinct(SymbolEqualityComparer.Default).ToList();
@@ -128,7 +134,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine($"public sealed class {declared.Name}Dispatch(");
         sb.AppendLine(string.Join(",\n", owners.Select(o =>
             $"    {o!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {Field(o)}")));
-        sb.AppendLine(")");
+        sb.AppendLine($") : {(onServer ? ServerEvents + ".ServerNetworkEventDispatchBase" : Events + ".NetworkEventDispatchBase")}");
         sb.AppendLine("{");
 
         var after = handlers.Where(h => h.After is not null).Select(h => $"\"{h.After}\"").Distinct().ToList();
@@ -148,8 +154,8 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         if (onServer)
         {
             var check = subject is null
-                ? $"{Events}.NetworkEventPolicy.Allows(this, (global::ReadyM.SDK.Attributes.Policy){policy}, origin)"
-                : $"{Events}.NetworkEventPolicy.Allows(this, (global::ReadyM.SDK.Attributes.Policy){policy}, e.{subject.Name}, origin)";
+                ? $"{ServerEvents}.ServerNetworkEventPolicy.Allows(this, {policy}, origin)"
+                : $"{ServerEvents}.ServerNetworkEventPolicy.Allows(this, {policy}, e.{subject.Name}, origin)";
 
             sb.AppendLine($"        if (!{check})");
             sb.AppendLine("        {");
@@ -190,7 +196,20 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         }
 
         if (onServer && scope != Scope.Server)
-            sb.AppendLine($"        {Events}.NetworkEventTransport.FanOut(this, {Audience(scope, subject, target)}, Written(in e));");
+        {
+            // A subject in no cell or area leaves the event with no audience. One bad event must not take the
+            // server down, so the lookup is try-shaped and dispatch drops it.
+            if (scope is Scope.Cell or Scope.Area)
+            {
+                var find = scope == Scope.Cell ? "TryCellOf" : "TryAreaOf";
+                sb.AppendLine(
+                    $"        if (!{ServerEvents}.ServerNetworkEventScopes.{find}(this, e.{subject!.Name}, out var audience))");
+                sb.AppendLine("            return;");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.FanOut(this, {Audience(scope, subject, target)}, Written(in e));");
+        }
 
         sb.AppendLine("    }");
 
@@ -209,7 +228,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             sb.AppendLine();
             sb.AppendLine($"    private void Refuse(in {type} e, {Events}.EventContext ctx, {Events}.EventCancellation cancellation)");
             sb.AppendLine("    {");
-            sb.AppendLine($"        {Events}.NetworkEventTransport.Reject(this, ctx.Origin, Written(in e));");
+            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.Reject(this, ctx.Origin, Written(in e));");
             EmitRejected(sb, handlers);
             sb.AppendLine("    }");
         }
@@ -246,8 +265,8 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
     {
         Scope.Global => $"{Events}.EventAudience.Global",
         Scope.Single => $"{Events}.EventAudience.Single(e.{target!.Name}.PlayerId)",
-        Scope.Area => $"{Events}.EventAudience.InArea({Events}.NetworkEventScopes.AreaOf(this, e.{subject!.Name}))",
-        Scope.Cell => $"{Events}.EventAudience.InCell({Events}.NetworkEventScopes.CellOf(this, e.{subject!.Name}))",
+        Scope.Area => $"{Events}.EventAudience.InArea(audience)",
+        Scope.Cell => $"{Events}.EventAudience.InCell(audience)",
         _ => $"{Events}.EventAudience.Server",
     };
 
@@ -343,7 +362,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         Rejected,
     }
 
-    /// <summary>Mirrors <c>ReadyM.SDK.Attributes.Scope</c>.</summary>
+    /// <summary>Mirrors <c>ReadyM.SDK.Attributes.Scope</c>. Read by name, so the order here is cosmetic.</summary>
     private enum Scope
     {
         Server,
