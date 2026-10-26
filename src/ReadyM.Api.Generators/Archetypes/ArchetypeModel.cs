@@ -35,6 +35,8 @@ internal sealed class AccessorModel(string name, string type, bool hasSetter, st
                             && support is NativeContainerFieldTypeSupportImplBase;
         IsIndex = property.GetAttributes().Any(attribute
             => attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.IndexAttribute);
+        IsPredictable = property.GetAttributes().Any(attribute
+            => attribute.AttributeClass?.ToDisplayString() == ArchetypeNames.PredictableAttribute);
 
         // The compiler keeps the implementing part's comment over the declaration's, so the generated part only gets one
         // when the declaration has none.
@@ -51,6 +53,13 @@ internal sealed class AccessorModel(string name, string type, bool hasSetter, st
 
     /// <summary>Whether [Index] marks this as the value the shape is found by.</summary>
     public bool IsIndex { get; }
+
+    /// <summary>
+    /// Whether [Predictable] lets a client guess at the value while it waits for the server. The guess is held
+    /// beside the entity, so the getter reads it in front of the replicated value and the setter puts it there
+    /// instead of writing one a client does not own.
+    /// </summary>
+    public bool IsPredictable { get; }
 
     /// <summary>The component member an undocumented value takes its doc comment from, as a cref.</summary>
     public string? InheritsDocFrom { get; }

@@ -109,10 +109,13 @@ internal static class ExtendedMemberEmitter
 
         writer.Line();
 
-        // A client writes a replicated value through its token instead.
-        if (!accessor.HasSetter || (client && AccessorEmitter.Marked(accessor, model.IsReplicated)))
+        // A client writes a replicated value through its token instead. A predictable one keeps its
+        // setter there: guessing at it is the one write a client may make, and it stays local.
+        if (!accessor.HasSetter
+            || (client && !accessor.IsPredictable && AccessorEmitter.Marked(accessor, model.IsReplicated)))
         {
             Remarks(writer, remarks);
+            Mark(writer, accessor);
             writer.Line($"public {accessor.Type} {name}");
             writer.Line($"    => {get};");
             return;
@@ -122,6 +125,8 @@ internal static class ExtendedMemberEmitter
         [
             $"/// Inside a query call <c>Set{name}</c> instead."
         ]);
+
+        Mark(writer, accessor);
 
         using (writer.Braces($"public {accessor.Type} {name}"))
         {
@@ -134,8 +139,19 @@ internal static class ExtendedMemberEmitter
         Remarks(writer, remarks, [
             "/// Use inside queries instead of the property setter."
         ]);
+        Mark(writer, accessor);
         writer.Line($"public void Set{name}({accessor.Type} value)");
         writer.Line($"    => {set};");
+    }
+
+    /// <summary>
+    /// Says a projected member is one a client may guess at, which is what the analyzer reads: the shape it
+    /// came from is not reachable from here, so the mark has to travel with the member.
+    /// </summary>
+    private static void Mark(SourceWriter writer, AccessorModel accessor)
+    {
+        if (accessor.IsPredictable)
+            writer.Line($"[{ArchetypeNames.Predictable}]");
     }
 
     /// <summary>

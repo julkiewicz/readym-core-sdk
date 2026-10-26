@@ -112,6 +112,10 @@ internal static class HandleEmitter
         if (hidden)
             writer.Line(ArchetypeNames.Hidden);
 
+        // Only on a projection: the shape's own declaration already carries the attribute a mod wrote.
+        if (accessor.IsPredictable && !partial)
+            writer.Line($"[{ArchetypeNames.Predictable}]");
+
         var declaration = partial
             ? $"{Keyword(accessor)} partial {accessor.Type} {called}"
             : $"{Keyword(accessor)} {accessor.Type} {called}";
@@ -119,8 +123,11 @@ internal static class HandleEmitter
         // A client writes a replicated value through its token, which is what carries the intent
         // and obeys the component's policy. The shape's own declaration keeps its setter because
         // C# requires the implementing part to implement every accessor the declaration has, so
-        // only a projected member can drop one.
-        var writable = accessor.HasSetter && !(client && !partial && AccessorEmitter.Marked(accessor, replicated));
+        // only a projected member can drop one. A predictable value keeps its setter on a client
+        // too: that is the one write a client is allowed to make, and it never leaves the machine.
+        var writable = accessor.HasSetter
+                       && !(client && !partial && !accessor.IsPredictable
+                            && AccessorEmitter.Marked(accessor, replicated));
 
         if (!writable)
         {

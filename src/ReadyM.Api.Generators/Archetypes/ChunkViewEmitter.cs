@@ -199,16 +199,22 @@ internal static class ChunkViewEmitter
 
         if (!accessor.HasSetter || indexed || !writes)
         {
-            writer.Line($"public {accessor.Type} {called} => {accessors}.Get{accessor.Name}({field}, _index);");
+            writer.Line($"public {accessor.Type} {called} => {accessors}.Get{accessor.Name}({field}, _index{Row(accessor)});");
             return;
         }
 
         using (writer.Braces($"public {accessor.Type} {called}"))
         {
-            writer.Line($"get => {accessors}.Get{accessor.Name}({field}, _index);");
+            writer.Line($"get => {accessors}.Get{accessor.Name}({field}, _index{Row(accessor)});");
             writer.Line($"set => {accessors}.Set{accessor.Name}({field}, _index, Handle, value);");
         }
     }
+
+    /// <summary>
+    /// The row's entity, passed only where the value can be guessed at. A guess is held by entity, so a chunk
+    /// read needs the handle to find one; every other read has nothing to look up and is handed nothing.
+    /// </summary>
+    private static string Row(AccessorModel accessor) => accessor.IsPredictable ? ", Handle" : string.Empty;
 
     /// <summary>The component set's order, which is what the query asks the owning side for.</summary>
     private static IReadOnlyList<Slot> Slots(DeclarationModel model)

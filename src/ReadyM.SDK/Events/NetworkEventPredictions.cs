@@ -42,6 +42,9 @@ public sealed class NetworkEventPredictions
     private sealed class Guess(NetworkEventPredictions predictions, RelayMessageCode code, double deadline)
         : INetworkEventRaise
     {
+        /// <summary>What drops the guessed values a [Predictable] member's setter held for this raise.</summary>
+        private Action? _drop;
+
         private Action? _undo;
 
         public RelayMessageCode Code { get; } = code;
@@ -50,7 +53,10 @@ public sealed class NetworkEventPredictions
 
         public INetworkEventRaise Predicting(Action guess)
         {
-            guess();
+            // Inside here a [Predictable] member's setter holds the value beside the entity rather than
+            // writing it, and says how to drop it again. A guess at anything else writes as it always does.
+            if (NetworkEventGuesses.Take(guess) is { } drop)
+                _drop += drop;
 
             if (!predictions._outstanding.Contains(this))
                 predictions._outstanding.Add(this);
@@ -67,8 +73,12 @@ public sealed class NetworkEventPredictions
 
         public void Undo()
         {
+            var drop = _drop;
             var undo = _undo;
+            _drop = null;
             _undo = null;
+
+            drop?.Invoke();
             undo?.Invoke();
         }
     }

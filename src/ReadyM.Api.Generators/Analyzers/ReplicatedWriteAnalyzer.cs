@@ -36,7 +36,19 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
             + "the rule it keeps is the one a value keeps. A handler declared for it is handed the "
             + "collection to work, which is where a client changes one.");
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule, Collection];
+    private static readonly DiagnosticDescriptor Guess = new(
+        "READYM020",
+        "Guessed value is written outside .Predicting()",
+        "'{0}.{1}' is the server's to set, and a client may only guess at it. Move the write inside "
+        + ".Predicting() on the raise it is guessing at.",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A [Predictable] value keeps its setter on a client so a guess can be written, and "
+            + "a guess is held beside the entity until the server answers. Written anywhere else the same "
+            + "line would stand forever with nothing to take it back.");
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule, Collection, Guess];
 
     public override void Initialize(AnalysisContext context)
     {
@@ -100,17 +112,36 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
 
         if (target is not IPropertyReferenceOperation { Property: { SetMethod: not null } property }
             || property.ContainingType is not { } shape
-            || !replicates.GetOrAdd(shape, Replicates)
             || Authoring(context.ContainingSymbol))
             return;
 
-        if (target.Syntax is { } syntax
-            && InsideMapping(syntax, context.Operation.SemanticModel, context.CancellationToken))
+        // A guessed value is the one replicated value a client writes. It is allowed exactly inside the
+        // callback that guesses it, where it never reaches the component, and nowhere else.
+        if (Guessable(property))
+        {
+            if (!Inside(target.Syntax, "Predicting", "INetworkEventRaise", context))
+                context.ReportDiagnostic(Diagnostic.Create(
+                    Guess, target.Syntax.GetLocation(), shape.Name, property.Name));
+
+            return;
+        }
+
+        if (!replicates.GetOrAdd(shape, Replicates))
+            return;
+
+        if (Inside(target.Syntax, "Map", "IShapeMappingScope", context))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(
             Rule, target.Syntax.GetLocation(), shape.Name, property.Name));
     }
+
+    /// <summary>
+    /// Whether a client may guess at this value. The mark travels on the member, because a projection of it
+    /// sits on a shape that says nothing about where the value came from.
+    /// </summary>
+    private static bool Guessable(IPropertySymbol property)
+        => property.GetAttributes().Any(attribute => attribute.AttributeClass?.Name == "PredictableAttribute");
 
     private static bool Replicates(INamedTypeSymbol shape)
         => shape.IsValueType && DeclarationModel.For(shape).IsReplicated;
@@ -126,10 +157,10 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    /// <summary>Whether the write sits in a handler handed to a mapping.</summary>
-    private static bool InsideMapping(SyntaxNode node, SemanticModel? model, CancellationToken ct)
+    /// <summary>Whether the write sits in a callback handed to a particular method, such as a mapping's.</summary>
+    private static bool Inside(SyntaxNode node, string method, string declaring, OperationAnalysisContext context)
     {
-        if (model is null)
+        if (context.Operation.SemanticModel is not { } model)
             return false;
 
         for (var current = node.Parent; current is not null; current = current.Parent)
@@ -141,8 +172,9 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
                 continue;
 
             if (current.Parent is ArgumentSyntax { Parent.Parent: InvocationExpressionSyntax invocation }
-                && model.GetSymbolInfo(invocation, ct).Symbol is IMethodSymbol { Name: "Map" } map
-                && map.ContainingType?.Name == "IShapeMappingScope")
+                && model.GetSymbolInfo(invocation, context.CancellationToken).Symbol is IMethodSymbol called
+                && called.Name == method
+                && called.ContainingType?.Name == declaring)
                 return true;
         }
 

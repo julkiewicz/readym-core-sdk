@@ -42,21 +42,32 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
             public partial int Cheer { get; set; }
         }
 
+        [ArchetypeMixin(Replication.ServerAuthoritative)]
+        public readonly partial struct Curse
+        {
+            [Predictable] public partial bool Active { get; set; }
+
+            public partial int Turns { get; set; }
+        }
+
         [Archetype(Networked = false)]
         [Include(typeof(Vitals))]
         [Include(typeof(Mood))]
+        [Include(typeof(Curse), "Curse")]
         public readonly partial struct Npc;
         """;
 
-    /// <param name="body">Statements in a method holding a 'vitals' and a 'mood'.</param>
+    /// <param name="body">Statements in a method holding a 'vitals', a 'mood', a 'curse' and an 'npc'.</param>
     private Diagnostic[] Report(string body, string runtime = "Client")
         => ReportSource(
             $$"""
+              using ReadyM.SDK.Events;
+
               namespace Mod;
 
               public static class Use
               {
-                  public static void Run(Vitals vitals, Mood mood)
+                  public static void Run(Vitals vitals, Mood mood, Curse curse, Npc npc, INetworkEventRaise raise)
                   {
               {{body}}
                   }
@@ -78,7 +89,7 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
         var reported = SourceGeneratorTestHelper.Analyze(
             result.OutputCompilation, new ReplicatedWriteAnalyzer(), properties);
 
-        return [.. reported.Where(diagnostic => diagnostic.Id is "READYM017" or "READYM019")];
+        return [.. reported.Where(diagnostic => diagnostic.Id is "READYM017" or "READYM019" or "READYM020")];
     }
 
     [Fact]
@@ -121,6 +132,57 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
     [Fact]
     public void A_server_writes_what_it_likes()
         => Assert.Empty(Report("        vitals.Hp = 5;", runtime: "Server"));
+
+    // -- a value a client may guess at ---------------------------------------------------------------
+
+    /// <summary>
+    /// The one replicated value a client writes, and the one place it may: inside the callback guessing it,
+    /// where the write is held beside the entity until the server answers and never reaches the component.
+    /// </summary>
+    [Fact]
+    public void A_guessed_value_is_written_inside_the_guess()
+        => Assert.Empty(Report("        raise.Predicting(() => curse.Active = true);"));
+
+    [Fact]
+    public void The_same_write_on_a_projection_of_it_is_allowed_too()
+        => Assert.Empty(Report("        raise.Predicting(() => npc.CurseActive = true);"));
+
+    /// <summary>
+    /// Written anywhere else it would stand forever, because nothing is waiting on an answer to take it
+    /// back. READYM020 rather than 017: the value is writable here, just not from there.
+    /// </summary>
+    [Fact]
+    public void A_guessed_value_written_outside_a_guess_is_an_error()
+    {
+        var reported = Assert.Single(Report("        curse.Active = true;"));
+
+        Assert.Equal("READYM020", reported.Id);
+    }
+
+    [Fact]
+    public void A_guessed_value_written_in_some_other_callback_is_an_error()
+        => Assert.Single(Report("        System.Action run = () => curse.Active = true;"));
+
+    /// <summary>
+    /// A guess is only ever at a value the attribute marks. Its unmarked neighbour is the server's alone
+    /// wherever it is written, inside the callback included.
+    /// </summary>
+    [Fact]
+    public void A_value_beside_it_that_is_not_marked_is_still_the_servers()
+    {
+        var reported = Assert.Single(Report("        raise.Predicting(() => curse.Turns = 3);"));
+
+        Assert.Equal("READYM017", reported.Id);
+    }
+
+    /// <summary>The server writes the value itself, so nothing there is a guess.</summary>
+    [Fact]
+    public void A_server_writes_a_guessable_value_like_any_other()
+        => Assert.Empty(Report("        curse.Active = true;", runtime: "Server"));
+
+    [Fact]
+    public void Reading_a_guessable_value_is_left_alone()
+        => Assert.Empty(Report("        var read = curse.Active;"));
 
     /// <summary>
     /// Inside a mapping the write is the pull, which is how the game's answer reaches the ECS. The

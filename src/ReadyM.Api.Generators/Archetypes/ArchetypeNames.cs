@@ -23,10 +23,17 @@ internal static class ArchetypeNames
     public const string ExplicitCollectionAttribute = Namespace + ".ExplicitCollectionAttribute";
     public const string ExtendsAttribute = Namespace + ".ExtendsAttribute";
     public const string IndexAttribute = Namespace + ".IndexAttribute";
+    public const string PredictableAttribute = Namespace + ".PredictableAttribute";
     public const string TagAttribute = Namespace + ".TagAttribute";
 
     public const string EntityHandle = "global::ReadyM.SDK.Entities.EntityHandle";
     public const string ComponentSet = "global::ReadyM.SDK.Archetypes.ComponentSet";
+
+    /// <summary>Where a client holds its guess at one predictable value, by entity.</summary>
+    public const string Guesses = "global::ReadyM.SDK.Events.GuessedValueRegistry";
+
+    /// <summary>Marks a generated member as one a client may guess at, for the analyzer.</summary>
+    public const string Predictable = "global::ReadyM.SDK.Attributes.Predictable";
 
     /// <summary>Keeps a generated type or member out of IntelliSense and the docs.</summary>
     /// <summary>

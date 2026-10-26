@@ -37,9 +37,47 @@ internal static class ShapeAttributeRules
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor PredictableUnreplicated = new(
+        "READYM050",
+        "[Predictable] on a value nobody replicates",
+        "'{0}.{1}' is not replicated, so there is no server value for a guess at it to fall through to when it is "
+        + "taken back. Replicate the shape, or roll the guess back yourself with .Rollback().",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor PredictableIndex = new(
+        "READYM051",
+        "[Predictable] on the value a shape is found by",
+        "'{0}.{1}' carries [Index], so entities are found by it. A guess is held beside the entity and moves no "
+        + "index, so a lookup would disagree with a read. Keep [Predictable] off the indexed value.",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor PredictableUnwritable = new(
+        "READYM052",
+        "[Predictable] on a value that cannot be written",
+        "'{0}.{1}' has no setter, so nothing can guess at it. Give it one, or drop [Predictable].",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor PredictableCollection = new(
+        "READYM053",
+        "[Predictable] on a collection",
+        "'{0}.{1}' is a collection, which changes through its own members rather than by assignment, so there is no "
+        + "one write to hold as a guess. Guess at a value instead, or roll the change back with .Rollback().",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static ImmutableArray<Diagnostic> Check(DeclarationModel model)
     {
         var found = new List<Diagnostic>();
+
+        foreach (var guessable in model.Accessors.Where(accessor => accessor.IsPredictable))
+            Predictable(found, model, guessable);
 
         var indexes = model.Accessors.Where(accessor => accessor.IsIndex).ToList();
 
@@ -66,6 +104,29 @@ internal static class ShapeAttributeRules
         }
 
         return [.. found];
+    }
+
+    /// <summary>
+    /// Where a guess cannot work. Each is an error rather than a guess that quietly never clears, never shows,
+    /// or leaves a lookup and a read disagreeing about the same entity.
+    /// </summary>
+    private static void Predictable(List<Diagnostic> found, DeclarationModel model, AccessorModel accessor)
+    {
+        var location = accessor.Declared is { } declared
+            ? LocationOf(declared, ArchetypeNames.PredictableAttribute)
+            : model.Symbol.Locations.FirstOrDefault() ?? Location.None;
+
+        if (!model.IsReplicated)
+            found.Add(Diagnostic.Create(PredictableUnreplicated, location, model.Name, accessor.Name));
+
+        if (accessor.IsIndex)
+            found.Add(Diagnostic.Create(PredictableIndex, location, model.Name, accessor.Name));
+
+        if (!accessor.HasSetter)
+            found.Add(Diagnostic.Create(PredictableUnwritable, location, model.Name, accessor.Name));
+
+        if (accessor.IsNativeContainer)
+            found.Add(Diagnostic.Create(PredictableCollection, location, model.Name, accessor.Name));
     }
 
     private static Location LocationOf(ISymbol symbol, string attributeName)
