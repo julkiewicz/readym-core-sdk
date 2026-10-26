@@ -485,6 +485,8 @@ public class NetworkEventTests(ITestOutputHelper output)
 
     private const string ServerPolicy = "global::ReadyM.SDK.Server.Events.ServerNetworkEventPolicy";
 
+    private const string Frame = "global::ReadyM.SDK.Events.NetworkEventFrame";
+
     private const string Audience = "global::ReadyM.SDK.Events.EventAudience";
 
     private const string AuditHandler = """
@@ -528,6 +530,22 @@ public class NetworkEventTests(ITestOutputHelper output)
         public partial struct ShoutEvent
         {
             public int Line { get; set; }
+        }
+        """;
+
+    private const string OpenClientHandler = """
+        using ReadyM.SDK.Attributes;
+        using ReadyM.SDK.Events;
+        using Other.Common;
+
+        namespace Other.Client;
+
+        [Service]
+        public partial class Listener
+        {
+            [EventHandler(Stage.Observe)]
+            public void Heard(in ShoutEvent e) { }
+
         }
         """;
 
@@ -672,6 +690,64 @@ public class NetworkEventTests(ITestOutputHelper output)
         Assert.Contains("writer.Put((byte)0);", server);
     }
 
+    // -- what a client takes off the wire --------------------------------------------------------------
+
+    /// <summary>
+    /// A fanned-out event has to reach the handlers that asked for it, so a client dispatch listens for its own
+    /// code the way the server one does. Without this an Apply or an Observe on a client never runs at all.
+    /// </summary>
+    [Fact]
+    public void A_client_listens_for_its_own_events_code()
+    {
+        var client = Generated(RunClient());
+
+        Assert.Contains("protected override global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code()", client);
+        Assert.Contains("protected override void Listen() => Hear(Code(), Arrived);", client);
+    }
+
+    /// <summary>
+    /// The origin travels with the event, because a client cannot otherwise tell a handler who raised it, and
+    /// SkipOnRaiser turns on whether this machine did.
+    /// </summary>
+    [Fact]
+    public void A_fanned_out_event_says_who_raised_it()
+    {
+        Assert.Contains($"{ServerTransport}.FanOut(this, Code(), ", Generated(RunServer()));
+        Assert.Contains("origin,", Generated(RunServer()));
+
+        var client = Generated(RunClient());
+
+        Assert.Contains($"{Frame}.TryRead(reader, out var frame)", client);
+        Assert.Contains("Dispatch(e, frame.Origin, frame.Origin == Me);", client);
+    }
+
+    /// <summary>
+    /// A refusal is the other thing that arrives on the event's code, and it carries the reason and the mod that
+    /// gave it. The origin's Rejected handlers are the only ones that ever see either.
+    /// </summary>
+    [Fact]
+    public void A_client_told_of_a_refusal_runs_its_rejected_handlers()
+    {
+        var client = Generated(RunClient());
+
+        Assert.Contains("if (frame.Refused)", client);
+        Assert.Contains("cancellation.Entering(reader.GetString());", client);
+        Assert.Contains("hitView.Fizzle(in e, ", client);
+    }
+
+    /// <summary>
+    /// A client with nothing to run on a refusal reads nothing off it. NEVT012 already stops a Rejected handler
+    /// on an event that named no reject type, so the two always agree.
+    /// </summary>
+    [Fact]
+    public void A_client_with_no_rejected_handler_reads_nothing_from_a_refusal()
+    {
+        var client = Generated(RunClientWith(OpenClientHandler, OpenEvent));
+
+        Assert.Contains("if (frame.Refused)", client);
+        Assert.DoesNotContain("cancellation.Entering(reader.GetString());", client);
+    }
+
     // -- the policy gate ------------------------------------------------------------------------------
 
     /// <summary>
@@ -763,8 +839,11 @@ public class NetworkEventTests(ITestOutputHelper output)
             alsoReferenceMetadata: [RunCommon(events).OutputCompilation.ToMetadataReference()]);
 
     private SourceGeneratorTestHelper.GeneratorRunResult RunClient(string handlers = ClientHandlers)
+        => RunClientWith(handlers);
+
+    private SourceGeneratorTestHelper.GeneratorRunResult RunClientWith(string handlers, string events = Events)
         => SourceGeneratorTestHelper.RunGenerators(
             [("HitView.cs", handlers)], [new NetworkEventHandlerGenerator()], output, Client,
-            alsoReferenceMetadata: [RunCommon().OutputCompilation.ToMetadataReference()],
+            alsoReferenceMetadata: [RunCommon(events).OutputCompilation.ToMetadataReference()],
             withoutReferences: AsAClientMod);
 }

@@ -144,8 +144,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine($") : {dispatchBase}, {Events}.INetworkEventDispatch<{type}>");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>This event's code on the wire, once the host has placed the mod's block.</summary>");
-        sb.AppendLine($"    {(onServer ? "protected override" : "private static")} "
-                      + "global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code()");
+        sb.AppendLine("    protected override global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code()");
         sb.AppendLine($"        => {manifest}.{declared.Name}Code + {manifest}.Offset;");
         sb.AppendLine();
 
@@ -220,7 +219,8 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
                 sb.AppendLine();
             }
 
-            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.FanOut(this, Code(), {Audience(scope, subject, target)}, Written(in e));");
+            sb.AppendLine($"        {ServerEvents}.ServerNetworkEventTransport.FanOut("
+                          + $"this, Code(), {Audience(scope, subject, target)}, origin, Written(in e));");
         }
 
         sb.AppendLine("    }");
@@ -251,6 +251,11 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             sb.AppendLine("    /// origin is whoever the relay says sent it, so the client does not name itself.</summary>");
             sb.AppendLine($"    public void Raise({type} e, global::ReadyM.Api.Idents.PlayerId origin)");
             sb.AppendLine($"        => {Events}.NetworkEventTransport.SendToServer(this, Code(), Written(in e));");
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>Takes this event, or a refusal of one this machine raised, off the wire.</summary>");
+            sb.AppendLine("    protected override void Listen() => Hear(Code(), Arrived);");
+            sb.AppendLine();
+            EmitArrived(sb, type, reject, handlers);
         }
 
         if (onServer)
@@ -286,6 +291,63 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             EmitRefused(sb, type, reject);
         sb.AppendLine("}");
         sb.AppendLine();
+    }
+
+    /// <summary>
+    /// A client's half of the wire: the event, which runs the stages that reach a client, or a refusal of one
+    /// this machine raised, which runs Rejected and nothing else. Both arrive on the event's own code.
+    /// </summary>
+    private static void EmitArrived(
+        StringBuilder sb, string type, INamedTypeSymbol? reject, List<Handler> handlers)
+    {
+        var rejected = handlers.Where(h => h.Stage == Stage.Rejected).ToList();
+
+        sb.AppendLine("    private void Arrived("
+                      + "global::ReadyM.Api.Multiplayer.Protocol.ServerEventHeader header, NetDataReader reader)");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        if (!{Events}.NetworkEventFrame.TryRead(reader, out var frame))");
+        sb.AppendLine("            return;");
+        sb.AppendLine();
+        sb.AppendLine($"        if (!TryRead(reader, out {type} e))");
+        sb.AppendLine("            return;");
+        sb.AppendLine();
+        sb.AppendLine("        if (frame.Refused)");
+        sb.AppendLine("        {");
+
+        if (rejected.Count == 0)
+        {
+            sb.AppendLine("            return;");
+        }
+        else
+        {
+            sb.AppendLine($"            var cancellation = new {Events}.EventCancellation();");
+            sb.AppendLine("            cancellation.Entering(reader.GetString());");
+            sb.AppendLine($"            cancellation.Cancel({Reason(reject!)});");
+            sb.AppendLine($"            var refusal = new {Events}.EventContext("
+                          + "frame.Origin, frame.Origin == Me, cancellation);");
+            sb.AppendLine();
+            EmitRejected(sb, handlers, "            ", "refusal");
+        }
+
+        sb.AppendLine("            return;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        Dispatch(e, frame.Origin, frame.Origin == Me);");
+        sb.AppendLine("    }");
+    }
+
+    /// <summary>
+    /// The reason off the wire. Only reached where a Rejected handler exists, and NEVT012 stops one on an event
+    /// that named no reject type, so there is always a type to read.
+    /// </summary>
+    private static string Reason(INamedTypeSymbol reject)
+    {
+        var named = reject.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var read = reject.TypeKind == TypeKind.Enum
+            ? $"({named})reader.GetInt()"
+            : $"reader.Get<{named}>()";
+
+        return $"reader.GetByte() == 1 ? {read} : (object?)null";
     }
 
     /// <summary>
@@ -426,12 +488,24 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
     }
 
-    private static void EmitRejected(StringBuilder sb, List<Handler> handlers)
+    /// <summary>
+    /// The Rejected handlers. An event with no reject type still refuses, so a handler that takes no reason is
+    /// called all the same: dropping it would be a handler that silently never fires.
+    /// </summary>
+    private static void EmitRejected(
+        StringBuilder sb, List<Handler> handlers, string indent = "        ", string ctx = "ctx")
     {
-        foreach (var handler in handlers.Where(h => h.Stage == Stage.Rejected && h.Reject is not null))
+        foreach (var handler in handlers.Where(h => h.Stage == Stage.Rejected))
         {
-            var reject = handler.Reject!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            sb.AppendLine($"        {Field(handler.Owner)}.{handler.Method.Name}(in e, ({reject})cancellation.Reason!, ctx);");
+            var call = $"{indent}{Field(handler.Owner)}.{handler.Method.Name}(in e";
+
+            if (handler.Reason is { } reason)
+                call += $", ({reason.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})cancellation.Reason!";
+
+            if (handler.TakesContext)
+                call += $", {ctx}";
+
+            sb.AppendLine(call + ");");
         }
     }
 

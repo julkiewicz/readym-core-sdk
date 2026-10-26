@@ -16,28 +16,22 @@ namespace ReadyM.SDK.Server.Events;
 /// How the server puts an accepted event on the wire: to the players its scope named, and a refusal to the origin
 /// alone. A client never sends to a peer, so there is no relayed path here to get wrong.
 /// </summary>
-/// <remarks>
-/// A message is the event's code, then one byte saying whether this is the event or a refusal of it, then the
-/// payload. The byte is there because both arrive on the same code, and a receiver has to know which it is
-/// holding before it reads the rest.
-/// </remarks>
+/// <remarks>A message is the event's code, then the frame, then the payload.</remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class ServerNetworkEventTransport
 {
-    /// <summary>Marks a message as the event itself.</summary>
-    public const byte Accepted = 0;
-
-    /// <summary>Marks a message as a refusal of the event, carrying the reason.</summary>
-    public const byte Refused = 1;
-
     /// <summary>Sends an accepted event to the players its scope names.</summary>
     public static void FanOut(
-        ServerNetworkEventDispatchBase dispatch, RelayMessageCode code, EventAudience audience, NetDataWriter payload)
+        ServerNetworkEventDispatchBase dispatch,
+        RelayMessageCode code,
+        EventAudience audience,
+        PlayerId origin,
+        NetDataWriter payload)
     {
         if (dispatch.Relay is not { } relay)
             return;
 
-        var message = Framed(code, Accepted, payload);
+        var message = Framed(code, false, origin, payload);
 
         // Scope.Server stops here: the event was for the server, so there is nobody downstream to tell
         switch (audience.Kind)
@@ -67,15 +61,16 @@ public static class ServerNetworkEventTransport
         if (dispatch.Relay is not { } relay || origin == PlayerId.Server)
             return;
 
-        relay.SendToOne(origin, Framed(code, Refused, payload), DeliveryMethod.ReliableOrdered);
+        relay.SendToOne(origin, Framed(code, true, origin, payload), DeliveryMethod.ReliableOrdered);
     }
 
-    private static NetDataWriter Framed(RelayMessageCode code, byte kind, NetDataWriter payload)
+    private static NetDataWriter Framed(RelayMessageCode code, bool refused, PlayerId origin, NetDataWriter payload)
     {
+        var framed = NetworkEventFrame.Write(refused, origin, payload);
+
         var message = new NetDataWriter();
         message.Put((byte)code);
-        message.Put(kind);
-        message.Put(payload.Data, 0, payload.Length);
+        message.Put(framed.Data, 0, framed.Length);
 
         return message;
     }
