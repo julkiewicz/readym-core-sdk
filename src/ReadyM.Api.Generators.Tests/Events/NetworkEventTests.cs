@@ -286,16 +286,6 @@ public class NetworkEventTests(ITestOutputHelper output)
         => AssertCompiles(RunServerWith(InternalHandler));
 
     [Fact]
-    public void The_policy_is_checked_before_any_handler_runs()
-    {
-        var server = Generated(RunServer());
-
-        Assert.True(
-            server.IndexOf("Policy", StringComparison.Ordinal)
-            < server.IndexOf("Check(", StringComparison.Ordinal));
-    }
-
-    [Fact]
     public void The_stages_run_in_their_declared_order()
     {
         var server = Generated(RunServer());
@@ -339,7 +329,7 @@ public class NetworkEventTests(ITestOutputHelper output)
 
         var first = server.IndexOf("CheckRange(", StringComparison.Ordinal);
         var second = server.IndexOf("CheckArmour(", StringComparison.Ordinal);
-        var guard = server.IndexOf("cancellation.IsCancelled", first, StringComparison.Ordinal);
+        var guard = server.IndexOf("ctx.Cancellation.IsCancelled", first, StringComparison.Ordinal);
 
         Assert.True(first >= 0 && second > first, "both validators are dispatched");
         Assert.True(guard > first && guard < second, "the refusal is checked before the second validator runs");
@@ -475,34 +465,15 @@ public class NetworkEventTests(ITestOutputHelper output)
             }
             """);
 
-    // -- routing --------------------------------------------------------------------------------------
+    // -- what the contract says about the event --------------------------------------------------------
 
-    private const string Transport = "global::ReadyM.SDK.Events.NetworkEventTransport";
+    private const string Contract = "global::ReadyM.SDK.Events.INetworkEventContract";
 
-    private const string ServerTransport = "global::ReadyM.SDK.Server.Events.ServerNetworkEventTransport";
+    private const string Handlers = "global::ReadyM.SDK.Events.INetworkEventHandlers";
 
-    private const string ServerScopes = "global::ReadyM.SDK.Server.Events.ServerNetworkEventScopes";
+    private const string Attributes = "global::ReadyM.SDK.Attributes";
 
-    private const string ServerPolicy = "global::ReadyM.SDK.Server.Events.ServerNetworkEventPolicy";
-
-    private const string Frame = "global::ReadyM.SDK.Events.NetworkEventFrame";
-
-    private const string Audience = "global::ReadyM.SDK.Events.EventAudience";
-
-    private const string AuditHandler = """
-        using ReadyM.SDK.Attributes;
-        using ReadyM.SDK.Events;
-        using Other.Common;
-
-        namespace Other.Server;
-
-        [Service]
-        public partial class Auditor
-        {
-            [EventHandler(Stage.Apply)]
-            public void Write(in AuditEvent e) { }
-        }
-        """;
+    private const string Handle = "global::ReadyM.SDK.Entities.EntityHandle";
 
     /// <summary>Nothing outside a mod calls its handlers, so a mod is free to keep the class to itself.</summary>
     private const string InternalHandler = """
@@ -549,244 +520,194 @@ public class NetworkEventTests(ITestOutputHelper output)
         }
         """;
 
-    private const string OpenHandler = """
-        using ReadyM.SDK.Attributes;
-        using ReadyM.SDK.Events;
-        using Other.Common;
-
-        namespace Other.Server;
-
-        [Service]
-        public partial class Crier
-        {
-            [EventHandler(Stage.Apply)]
-            public void Heard(in ShoutEvent e) { }
-        }
-        """;
-
-    private const string WhisperHandler = """
-        using ReadyM.SDK.Attributes;
-        using ReadyM.SDK.Events;
-        using Other.Common;
-
-        namespace Other.Server;
-
-        [Service]
-        public partial class Postman
-        {
-            [EventHandler(Stage.Apply)]
-            public void Deliver(in WhisperEvent e) { }
-        }
-        """;
-
     /// <summary>
-    /// Dispatch derives from its own side's base, which is how the seams reach the world and the relay through a
-    /// typed this. A client dispatcher deriving from the server's would only show up as a mod failing to build.
+    /// One contract per event, in the project that declares it, rather than one per mod that handles it.
+    /// That is what lets the coordinator ask the policy once and send the event out once however many mods
+    /// are listening; a contract per mod would be back to a fan-out per mod.
     /// </summary>
     [Fact]
-    public void A_dispatcher_derives_from_its_own_sides_base()
+    public void Each_declared_event_gets_one_contract()
     {
-        Assert.Contains(") : global::ReadyM.SDK.Server.Events.ServerNetworkEventDispatchBase", Generated(RunServer()));
-        Assert.Contains(") : global::ReadyM.SDK.Events.NetworkEventDispatchBase", Generated(RunClient()));
+        var common = Generated(RunCommon());
+
+        Assert.Contains($"public sealed class HitEventContract : {Contract}<global::Other.Common.HitEvent>", common);
+        Assert.Contains($"public sealed class AuditEventContract : {Contract}<global::Other.Common.AuditEvent>", common);
+        Assert.Contains($"public sealed class WhisperEventContract : {Contract}<global::Other.Common.WhisperEvent>", common);
     }
 
     /// <summary>
-    /// A client never sends an event to a peer. It goes to the server, which is what lets the server validate,
-    /// change or stop it before anyone else hears about it.
+    /// The code comes from the manifest the mod's Common project generated, shifted by the block the host
+    /// gave that mod, so two mods loaded together never collide.
     /// </summary>
     [Fact]
-    public void A_client_sends_an_event_only_to_the_server()
-    {
-        var client = Generated(RunClient());
-
-        Assert.Contains($"{Transport}.SendToServer(", client);
-        Assert.DoesNotContain("RelayMode", client);
-    }
-
-    /// <summary>
-    /// Dispatched on the server and sent nowhere. The first assertion is what makes this a real test: an empty
-    /// generator satisfies the second on its own.
-    /// </summary>
-    [Fact]
-    public void A_server_scoped_event_is_dispatched_and_goes_no_further()
-    {
-        var server = Generated(RunServerWith(AuditHandler));
-
-        Assert.Contains("Write(in ", server);
-        Assert.DoesNotContain($"{ServerTransport}.FanOut", server);
-    }
-
-    [Fact]
-    public void A_cell_scoped_event_goes_to_the_cell_its_subject_is_in()
-    {
-        var server = Generated(RunServer());
-
-        Assert.Contains($"{ServerScopes}.TryCellOf(this, e.Attacker, out var audience)", server);
-        Assert.Contains($"{ServerTransport}.FanOut(this, Code(), {Audience}.InCell(audience)", server);
-    }
-
-    /// <summary>
-    /// A subject that is in no cell leaves the event with no audience. One bad event must not take the server
-    /// down, so the lookup is try-shaped and dispatch drops it, the way a failed shape lookup skips an RPC
-    /// handler.
-    /// </summary>
-    [Fact]
-    public void An_event_whose_subject_has_no_cell_is_dropped_rather_than_thrown()
-        => Assert.Contains($"if (!{ServerScopes}.TryCellOf(", Generated(RunServer()));
-
-    [Fact]
-    public void A_single_scoped_event_goes_to_the_player_its_target_names()
-        => Assert.Contains($"{Audience}.Single(", Generated(RunServerWith(WhisperHandler)));
-
-    // -- what goes on the wire ------------------------------------------------------------------------
-
-    /// <summary>
-    /// The transport is handed the event's code, because a writer full of members says nothing about which
-    /// event it is. The code comes from the manifest the mod's Common project generated, shifted by the block
-    /// the host gave that mod, so two mods loaded together never collide.
-    /// </summary>
-    [Fact]
-    public void The_transport_is_told_which_event_it_is_sending()
-    {
-        var server = Generated(RunServer());
-
-        Assert.Contains(
-            "global::Other.Common.NetworkEventManifest.HitEventCode"
-            + " + global::Other.Common.NetworkEventManifest.Offset",
-            server);
-        Assert.Contains($"{ServerTransport}.FanOut(this, Code(), ", server);
-    }
-
-    /// <summary>A client has one destination, so the code is all it adds.</summary>
-    [Fact]
-    public void A_client_names_the_event_it_raises()
+    public void The_contract_carries_the_events_code()
         => Assert.Contains(
-            "global::ReadyM.SDK.Events.NetworkEventTransport.SendToServer(this, Code(), ", Generated(RunClient()));
+            "        => NetworkEventManifest.HitEventCode + NetworkEventManifest.Offset;",
+            Generated(RunCommon()));
 
-    /// <summary>
-    /// A refusal is not the event: the origin is owed the reason and the mod that gave it, so it travels with
-    /// its own payload rather than the one the fan-out would have sent.
-    /// </summary>
     [Fact]
-    public void A_refusal_carries_its_reason_and_who_gave_it()
+    public void The_contract_carries_the_scope_the_event_was_declared_with()
     {
-        var server = Generated(RunServer());
+        var common = Generated(RunCommon());
 
-        Assert.Contains($"{ServerTransport}.Reject(this, Code(), ctx.Origin, Refused(in e, cancellation))", server);
-        Assert.Contains("writer.Put(cancellation.StoppedBy);", server);
-        Assert.Contains("cancellation.Reason is global::Other.Common.HitReject reason", server);
+        Assert.Contains($"public {Attributes}.Scope Scope => {Attributes}.Scope.Cell;", common);
+        Assert.Contains($"public {Attributes}.Scope Scope => {Attributes}.Scope.Server;", common);
+        Assert.Contains($"public {Attributes}.Scope Scope => {Attributes}.Scope.Single;", common);
     }
 
     /// <summary>
-    /// An event may name a reject type and still be cancelled without one, so the reason gets a presence byte
-    /// rather than the reader having to guess whether there is anything left to read.
+    /// The subject the policy is checked against and a scoped audience is read from, as a handle, so the
+    /// server's checks need nothing generated per shape.
     /// </summary>
     [Fact]
-    public void A_refusal_with_no_reason_still_reads_back()
-    {
-        var server = Generated(RunServer());
+    public void The_contract_carries_the_subject_as_a_handle()
+        => Assert.Contains($"=> {Handle}.Of(e.Attacker);", Generated(RunCommon()));
 
-        Assert.Contains("writer.Put((byte)1);", server);
-        Assert.Contains("writer.Put((byte)0);", server);
-    }
-
-    // -- what a client takes off the wire --------------------------------------------------------------
-
-    /// <summary>
-    /// A fanned-out event has to reach the handlers that asked for it, so a client dispatch listens for its own
-    /// code the way the server one does. Without this an Apply or an Observe on a client never runs at all.
-    /// </summary>
     [Fact]
-    public void A_client_listens_for_its_own_events_code()
-    {
-        var client = Generated(RunClient());
+    public void A_single_scoped_event_names_the_player_it_goes_to()
+        => Assert.Contains("=> e.To.PlayerId;", Generated(RunCommon()));
 
-        Assert.Contains("protected override global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code()", client);
-        Assert.Contains("protected override void Listen() => Hear(Code(), Arrived);", client);
-    }
-
-    /// <summary>
-    /// The origin travels with the event, because a client cannot otherwise tell a handler who raised it, and
-    /// SkipOnRaiser turns on whether this machine did.
-    /// </summary>
+    /// <summary>An event that goes to an audience has no one player, and says so rather than guessing one.</summary>
     [Fact]
-    public void A_fanned_out_event_says_who_raised_it()
-    {
-        Assert.Contains($"{ServerTransport}.FanOut(this, Code(), ", Generated(RunServer()));
-        Assert.Contains("origin,", Generated(RunServer()));
-
-        var client = Generated(RunClient());
-
-        Assert.Contains($"{Frame}.TryRead(reader, out var frame)", client);
-        Assert.Contains("Dispatch(e, frame.Origin, frame.Origin == Me, true);", client);
-    }
+    public void An_event_that_is_not_single_scoped_names_no_player()
+        => Assert.Contains("=> global::ReadyM.Api.Idents.PlayerId.Invalid;", Generated(RunCommon()));
 
     /// <summary>
-    /// A refusal is the other thing that arrives on the event's code, and it carries the reason and the mod that
-    /// gave it. The origin's Rejected handlers are the only ones that ever see either.
-    /// </summary>
-    [Fact]
-    public void A_client_told_of_a_refusal_runs_its_rejected_handlers()
-    {
-        var client = Generated(RunClient());
-
-        Assert.Contains("if (frame.Refused)", client);
-        Assert.Contains("cancellation.Entering(reader.GetString());", client);
-        Assert.Contains("hitView.Fizzle(in e, ", client);
-    }
-
-    /// <summary>
-    /// A client with nothing to run on a refusal reads nothing off it. NEVT012 already stops a Rejected handler
-    /// on an event that named no reject type, so the two always agree.
-    /// </summary>
-    [Fact]
-    public void A_client_with_no_rejected_handler_reads_nothing_from_a_refusal()
-    {
-        var client = Generated(RunClientWith(OpenClientHandler, OpenEvent));
-
-        Assert.Contains("if (frame.Refused)", client);
-        Assert.DoesNotContain("cancellation.Entering(reader.GetString());", client);
-    }
-
-    // -- the policy gate ------------------------------------------------------------------------------
-
-    /// <summary>
-    /// The gate runs on the server before any handler, and reads the subject the declaration named. A client
-    /// that raises what its policy forbids is refused here, which is the only place it can be.
-    /// </summary>
-    [Fact]
-    public void The_subject_is_checked_against_the_policy_before_any_handler_runs()
-        => Assert.Contains(
-            $"{ServerPolicy}.Allows(this, global::ReadyM.SDK.Attributes.Policy.SubjectOwner, e.Attacker, origin)",
-            Generated(RunServer()));
-
-    /// <summary>
-    /// By name, not by ordinal. A generator cannot reference the SDK, so it mirrors Policy; emitting the number
-    /// would silently re-point every declaration the moment a member is inserted into the real enum, which is
-    /// what inserting Anyone at the top of it would have done.
+    /// By name, not by ordinal. A generator cannot reference the SDK, so it mirrors Policy; emitting the
+    /// number would silently re-point every declaration the moment a member is inserted into the real enum,
+    /// which is what inserting Anyone at the top of it would have done.
     /// </summary>
     [Fact]
     public void The_policy_is_emitted_by_name_so_reordering_the_enum_cannot_change_it()
     {
-        var server = Generated(RunServer());
+        var common = Generated(RunCommon());
 
-        Assert.DoesNotContain("(global::ReadyM.SDK.Attributes.Policy)", server);
+        Assert.Contains($"public {Attributes}.Policy Policy => {Attributes}.Policy.SubjectOwner;", common);
+        Assert.DoesNotContain($"({Attributes}.Policy)", common);
     }
 
-    /// <summary>An event anyone may raise still passes through the gate, which lets everyone through.</summary>
     [Fact]
-    public void An_event_anyone_may_raise_is_still_checked_against_the_policy()
+    public void An_event_anyone_may_raise_says_so_in_its_contract()
         => Assert.Contains(
-            "global::ReadyM.SDK.Attributes.Policy.Anyone",
-            Generated(RunServerWith(OpenHandler, OpenEvent)));
+            $"public {Attributes}.Policy Policy => {Attributes}.Policy.Anyone;",
+            Generated(RunCommon(OpenEvent)));
 
-    /// <summary>A refusal is a reply, so it goes to the origin and never to the audience.</summary>
+    // -- what goes on the wire ------------------------------------------------------------------------
+
+    /// <summary>
+    /// A refusal is not the event: the origin is owed the reason and the mod that gave it. The reason gets a
+    /// presence byte because an event may name a reject type and still be refused without one, by the policy
+    /// or by a bare Cancel().
+    /// </summary>
     [Fact]
-    public void A_rejection_goes_to_the_origin_alone()
+    public void A_refusal_carries_its_reason_and_reads_back_without_one()
+    {
+        var common = Generated(RunCommon());
+
+        Assert.Contains("if (reason is global::Other.Common.HitReject given)", common);
+        Assert.Contains("writer.Put((byte)1);", common);
+        Assert.Contains("writer.Put((byte)0);", common);
+        Assert.Contains("=> reader.GetByte() == 1 ? (global::Other.Common.HitReject)reader.GetInt()", common);
+    }
+
+    /// <summary>An event that named no reject type is refused bare, so there is nothing to write or read.</summary>
+    [Fact]
+    public void An_event_with_no_reject_type_carries_no_reason()
+        => Assert.Contains("public object? ReadReason(NetDataReader reader) => null;", Generated(RunCommon()));
+
+    /// <summary>
+    /// Reading needs the world and writing does not, so the event serializes itself and the contract reads
+    /// it back. One reader per event rather than one per mod: two mods reading the same bytes differently is
+    /// not a failure anything would report.
+    /// </summary>
+    [Fact]
+    public void The_contract_reads_the_event_back_off_the_wire()
+    {
+        var common = Generated(RunCommon());
+
+        Assert.Contains("public bool TryRead(global::ReadyM.SDK.Events.NetworkEventDispatchCore world,", common);
+        Assert.Contains("world, reader, out var m0, \"HitEvent\", \"Attacker\"", common);
+    }
+
+    // -- what a mod generates -------------------------------------------------------------------------
+
+    /// <summary>
+    /// A mod emits handlers and nothing else. It used to emit a dispatcher of its own, which subscribed,
+    /// checked the policy and fanned out, so two mods on one event did all three twice.
+    /// </summary>
+    [Fact]
+    public void A_mod_emits_a_handler_set_and_no_dispatcher_of_its_own()
+    {
+        foreach (var generated in new[] { Generated(RunServer()), Generated(RunClient()) })
+        {
+            Assert.Contains($") : {Handlers}<global::Other.Common.HitEvent>", generated);
+            Assert.DoesNotContain("NetworkEventDispatchBase", generated);
+            Assert.DoesNotContain("FanOut", generated);
+            Assert.DoesNotContain("ServerNetworkEventPolicy", generated);
+        }
+    }
+
+    /// <summary>
+    /// One stage at a time, so the coordinator can finish a stage across every mod before the next starts.
+    /// A case per stage is what makes another mod's Validate able to refuse what this one would apply.
+    /// </summary>
+    [Fact]
+    public void A_handler_set_runs_one_stage_at_a_time()
     {
         var server = Generated(RunServer());
 
-        Assert.Contains($"{ServerTransport}.Reject(this, ", server);
+        Assert.Contains($"public void Run({Attributes}.Stage stage, ref global::Other.Common.HitEvent e,", server);
+        Assert.Contains($"case {Attributes}.Stage.Validate:", server);
+        Assert.Contains($"case {Attributes}.Stage.Rejected:", server);
+    }
+
+    /// <summary>The two stages that always run on the server are not emitted where they could never fire.</summary>
+    [Fact]
+    public void A_client_handler_set_has_no_server_only_stages()
+    {
+        var client = Generated(RunClient());
+
+        Assert.Contains($"case {Attributes}.Stage.Apply:", client);
+        Assert.DoesNotContain($"case {Attributes}.Stage.Validate:", client);
+        Assert.DoesNotContain($"case {Attributes}.Stage.Filter:", client);
+    }
+
+    /// <summary>A mod with nothing to run on a refusal emits no case for one.</summary>
+    [Fact]
+    public void A_mod_with_no_rejected_handler_emits_no_rejected_case()
+        => Assert.DoesNotContain(
+            $"case {Attributes}.Stage.Rejected:", Generated(RunClientWith(OpenClientHandler, OpenEvent)));
+
+    /// <summary>
+    /// A refusal may carry no reason, by the policy or by a bare Cancel(), and a handler that asked for one
+    /// has nothing to be handed. Casting null to the declared enum would throw rather than refuse.
+    /// </summary>
+    [Fact]
+    public void A_rejected_handler_runs_only_where_there_is_a_reason_to_hand_it()
+        => Assert.Contains(
+            "if (ctx.Cancellation.Reason is global::Other.Common.HitReject reason0)", Generated(RunServer()));
+
+    /// <summary>
+    /// Both run themselves where the target has a module initializer, and both are listed per assembly so a
+    /// netstandard2.0 target, which has none, can be run by the mod loader instead.
+    /// </summary>
+    [Fact]
+    public void An_assembly_lists_what_it_declared_so_a_host_can_run_it()
+    {
+        Assert.Contains(
+            "global::ReadyM.SDK.Events.NetworkEventRegistry.Declare<global::Other.Common.HitEvent>("
+            + "new global::Other.Common.HitEventContract());",
+            Generated(RunCommon()));
+
+        Assert.Contains("public static void RegisterAll()", Generated(RunServer()));
+        Assert.Contains("global::ReadyM.SDK.Events.NetworkEventRegistry.Handle<", Generated(RunServer()));
+    }
+
+    [Fact]
+    public void A_handler_set_says_which_side_it_belongs_to()
+    {
+        Assert.Contains("global::ReadyM.Api.Multiplayer.RPC.RpcSide.Server", Generated(RunServer()));
+        Assert.Contains("global::ReadyM.Api.Multiplayer.RPC.RpcSide.Client", Generated(RunClient()));
     }
 
     // -- helpers --------------------------------------------------------------------------------------

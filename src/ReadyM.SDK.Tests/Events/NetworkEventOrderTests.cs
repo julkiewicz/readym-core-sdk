@@ -7,25 +7,29 @@ using Xunit;
 namespace ReadyM.SDK.Tests.Events;
 
 /// <summary>
-/// The order two mods' handlers for one event run in. A mod says what it must follow, and everything else keeps
-/// the order it was loaded in, so a set of mods that say nothing about each other behaves the same every run.
+/// The order two mods' handlers for one event run in. A mod says what it must follow, and everything else runs
+/// in the order of the mods' own names, which is the same order on every machine.
 /// </summary>
 public class NetworkEventOrderTests
 {
     private static List<string> Sorted(params (string Mod, string[] After)[] mods)
         => NetworkEventOrder.Sort(mods.Select(m => (m.Mod, (IReadOnlyList<string>)m.After)).ToList());
 
+    /// <summary>
+    /// Not the order they were handed over in. The server and a client load a different set of mods in a
+    /// different sequence, so load order is two orders and the sides would apply one event differently.
+    /// </summary>
     [Fact]
-    public void Mods_that_say_nothing_keep_the_order_they_were_loaded_in()
-        => Assert.Equal(["A", "B", "C"], Sorted(("A", []), ("B", []), ("C", [])));
+    public void Mods_that_say_nothing_run_in_name_order()
+        => Assert.Equal(["A", "B", "C"], Sorted(("C", []), ("A", []), ("B", [])));
 
     [Fact]
     public void A_mod_runs_behind_the_one_it_names()
         => Assert.Equal(["B", "A"], Sorted(("A", ["B"]), ("B", [])));
 
-    /// <summary>Load order decides nothing once a mod has said what it follows.</summary>
+    /// <summary>Name order decides nothing once a mod has said what it follows.</summary>
     [Fact]
-    public void Naming_a_mod_loaded_later_still_puts_this_one_behind_it()
+    public void Naming_a_mod_that_sorts_later_still_puts_this_one_behind_it()
         => Assert.Equal(["C", "A", "B"], Sorted(("A", ["C"]), ("B", ["A"]), ("C", [])));
 
     [Fact]

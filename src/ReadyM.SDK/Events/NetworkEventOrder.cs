@@ -4,9 +4,15 @@ namespace ReadyM.SDK.Events;
 
 /// <exclude />
 /// <summary>
-/// The order mods' handlers for one event run in. A mod names what it must follow; everything else keeps its
-/// load order, so a set of mods that say nothing about each other behaves the same every run.
+/// The order mods' handlers for one event run in. A mod names what it must follow; everything else runs in the
+/// order of the mods' own names.
 /// </summary>
+/// <remarks>
+/// By name, never by load order. The server and a client load a different set of mods in a different sequence,
+/// so load order is not one order: two mods that say nothing about each other would apply the same event in one
+/// order on the server and the other on a client, and the two would quietly hold different worlds. A name is
+/// the same string on every machine, which is what the manifest ids are for.
+/// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class NetworkEventOrder
 {
@@ -18,7 +24,7 @@ public static class NetworkEventOrder
         var done = new HashSet<string>();
         var open = new HashSet<string>();
 
-        foreach (var (mod, _) in mods)
+        foreach (var mod in after.Keys.OrderBy(name => name, StringComparer.Ordinal))
             Visit(mod, after, order, done, open);
 
         return order;

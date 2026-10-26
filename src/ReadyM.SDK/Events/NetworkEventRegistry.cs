@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using ReadyM.Api.DI;
@@ -7,32 +8,45 @@ namespace ReadyM.SDK.Events;
 
 /// <exclude />
 /// <summary>
-/// Holds the dispatch classes a loaded assembly generated, so the SDK can put them in the container without
-/// naming any of them. The same shape as the RPC handler registry, for the same reason: a mod declares its
-/// events and handlers, and nothing else.
+/// Holds what a loaded assembly generated for network events, so the SDK can put it in the container without
+/// naming any of it. Two kinds: the contract an event's own Common project declares, once per event, and the
+/// handler set a mod declares, once per event it handles.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class NetworkEventRegistry
 {
-    private static readonly ConcurrentDictionary<Type, Declaration> Declared = new();
+    private static readonly ConcurrentDictionary<Type, Action<IDependencyContainer, INetworkEventCoordinators>>
+        Contracts = new();
 
-    /// <summary>Called by generated code for one event's dispatch.</summary>
-    public static void Declare<TDispatch, TEvent>(RpcSide side)
-        where TDispatch : class, INetworkEventDispatch<TEvent>
-        where TEvent : struct, INetworkEvent
-        => Declared[typeof(TDispatch)] = new Declaration(
-            side,
-            container => container.RegisterSingleton<INetworkEventDispatch<TEvent>, TDispatch>());
+    private static readonly ConcurrentDictionary<Type, Handling> Handlers = new();
 
-    /// <summary>Registers every dispatch declared for one side, which is also what starts it listening.</summary>
-    public static void RegisterAll(IDependencyContainer container, RpcSide side)
+    /// <summary>Called by generated code in the project that declares the event.</summary>
+    public static void Declare<T>(INetworkEventContract<T> contract) where T : struct, INetworkEvent
+        => Contracts[typeof(T)] = (container, coordinators) => coordinators.Register(container, contract);
+
+    /// <summary>Called by generated code in each mod that handles the event.</summary>
+    public static void Handle<THandlers, T>(RpcSide side)
+        where THandlers : class, INetworkEventHandlers<T>
+        where T : struct, INetworkEvent
+        => Handlers[typeof(THandlers)] = new Handling(
+            side, container => container.RegisterSingleton<INetworkEventHandlers<T>, THandlers>());
+
+    /// <summary>
+    /// Registers this side's handler sets and a coordinator per declared event. Every event gets one, handled
+    /// here or not: an event this side has nothing to say about is still forwarded, and still refused.
+    /// </summary>
+    public static void RegisterAll(
+        IDependencyContainer container, RpcSide side, INetworkEventCoordinators coordinators)
     {
-        foreach (var declaration in Declared.Values)
-            if (declaration.Side == side)
-                declaration.Register(container);
+        foreach (var handling in Handlers.Values)
+            if (handling.Side == side)
+                handling.Register(container);
+
+        foreach (var declared in Contracts.Values)
+            declared(container, coordinators);
     }
 
-    private readonly struct Declaration(RpcSide side, Action<IDependencyContainer> register)
+    private readonly struct Handling(RpcSide side, Action<IDependencyContainer> register)
     {
         public RpcSide Side { get; } = side;
 

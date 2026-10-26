@@ -1,0 +1,350 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using LiteNetLib.Utils;
+using ReadyM.Api.Idents;
+using ReadyM.Api.Multiplayer.Client;
+using ReadyM.Api.Multiplayer.Protocol;
+using ReadyM.Api.Multiplayer.Protocol.Enums;
+using ReadyM.SDK.Attributes;
+using ReadyM.SDK.Entities;
+using ReadyM.SDK.Events;
+using ReadyM.SDK.Server.Events;
+using Xunit;
+
+namespace ReadyM.SDK.Tests.Events;
+
+/// <summary>
+/// One event, several mods. The coordinator is the thing that makes that work: it runs a stage across every
+/// mod before the next stage starts, so a second mod's Validate can still refuse what the first one accepted,
+/// and it checks the policy and fans out once however many mods are listening.
+/// </summary>
+public class NetworkEventCoordinatorTests
+{
+    private const RelayMessageCode Wire = RelayMessageCode.MaxServerRpcEvent;
+
+    private static readonly PlayerId Me = new(2);
+
+    private static readonly PlayerId Somebody = new(5);
+
+    private readonly List<string> _ran = [];
+
+    /// <summary>What a mod's generated handler set is, as the coordinator sees it.</summary>
+    private sealed class Handlers(string name, List<string> ran, params string[] after)
+        : INetworkEventHandlers<Blow>
+    {
+        /// <summary>The stage this one refuses in, and the reason it gives.</summary>
+        public (Stage Stage, object? Reason)? Refuses { get; init; }
+
+        /// <summary>What this mod's Filter adds to the damage, so a rewrite can be seen downstream.</summary>
+        public int Adds { get; init; }
+
+        public string Mod => name;
+
+        public IReadOnlyList<string> After => after;
+
+        public void Run(Stage stage, ref Blow e, EventContext ctx)
+        {
+            ran.Add($"{name}:{stage}:{e.Damage}");
+            ctx.Cancellation.Entering(name);
+
+            if (stage == Stage.Filter)
+                e.Damage += Adds;
+
+            if (Refuses is { } refusal && refusal.Stage == stage)
+                ctx.Cancellation.Cancel(refusal.Reason);
+        }
+    }
+
+    private struct Blow : INetworkEvent
+    {
+        public int Damage { get; set; }
+
+        public RelayMessageCode Code => Wire;
+
+        public void Serialize(NetDataWriter writer) => writer.Put(Damage);
+    }
+
+    /// <summary>Stands in for what the Common project generates beside the event struct.</summary>
+    private sealed class Contract(Scope scope, Policy policy) : INetworkEventContract<Blow>
+    {
+        public RelayMessageCode Code => Wire;
+
+        public Scope Scope => scope;
+
+        public Policy Policy => policy;
+
+        public EntityHandle? Subject(in Blow e) => null;
+
+        public PlayerId Target(in Blow e) => PlayerId.Invalid;
+
+        public bool TryRead(NetworkEventDispatchCore world, NetDataReader reader, out Blow e)
+        {
+            e = new Blow { Damage = reader.GetInt() };
+
+            return true;
+        }
+
+        public void WriteReason(NetDataWriter writer, object? reason) => writer.Put((int)(reason ?? 0));
+
+        public object? ReadReason(NetDataReader reader) => reader.GetInt();
+    }
+
+    private sealed class Relay : IRpcClient
+    {
+        private readonly Dictionary<RelayMessageCode, Action<ServerEventHeader, NetDataReader>> _server = new();
+
+        public PlayerId? PlayerId { get; set; } = Me;
+
+        public void Deliver(NetDataWriter body)
+        {
+            if (_server.TryGetValue(Wire, out var handler))
+                handler(new ServerEventHeader(Wire, default), new NetDataReader(body.Data, 0, body.Length));
+        }
+
+        public void AddServerRpcMessageHandler(RelayMessageCode code, Action<ServerEventHeader, NetDataReader> h)
+            => _server[code] = h;
+
+        public void RemoveServerRpcMessageHandler(RelayMessageCode code, Action<ServerEventHeader, NetDataReader> h)
+            => _server.Remove(code);
+
+        public void AddClientRpcMessageHandler(RelayMessageCode code, Action<CustomRelayEventHeader, NetDataReader> h)
+            => throw new NotSupportedException();
+
+        public void AddClientRpcMessageHandler(
+            RelayMessageCode min, RelayMessageCode max, Action<CustomRelayEventHeader, NetDataReader> h)
+            => throw new NotSupportedException();
+
+        public void RemoveClientRpcMessageHandler(
+            RelayMessageCode code, Action<CustomRelayEventHeader, NetDataReader> h)
+            => throw new NotSupportedException();
+
+        public void RemoveClientRpcMessageHandler(
+            RelayMessageCode min, RelayMessageCode max, Action<CustomRelayEventHeader, NetDataReader> h)
+            => throw new NotSupportedException();
+
+        public void SendMessage(RelayMessage message)
+        {
+        }
+    }
+
+    private ServerNetworkEventCoordinator<Blow> OnServer(Policy policy, params Handlers[] mods)
+        => new(new Contract(Scope.Global, policy), mods);
+
+    private ServerNetworkEventCoordinator<Blow> OnServer(params Handlers[] mods) => OnServer(Policy.Anyone, mods);
+
+    private static (ClientNetworkEventCoordinator<Blow> Coordinator, Relay Relay) OnClient(params Handlers[] mods)
+    {
+        var relay = new Relay();
+        var coordinator = new ClientNetworkEventCoordinator<Blow>(new Contract(Scope.Global, Policy.Anyone), mods)
+        {
+            Relay = relay,
+        };
+
+        coordinator.OnScopeStart();
+
+        return (coordinator, relay);
+    }
+
+    /// <summary>What the server fans out: the frame, then the event.</summary>
+    private static NetDataWriter Arriving(bool refused, PlayerId origin, int damage, params object[] refusal)
+    {
+        var payload = new NetDataWriter();
+        payload.Put(damage);
+
+        foreach (var part in refusal)
+        {
+            if (part is string mod)
+                payload.Put(mod);
+            else
+                payload.Put((int)part);
+        }
+
+        return NetworkEventFrame.Write(refused, origin, payload);
+    }
+
+    // -- one stage at a time, across every mod ---------------------------------------------------------
+
+    /// <summary>
+    /// The whole point of the coordinator. Run mod by mod instead and a second mod's Validate would be asked
+    /// after the first mod had already applied the event, which is a rule checked too late to mean anything.
+    /// </summary>
+    [Fact]
+    public void A_stage_runs_across_every_mod_before_the_next_stage_starts()
+    {
+        OnServer(new Handlers("A", _ran), new Handlers("B", _ran)).Raise(default, PlayerId.Server, true);
+
+        Assert.Equal(
+            [
+                "A:Validate:0", "B:Validate:0",
+                "A:Filter:0", "B:Filter:0",
+                "A:Apply:0", "B:Apply:0",
+                "A:Observe:0", "B:Observe:0",
+            ],
+            _ran);
+    }
+
+    /// <summary>A client runs the two stages that reach it, and neither of the two that never leave the server.</summary>
+    [Fact]
+    public void A_client_runs_apply_and_observe_across_every_mod_and_nothing_else()
+    {
+        var (_, relay) = OnClient(new Handlers("A", _ran), new Handlers("B", _ran));
+
+        relay.Deliver(Arriving(false, Somebody, 3));
+
+        Assert.Equal(["A:Apply:3", "B:Apply:3", "A:Observe:3", "B:Observe:3"], _ran);
+    }
+
+    /// <summary>A filter's rewrite is what every later stage, in every mod, is given.</summary>
+    [Fact]
+    public void What_one_mods_filter_rewrote_is_what_the_next_mod_applies()
+    {
+        OnServer(new Handlers("A", _ran) { Adds = 5 }, new Handlers("B", _ran) { Adds = 2 })
+            .Raise(default, PlayerId.Server, true);
+
+        Assert.Equal(["A:Apply:7", "B:Apply:7"], _ran.Where(step => step.Contains(":Apply:")));
+    }
+
+    // -- refusing --------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// An anti-cheat mod's whole job: refuse what the event's own mod was happy with. That only works if its
+    /// Validate runs before the owner's Apply, which is what a per-mod ladder cannot do.
+    /// </summary>
+    [Fact]
+    public void A_second_mods_validate_stops_the_first_mods_apply()
+    {
+        OnServer(
+                new Handlers("Owner", _ran),
+                new Handlers("Rules", _ran) { Refuses = (Stage.Validate, 9) })
+            .Raise(default, PlayerId.Server, true);
+
+        Assert.Equal(["Owner:Validate:0", "Rules:Validate:0", "Owner:Rejected:0", "Rules:Rejected:0"], _ran);
+    }
+
+    /// <summary>Every mod hears that it was refused, not only the one whose handler refused it.</summary>
+    [Fact]
+    public void A_refusal_reaches_every_mods_rejected_handlers()
+    {
+        OnServer(new Handlers("A", _ran) { Refuses = (Stage.Validate, 1) }, new Handlers("B", _ran))
+            .Raise(default, PlayerId.Server, true);
+
+        Assert.Equal(["A:Validate:0", "A:Rejected:0", "B:Rejected:0"], _ran);
+    }
+
+    [Fact]
+    public void A_refusal_in_filter_still_stops_apply()
+    {
+        OnServer(new Handlers("A", _ran) { Refuses = (Stage.Filter, 1) }, new Handlers("B", _ran))
+            .Raise(default, PlayerId.Server, true);
+
+        Assert.DoesNotContain(_ran, step => step.Contains(":Apply:"));
+        Assert.Contains("B:Validate:0", _ran);
+    }
+
+    /// <summary>A client is told which mod refused it, so a Rejected handler can say so.</summary>
+    [Fact]
+    public void A_client_told_of_a_refusal_runs_rejected_alone_and_knows_who_refused()
+    {
+        var mods = new[] { new Handlers("A", _ran), new Handlers("B", _ran) };
+        var (_, relay) = OnClient(mods);
+
+        relay.Deliver(Arriving(true, Me, 4, "AntiCheat", 7));
+
+        Assert.Equal(["A:Rejected:4", "B:Rejected:4"], _ran);
+    }
+
+    // -- the policy ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Asked once, before any mod sees the event. A per-mod ladder asks it once per mod, which is the same
+    /// answer at a cost that grows with how many mods are installed.
+    /// </summary>
+    [Fact]
+    public void A_client_that_may_not_raise_it_gets_no_stage_but_rejected()
+    {
+        OnServer(Policy.ServerAuthoritative, new Handlers("A", _ran), new Handlers("B", _ran))
+            .Dispatch(default, Somebody, raisedHere: false, vouched: false);
+
+        Assert.Equal(["A:Rejected:0", "B:Rejected:0"], _ran);
+    }
+
+    /// <summary>The server vouches for what it raises, so a bot can act as a player the policy would refuse.</summary>
+    [Fact]
+    public void The_server_raising_as_a_player_is_not_asked_the_policy()
+    {
+        OnServer(Policy.ServerAuthoritative, new Handlers("A", _ran)).Raise(default, Somebody, true);
+
+        Assert.Contains("A:Apply:0", _ran);
+    }
+
+    // -- the order mods run in -------------------------------------------------------------------------
+
+    [Fact]
+    public void A_mod_that_names_another_runs_behind_it_whatever_its_name_sorts_as()
+    {
+        OnServer(new Handlers("Second", _ran, "First"), new Handlers("First", _ran)).Raise(default, PlayerId.Server, true);
+
+        Assert.Equal(["First:Apply:0", "Second:Apply:0"], _ran.Where(step => step.Contains(":Apply:")));
+    }
+
+    /// <summary>
+    /// By name, not by the order the container handed them over in. That order is the order the mods loaded,
+    /// which the server and a client do differently, and two mods applying one event in opposite orders on
+    /// the two machines is a divergence nothing would report.
+    /// </summary>
+    [Fact]
+    public void Mods_that_name_nobody_run_in_name_order()
+    {
+        OnServer(new Handlers("Z", _ran), new Handlers("A", _ran)).Raise(default, PlayerId.Server, true);
+
+        Assert.Equal(["A:Apply:0", "Z:Apply:0"], _ran.Where(step => step.Contains(":Apply:")));
+    }
+
+    /// <summary>A client runs its mods in the same order the server ran them, or the two worlds diverge.</summary>
+    [Fact]
+    public void A_client_runs_its_mods_in_the_same_order()
+    {
+        var (_, relay) = OnClient(new Handlers("Second", _ran, "First"), new Handlers("First", _ran));
+
+        relay.Deliver(Arriving(false, Somebody, 1));
+
+        Assert.Equal(["First:Apply:1", "Second:Apply:1"], _ran.Where(step => step.Contains(":Apply:")));
+    }
+
+    // -- an event nobody here handles ------------------------------------------------------------------
+
+    /// <summary>
+    /// A client that raises an event it declares no handler for still has a coordinator, because the
+    /// declaration is in the Common project both sides share. Without one, a refusal of its own event would
+    /// arrive on a code nothing is listening to and its guess would stand until the deadline took it back.
+    /// </summary>
+    [Fact]
+    public void A_client_with_no_handlers_still_takes_its_guess_back_on_a_refusal()
+    {
+        var predictions = new NetworkEventPredictions();
+        var relay = new Relay();
+        var coordinator = new ClientNetworkEventCoordinator<Blow>(new Contract(Scope.Global, Policy.Anyone), [])
+        {
+            Relay = relay,
+            Predictions = predictions,
+        };
+
+        coordinator.OnScopeStart();
+        predictions.Open(Wire, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
+
+        relay.Deliver(Arriving(true, Me, 1, "Someone", 0));
+
+        Assert.Equal(["guess", "undo"], _ran);
+    }
+
+    [Fact]
+    public void A_server_with_no_handlers_for_an_event_still_dispatches_it()
+    {
+        var coordinator = OnServer();
+
+        coordinator.Raise(default, PlayerId.Server, true);
+
+        Assert.Empty(_ran);
+    }
+}
