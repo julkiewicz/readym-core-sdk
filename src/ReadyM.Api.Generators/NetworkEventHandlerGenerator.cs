@@ -256,10 +256,81 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("        return writer;");
         sb.AppendLine("    }");
 
+        EmitRead(sb, declared, type);
+
         if (onServer)
             EmitRefused(sb, type, reject);
         sb.AppendLine("}");
         sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Reads an event back off the wire, in the order it wrote itself. Entity members name an id this end may
+    /// not have, so a miss drops the whole event: half an event is worse than none, and the sender's own end
+    /// has already been told whether it was accepted.
+    /// </summary>
+    private static void EmitRead(StringBuilder sb, INamedTypeSymbol declared, string type)
+    {
+        var members = declared.GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsStatic).ToList();
+
+        sb.AppendLine();
+        sb.AppendLine($"    private bool TryRead(NetDataReader reader, out {type} e)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        e = default;");
+        sb.AppendLine();
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            var member = members[i];
+
+            if (RpcEntityParams.IsShape(member.Type, out var shape, out var optional))
+            {
+                var read = optional ? "TryReadOptional" : "TryRead";
+                var named = shape.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+                sb.AppendLine(
+                    $"        if (!{Events}.NetworkEventCodec.{read}<{named}>("
+                    + $"this, reader, out var m{i}, \"{declared.Name}\", \"{member.Name}\"))");
+                sb.AppendLine("            return false;");
+            }
+            else
+            {
+                sb.AppendLine($"        var m{i} = {Reader(member.Type)};");
+            }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine($"        e = new {type}");
+        sb.AppendLine("        {");
+
+        for (var i = 0; i < members.Count; i++)
+            sb.AppendLine($"            {members[i].Name} = m{i},");
+
+        sb.AppendLine("        };");
+        sb.AppendLine();
+        sb.AppendLine("        return true;");
+        sb.AppendLine("    }");
+    }
+
+    /// <summary>How one plain member reads itself back, cast where the wire carries the underlying type.</summary>
+    private static string Reader(ITypeSymbol type)
+    {
+        if (type.TypeKind == TypeKind.Enum)
+        {
+            var underlying = SerializationHelper.GetEnumBaseType(type);
+            var named = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            return $"({named})reader.{SerializationHelper.GetDeserializationMethod(underlying)}()";
+        }
+
+        if (SerializationHelper.IsINetSerializable(type))
+        {
+            var named = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            return $"reader.Get<{named}>()";
+        }
+
+        return $"reader.{SerializationHelper.GetDeserializationMethod(type.SpecialType)}()";
     }
 
     /// <summary>

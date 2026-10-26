@@ -13,11 +13,8 @@ namespace ReadyM.SDK.Server.Events;
 /// Its members are internal on purpose: a mod never reads them, and the generated class that derives from this
 /// never does either. Only the seams in this assembly do.
 /// </remarks>
-public abstract class ServerNetworkEventDispatchBase
+public abstract class ServerNetworkEventDispatchBase : ReadyM.SDK.Events.NetworkEventDispatchCore
 {
-    /// <summary>Where entity members are looked up, and where a skipped handler is logged. Set by the host.</summary>
-    internal RpcEntities? Entities { get; set; }
-
     /// <summary>
     /// Where the players an accepted event goes to are found. The scopes helper walks upwards from one entity and
     /// gets by on the raw api, but a fan-out walks downwards from a scope to everyone in it, which is the public
