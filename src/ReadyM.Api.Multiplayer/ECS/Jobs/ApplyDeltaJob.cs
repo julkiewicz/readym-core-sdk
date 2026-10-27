@@ -74,6 +74,8 @@ internal class ApplyDeltaJob<T>(
             {
                 if (entity.Value.HasComponent<T>())
                 {
+                    DeltaHooks<T>.Landing?.Invoke(ref entity.Value.GetComponent<T>());
+
                     var comp = entity.Value.GetComponent<T>();
                     comp.ReadDeltaTracking(reader, entity.Value.Id);
 
@@ -90,7 +92,7 @@ internal class ApplyDeltaJob<T>(
                     }
 
                     entity.Value.Set(comp);
-                    Landed(entity.Value.Id);
+                    DeltaHooks<T>.Landed?.Invoke(ref entity.Value.GetComponent<T>());
                 }
                 else
                 {
@@ -104,8 +106,8 @@ internal class ApplyDeltaJob<T>(
                         comp.ClearDirty();
                     }
 
+                    // Nothing can be held in a component the entity did not have
                     entity.Value.Add(comp);
-                    Landed(entity.Value.Id);
                 }
             }
             else
@@ -119,6 +121,7 @@ internal class ApplyDeltaJob<T>(
                 }
 
                 ref var component = ref entity.Value.GetComponent<T>();
+                DeltaHooks<T>.Landing?.Invoke(ref component);
                 component.ReadDeltaTracking(reader, entity.Value.Id);
 
                 if (playerId == owner)
@@ -128,18 +131,8 @@ internal class ApplyDeltaJob<T>(
                     component.ClearDirty();
                 }
 
-                Landed(entity.Value.Id);
+                DeltaHooks<T>.Landed?.Invoke(ref component);
             }
         }
-    }
-
-    /// <summary>
-    /// The server's own value for this component has arrived, so a guess standing in front of it has been
-    /// answered and is dropped. Nothing is holding one almost always, which is the field read.
-    /// </summary>
-    private static void Landed(int entity)
-    {
-        if (DeltaApplyNotifier.Watched)
-            DeltaApplyNotifier.Landed(typeof(T), entity);
     }
 }

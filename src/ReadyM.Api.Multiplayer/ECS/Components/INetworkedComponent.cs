@@ -9,6 +9,9 @@ namespace ReadyM.Api.Multiplayer.ECS.Components;
 public interface INetworkedComponent : IReadyComponent, INetSerializable
 {
     void ClearDirty();
+
+    /// <summary>Leaves one field out of the next delta, which is what a value held back from the server needs.</summary>
+    void ClearDirty(int field);
     bool IsDirty { get; }
     void WriteDelta(NetDataWriter writer);
     void ReadDelta(NetDataReader reader);

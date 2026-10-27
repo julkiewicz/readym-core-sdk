@@ -5,6 +5,7 @@ using LiteNetLib.Utils;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.ConflictResolution;
 using ReadyM.Api.Multiplayer.ECS.Components;
+using ReadyM.Api.Multiplayer.ECS.Jobs;
 using ReadyM.Api.Multiplayer.ECS.Registry;
 using ReadyM.Api.Multiplayer.ECS.Values;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
@@ -83,6 +84,9 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
 
     protected void OnUpdate(SendContext context)
     {
+        // A field held apart from the server's value, a client's guess, keeps itself out of what goes out
+        DeltaHooks<T>.Sending?.Invoke();
+
         var maxPacketSize = GetMaxPacketSize();
         var owners = SentOwners();
         var query = _queryCache.GetQuery(context);

@@ -4,18 +4,18 @@ using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Events;
 using ReadyM.SDK.Tests.Client;
+using ReadyM.SDK.Tests.Client.Fixtures;
 using Xunit;
 
 namespace ReadyM.SDK.Tests.Events;
 
 /// <summary>
-/// What a [Predictable] member's generated accessors stand on: a value held beside the entity while a guess is
-/// outstanding, read in front of the replicated one, and dropped when the guess is taken back.
+/// What a [Predictable] member's generated accessors stand on: the guess written into the component, the
+/// server's value kept aside, and the server's value put back when the guess is taken back.
 /// </summary>
 /// <remarks>
-/// The stand-in for the component here is a dictionary the test writes itself, which is what lets the
-/// fall-through be asserted: the point of dropping rather than restoring is that the server's value as it
-/// stands at that moment is what the read falls through to.
+/// Driven on a number rather than a flag, so which server value came back is visible. A registry is made here
+/// by hand over a field the fixture does not mark, which is all the generated code does over one it does.
 /// </remarks>
 public class GuessedValueTests : ClientSdkTest
 {
@@ -23,158 +23,53 @@ public class GuessedValueTests : ClientSdkTest
 
     private readonly NetworkedEventPredictions _predictions = new();
 
-    private readonly GuessedValueRegistry<bool> _frozen = new("Chill.Frozen", typeof(Client.Fixtures.LockdownComponent));
-
-    private readonly Dictionary<EntityHandle, bool> _replicated = new();
-
-    private EntityHandle Entity() => EntityHandle.Of(SpawnMonster());
-
-    /// <summary>What a generated getter does: the guess if there is one, otherwise the replicated value.</summary>
-    private bool Read(EntityHandle handle)
-        => _frozen.TryGet(handle, out var guessed) ? guessed : _replicated.GetValueOrDefault(handle);
-
-    /// <summary>What a generated setter does, which has nothing to do with guessing.</summary>
-    private void Write(EntityHandle handle, bool value) => _replicated[handle] = value;
-
-    /// <summary>What a generated PredictX does.</summary>
-    private void Guess(EntityHandle handle, bool value) => _frozen.Guess(handle, value);
-
-    [Fact]
-    public void A_write_goes_through_to_the_value_itself()
-    {
-        var entity = Entity();
-
-        Write(entity, true);
-
-        Assert.True(_replicated[entity]);
-        Assert.True(Read(entity));
-    }
-
-    [Fact]
-    public void A_guess_is_read_back_without_touching_the_value_itself()
-    {
-        var entity = Entity();
-
-        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
-
-        Assert.True(Read(entity));
-        Assert.False(_replicated.ContainsKey(entity));
-    }
-
-    [Fact]
-    public void A_refusal_drops_the_guess_and_the_read_falls_through()
-    {
-        var entity = Entity();
-
-        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
-        _predictions.Refused(Code);
-
-        Assert.False(Read(entity));
-    }
-
-    [Fact]
-    public void A_guess_nothing_answered_is_dropped_when_it_runs_out()
-    {
-        var entity = Entity();
-
-        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
-
-        Assert.False(Read(entity));
-    }
-
     /// <summary>
-    /// The reason dropping beats putting a value back. The server accepting the event is an ordinary
-    /// replicated change that lands while the guess still stands, and the read has to end up on it, not on
-    /// what was true when the guess was made.
+    /// Every guess taken back before the world goes. The registries are static, so a guess left standing
+    /// would still be listening to the delta path in the next test.
     /// </summary>
-    [Fact]
-    public void An_authoritative_change_that_landed_meanwhile_is_not_clobbered()
+    protected override void TearDown() => _predictions.Expire(double.MaxValue);
+
+    private readonly GuessedValueRegistry<LockdownComponent, int> _hour = new("Curfew.Hour", LockdownComponent.Fields.Hour);
+
+    private Settlement Town(int hour = 5)
     {
-        var entity = Entity();
+        var town = Entities.Create<Settlement>();
 
-        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
-        Write(entity, true);
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        town.LockdownHour = hour;
+        EntityHandle.Of(town).GetComponent<LockdownComponent>().ClearDirty();
 
-        Assert.True(Read(entity));
+        return town;
     }
 
+    private void Guess(Settlement town, int hour) => _hour.Guess(EntityHandle.Of(town), hour);
+
     [Fact]
-    public void A_guess_about_one_entity_says_nothing_about_another()
+    public void A_guess_reads_back_as_the_value()
     {
-        var guessed = Entity();
-        var other = Entity();
+        var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => Guess(guessed, true));
+        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
 
-        Assert.True(Read(guessed));
-        Assert.False(Read(other));
+        Assert.Equal(6, town.LockdownHour);
     }
 
-    /// <summary>
-    /// Each member has its own registry, so one guess cannot be read as another's. Two members of one shape
-    /// sharing a store keyed by entity would hand a read of the second one the first one's value.
-    /// </summary>
+    /// <summary>A guess made twice in one raise stands as the last one, and the first one's start is kept.</summary>
     [Fact]
-    public void A_guess_at_one_member_says_nothing_about_another()
+    public void Guessing_twice_in_one_raise_puts_back_the_value_from_before_the_first()
     {
-        var entity = Entity();
-        var other = new GuessedValueRegistry<bool>("Chill.Numb", typeof(Client.Fixtures.LockdownComponent));
-
-        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
-
-        Assert.False(other.TryGet(entity, out _));
-    }
-
-    /// <summary>A guess made twice in one raise stands as the last one, and is still dropped once.</summary>
-    [Fact]
-    public void Guessing_twice_leaves_the_last_guess_and_drops_it_once()
-    {
-        var entity = Entity();
+        var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() =>
         {
-            Guess(entity, true);
-            Guess(entity, false);
+            Guess(town, 6);
+            Guess(town, 7);
         });
 
-        Assert.False(Read(entity));
+        Assert.Equal(7, town.LockdownHour);
 
-        Write(entity, true);
         _predictions.Refused(Code);
 
-        Assert.True(Read(entity));
-    }
-
-    /// <summary>
-    /// Nothing is waiting on an answer out here, so the guess would stand for the rest of the session. It
-    /// says so rather than holding a value nothing will ever take back.
-    /// </summary>
-    [Fact]
-    public void Guessing_with_no_raise_waiting_on_an_answer_says_so()
-    {
-        var entity = Entity();
-
-        var thrown = Assert.Throws<InvalidOperationException>(() => Guess(entity, true));
-
-        Assert.Contains("Chill.Frozen", thrown.Message);
-        Assert.Contains("Predicting", thrown.Message);
-        Assert.False(Read(entity));
-    }
-
-    /// <summary>
-    /// The scope is the callback and nothing after it, so a guess a step outside it is as unanswered as one
-    /// made anywhere else.
-    /// </summary>
-    [Fact]
-    public void Guessing_after_the_callback_has_run_is_outside_it()
-    {
-        var entity = Entity();
-
-        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
-
-        Assert.Throws<InvalidOperationException>(() => Guess(entity, false));
+        Assert.Equal(5, town.LockdownHour);
     }
 
     /// <summary>
@@ -184,18 +79,78 @@ public class GuessedValueTests : ClientSdkTest
     [Fact]
     public void An_earlier_raise_running_out_leaves_a_later_raises_guess_alone()
     {
-        var entity = Entity();
+        var town = Town();
 
-        var first = _predictions.Open(Code, 0);
-        first.Predicting(() => Guess(entity, true));
-
-        var second = _predictions.Open(Code, 1000);
-        second.Predicting(() => Guess(entity, true));
+        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+        _predictions.Open(Code, 1000).Predicting(() => Guess(town, 7));
 
         // Only the first one's deadline has passed
         _predictions.Expire(NetworkedEventPredictions.Ttl);
 
-        Assert.True(Read(entity));
+        Assert.Equal(7, town.LockdownHour);
+    }
+
+    /// <summary>
+    /// The server's value is the one from before any guess stood. The second raise found the first one's
+    /// guess in the component, and keeping that would put a guess back as if the server had said it.
+    /// </summary>
+    [Fact]
+    public void A_guess_on_top_of_a_guess_puts_back_the_servers_value_not_the_first_guess()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+        _predictions.Open(Code, 1000).Predicting(() => Guess(town, 7));
+
+        _predictions.Expire(1000 + NetworkedEventPredictions.Ttl);
+
+        Assert.Equal(5, town.LockdownHour);
+    }
+
+    /// <summary>Each member has its own registry, so a guess at one leaves the other as the server left it.</summary>
+    [Fact]
+    public void A_guess_at_one_member_says_nothing_about_another()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+
+        Assert.False(town.LockdownActive);
+
+        _predictions.Refused(Code);
+
+        Assert.False(town.LockdownActive);
+        Assert.Equal(5, town.LockdownHour);
+    }
+
+    /// <summary>
+    /// Nothing is waiting on an answer out here, so the guess would stand for the rest of the session. It
+    /// says so rather than holding a value nothing will ever take back, and leaves the value alone.
+    /// </summary>
+    [Fact]
+    public void Guessing_with_no_raise_waiting_on_an_answer_says_so()
+    {
+        var town = Town();
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => Guess(town, 6));
+
+        Assert.Contains("Curfew.Hour", thrown.Message);
+        Assert.Contains("Predicting", thrown.Message);
+        Assert.Equal(5, town.LockdownHour);
+    }
+
+    /// <summary>
+    /// The scope is the callback and nothing after it, so a guess a step outside it is as unanswered as one
+    /// made anywhere else.
+    /// </summary>
+    [Fact]
+    public void Guessing_after_the_callback_has_run_is_outside_it()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+
+        Assert.Throws<InvalidOperationException>(() => Guess(town, 7));
     }
 
     /// <summary>
@@ -205,16 +160,33 @@ public class GuessedValueTests : ClientSdkTest
     [Fact]
     public void A_raise_that_guesses_a_value_and_an_action_takes_both_back()
     {
-        var entity = Entity();
+        var town = Town();
         var ran = new List<string>();
 
         _predictions.Open(Code, 0)
-            .Predicting(() => Guess(entity, true))
+            .Predicting(() => Guess(town, 6))
             .Rollback(() => ran.Add("undo"));
 
         _predictions.Refused(Code);
 
         Assert.Equal(["undo"], ran);
-        Assert.False(Read(entity));
+        Assert.Equal(5, town.LockdownHour);
+    }
+
+    /// <summary>
+    /// The entity going away while its guess stands is ordinary, say a creature dying to the hit being
+    /// guessed at. There is nothing to put back, and the deadline coming round must not fall over it.
+    /// </summary>
+    [Fact]
+    public void A_guess_on_an_entity_that_has_gone_is_dropped_quietly()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+        Entities.Delete(town);
+
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
+
+        Assert.Equal(0, _predictions.Outstanding);
     }
 }

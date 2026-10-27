@@ -47,7 +47,7 @@ public sealed class NetworkedEventPredictions
     private sealed class Guess(NetworkedEventPredictions predictions, RelayMessageCode code, double deadline)
         : INetworkedEventRaise
     {
-        /// <summary>What drops the guessed values a [Predictable] member's setter held for this raise.</summary>
+        /// <summary>What puts back the server's values for the guesses this raise made at [Predictable] members.</summary>
         private Action? _drop;
 
         private Action? _undo;
@@ -58,8 +58,8 @@ public sealed class NetworkedEventPredictions
 
         public INetworkedEventRaise Predicting(Action guess)
         {
-            // Inside here a [Predictable] member's setter holds the value beside the entity rather than
-            // writing it, and says how to drop it again. A guess at anything else writes as it always does.
+            // Inside here a [Predictable] member's PredictX writes its guess into the component and says how
+            // to put the server's value back. A write to anything else is the ordinary write it always is.
             if (NetworkedEventGuesses.Take(guess) is { } drop)
                 _drop += drop;
 

@@ -541,7 +541,7 @@ public partial struct FloatComponent : INetworkedComponent
         var isDirtyProperty = componentType.GetProperty("IsDirty");
         Assert.NotNull(isDirtyProperty);
 
-        var clearDirtyMethod = componentType.GetMethod("ClearDirty");
+        var clearDirtyMethod = componentType.GetMethod("ClearDirty", Type.EmptyTypes);
         Assert.NotNull(clearDirtyMethod);
 
         clearDirtyMethod.Invoke(instance, Array.Empty<object>());

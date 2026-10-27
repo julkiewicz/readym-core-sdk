@@ -114,19 +114,8 @@ internal static class AccessorEmitter
 
         writer.Line();
 
-        if (accessor.IsPredictable)
-        {
-            // The row's handle, because a guess is held by entity and a chunk row is not one. Without it a
-            // chunk read would skip the guess the handle path merges, which is a wrong value, not a slow one.
-            writer.Line($"public static {accessor.Type} Get{accessor.Name}("
-                        + $"in {chunks.ComponentChunk} chunk, int index, in {ArchetypeNames.EntityHandle} handle)");
-            writer.Line($"    => {Guesses(accessor)}.TryGet(handle, out var guessed) ? guessed : {read};");
-        }
-        else
-        {
-            writer.Line($"public static {accessor.Type} Get{accessor.Name}(in {chunks.ComponentChunk} chunk, int index)");
-            writer.Line($"    => {read};");
-        }
+        writer.Line($"public static {accessor.Type} Get{accessor.Name}(in {chunks.ComponentChunk} chunk, int index)");
+        writer.Line($"    => {read};");
 
         // A chunk write moves no index, so an indexed value is read-only here and written by handle.
         if (!accessor.HasSetter || indexed || !chunkWrites)
@@ -211,22 +200,14 @@ internal static class AccessorEmitter
 
         if (accessor.IsPredictable)
         {
+            // The guess is written into the component, so every read below is the component's and sees it
             writer.Line();
-            writer.Line($"private static readonly {ArchetypeNames.Guesses}<{accessor.Type}> {Guesses(accessor)}");
-            writer.Line($"    = new(\"{declaring}.{accessor.Name}\", typeof({component}));");
+            writer.Line($"private static readonly {ArchetypeNames.Guesses}<{component}, {accessor.Type}> {Guesses(accessor)}");
+            writer.Line($"    = new(\"{declaring}.{accessor.Name}\", {Entry(accessor, component)});");
         }
 
         writer.Line();
-
-        if (accessor.IsPredictable)
-        {
-            writer.Line($"public static {accessor.Type} Get{accessor.Name}(in {ArchetypeNames.EntityHandle} handle)");
-            writer.Line($"    => {Guesses(accessor)}.TryGet(handle, out var guessed) ? guessed : {read};");
-        }
-        else
-        {
-            writer.Line($"public static {accessor.Type} Get{accessor.Name}(in {ArchetypeNames.EntityHandle} handle) => {read};");
-        }
+        writer.Line($"public static {accessor.Type} Get{accessor.Name}(in {ArchetypeNames.EntityHandle} handle) => {read};");
 
         if (accessor.HasSetter)
         {
@@ -285,13 +266,6 @@ internal static class AccessorEmitter
 
         using (writer.Braces(signature))
         {
-            if (accessor.IsPredictable)
-            {
-                writer.Line($"if ({Guesses(accessor)}.TryGet(handle, out value))");
-                writer.Line("    return true;");
-                writer.Line();
-            }
-
             using (writer.Braces($"if (handle.TryGetComponent<{component}>(out var component))"))
             {
                 writer.Line($"value = {accessor.Read($"component.{accessor.Field}")};");
@@ -430,7 +404,7 @@ internal static class AccessorEmitter
     internal static bool Marked(AccessorModel accessor, bool replicated)
         => replicated && !accessor.IsNativeContainer;
 
-    /// <summary>Where this member's guesses are held, one registry per member so a read is a count check.</summary>
+    /// <summary>Where the server's value is kept while this member is guessed at, one registry per member.</summary>
     internal static string Guesses(AccessorModel accessor) => accessor.Name + "Guesses";
 
     private static string Entry(AccessorModel accessor, string component)

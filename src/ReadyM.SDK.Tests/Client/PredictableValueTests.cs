@@ -1,3 +1,4 @@
+using LiteNetLib.Utils;
 using ReadyM.Api.Multiplayer.ECS.Jobs;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Entities;
@@ -12,13 +13,84 @@ namespace ReadyM.SDK.Tests.Client;
 /// for them. What a mod sees is one property: it reads the guess while one stands and the server's value once
 /// it does not, and never learns which it got.
 /// </summary>
+/// <remarks>
+/// The guess is written into the component itself, because the component is what the game is told about. The
+/// tests below read the component as well as the property for that reason: a value only C# could see would
+/// leave the game showing the server's value the whole time.
+/// </remarks>
 public class PredictableValueTests : ClientSdkTest
 {
     private const RelayMessageCode Code = RelayMessageCode.MaxServerRpcEvent;
 
+    /// <summary>Which bit of the delta mask each of the fixture's fields is.</summary>
+    private const byte ActiveBit = 1 << 0;
+
+    private const byte HourBit = 1 << 1;
+
     private readonly NetworkedEventPredictions _predictions = new();
 
-    private Settlement Town() => Entities.Create<Settlement>();
+    /// <summary>
+    /// Every guess taken back before the world goes. The registries are static, so a guess left standing
+    /// would still be listening to the delta path in the next test.
+    /// </summary>
+    protected override void TearDown() => _predictions.Expire(double.MaxValue);
+
+    private Settlement Town()
+    {
+        var town = Entities.Create<Settlement>();
+
+        // Settled, the way a replicated entity is once the server's snapshot of it has been read
+        Component(town).ClearDirty();
+        Component(town).ClearApiFlag();
+
+        return town;
+    }
+
+    private static ref LockdownComponent Component(Settlement town)
+        => ref EntityHandle.Of(town).GetComponent<LockdownComponent>();
+
+    /// <summary>The fields the next delta this client sends would carry, as the mask at its head.</summary>
+    private static byte Outgoing(Settlement town)
+    {
+        var writer = new NetDataWriter();
+
+        Component(town).WriteDelta(writer);
+
+        return writer.Data[0];
+    }
+
+    /// <summary>
+    /// The server's value arriving as the delta path delivers it: the hooks either side of the read, around a
+    /// delta carrying only what changed on the server's copy.
+    /// </summary>
+    private static void Arrives(Settlement town, bool? active = null, int? hour = null)
+    {
+        // Moved off the value first, so the write that follows is a change and the delta carries it
+        var server = default(LockdownComponent);
+
+        if (active is { } changedActive)
+            server.Active = !changedActive;
+
+        if (hour is { } changedHour)
+            server.Hour = changedHour + 1;
+
+        server.ClearDirty();
+
+        if (active is { } carriedActive)
+            server.Active = carriedActive;
+
+        if (hour is { } carriedHour)
+            server.Hour = carriedHour;
+
+        var writer = new NetDataWriter();
+        server.WriteDelta(writer);
+
+        ref var component = ref Component(town);
+
+        DeltaHooks<LockdownComponent>.Landing?.Invoke(ref component);
+        component.ReadDeltaTracking(new NetDataReader(writer.CopyData()), EntityHandle.Of(town).Id);
+        DeltaHooks<LockdownComponent>.Landed?.Invoke(ref component);
+    }
 
     [Fact]
     public void A_value_nobody_has_guessed_at_reads_as_the_server_left_it()
@@ -41,34 +113,66 @@ public class PredictableValueTests : ClientSdkTest
     }
 
     /// <summary>
-    /// The guess is held beside the entity, never written into the replicated component. That is the whole of
-    /// why a client is allowed to write a value the server owns here: none of it leaves the machine.
+    /// The game reads the component, not the property, so a guess held anywhere else is a guess nobody sees.
+    /// It goes in as a change from the API, which is the mark that has the game take a value from the ECS.
     /// </summary>
     [Fact]
-    public void A_guess_never_reaches_the_value_itself()
+    public void A_guess_is_written_into_the_component_for_the_game_to_show()
     {
         var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
-        _predictions.Refused(Code);
 
-        Assert.False(town.LockdownActive);
+        Assert.True(Component(town).Active);
+        Assert.True(Component(town).ChangedFromApi);
     }
 
     /// <summary>
-    /// Dropping rather than restoring, read through the generated getter: the server accepting the event is an
-    /// ordinary change that lands while the guess still stands, and the read has to end up on it.
+    /// A guess is this client's alone. Sent, it would reach the server as the value itself, which is the one
+    /// thing a guess at a value the server owns must never do.
     /// </summary>
     [Fact]
-    public void The_server_answering_while_the_guess_stands_is_what_the_read_falls_through_to()
+    public void A_guess_is_never_sent()
     {
         var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
-        town.LockdownActive = true;
+
+        Assert.False(Component(town).IsDirty);
+        Assert.Equal(0, Outgoing(town));
+    }
+
+    /// <summary>
+    /// The game copying the guessed value back into the component, or anything else marking it changed while
+    /// the guess stands, still does not send it: the outgoing delta leaves the guessed field out, and only it.
+    /// </summary>
+    [Fact]
+    public void A_guessed_field_is_held_out_of_what_is_sent_while_the_guess_stands()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+
+        Component(town).Active = false;
+        Component(town).Hour = 22;
+        DeltaHooks<LockdownComponent>.Sending?.Invoke();
+
+        Assert.Equal(HourBit, Outgoing(town));
+    }
+
+    [Fact]
+    public void A_refused_guess_puts_the_servers_value_back_for_the_game_to_show()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        Component(town).ClearApiFlag();
         _predictions.Refused(Code);
 
-        Assert.True(town.LockdownActive);
+        Assert.False(town.LockdownActive);
+        Assert.False(Component(town).Active);
+        Assert.True(Component(town).ChangedFromApi);
+        Assert.Equal(0, Outgoing(town));
     }
 
     [Fact]
@@ -117,7 +221,7 @@ public class PredictableValueTests : ClientSdkTest
     }
 
     /// <summary>
-    /// The shape's own property and the archetype's projection of it read one guess. Two stores, or a guess
+    /// The shape's own property and the archetype's projection of it read one value. Two stores, or a guess
     /// held on the projection alone, would leave the same value reading two ways on one entity.
     /// </summary>
     [Fact]
@@ -144,11 +248,12 @@ public class PredictableValueTests : ClientSdkTest
         _predictions.Expire(NetworkedEventPredictions.Ttl * 10);
 
         Assert.True(town.LockdownActive);
+        Assert.Equal(ActiveBit, Outgoing(town));
     }
 
     /// <summary>
     /// The server's own value arriving is what answers an accepted guess, long before the deadline would.
-    /// Standing one out after the truth has landed is what makes a filtered value show wrong for a while.
+    /// Once it has, the deadline coming round finds nothing to take back and leaves the server's value alone.
     /// </summary>
     [Fact]
     public void The_value_arriving_from_the_server_answers_the_guess()
@@ -156,12 +261,56 @@ public class PredictableValueTests : ClientSdkTest
         var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
-        Assert.True(town.LockdownActive);
 
-        Landed(town);
+        Arrives(town, active: true);
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
+
+        Assert.True(town.LockdownActive);
+        Assert.True(Component(town).Active);
+    }
+
+    /// <summary>
+    /// The server answering with something other than the guess: what arrived is what reads, rather than the
+    /// guess standing in front of it until the deadline.
+    /// </summary>
+    [Fact]
+    public void A_different_answer_from_the_server_replaces_the_guess_at_once()
+    {
+        var town = Town();
+        town.LockdownActive = true;
+        Component(town).ClearDirty();
+
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(false));
+        Assert.False(town.LockdownActive);
+
+        Arrives(town, active: false);
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
 
         Assert.False(town.LockdownActive);
-        Assert.Equal(1, _predictions.Outstanding);
+        Assert.False(Component(town).Active);
+    }
+
+    /// <summary>
+    /// A delta carries only the fields that changed. One that moved the field beside the guess says nothing
+    /// about the guess, which keeps standing rather than flickering back to the old value until the real
+    /// answer arrives.
+    /// </summary>
+    [Fact]
+    public void A_delta_that_does_not_carry_the_guessed_value_leaves_the_guess_standing()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+
+        Arrives(town, hour: 7);
+
+        Assert.True(town.LockdownActive);
+        Assert.Equal(7, town.LockdownHour);
+
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
+
+        Assert.False(town.LockdownActive);
+        Assert.Equal(7, town.LockdownHour);
     }
 
     /// <summary>A delta for one entity says nothing about a guess standing on another.</summary>
@@ -177,30 +326,31 @@ public class PredictableValueTests : ClientSdkTest
             waiting.PredictLockdownActive(true);
         });
 
-        Landed(answered);
+        Arrives(answered, active: true);
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
 
-        Assert.False(answered.LockdownActive);
-        Assert.True(waiting.LockdownActive);
+        Assert.True(answered.LockdownActive);
+        Assert.False(waiting.LockdownActive);
     }
 
     /// <summary>
-    /// A delta for a component nothing is guessed in is most of them, and must leave every guess standing.
+    /// The delta path asks about guesses only while one stands. With none it pays a null check per component
+    /// type, and every delta for every other type pays nothing at all.
     /// </summary>
     [Fact]
-    public void A_value_arriving_for_another_component_leaves_the_guess_alone()
+    public void Nothing_listens_to_the_delta_path_once_no_guess_stands()
     {
         var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        Assert.NotNull(DeltaHooks<LockdownComponent>.Landing);
 
-        DeltaApplyNotifier.Landed(typeof(HealthComponent), EntityHandle.Of(town).Id);
+        _predictions.Refused(Code);
 
-        Assert.True(town.LockdownActive);
+        Assert.Null(DeltaHooks<LockdownComponent>.Landing);
+        Assert.Null(DeltaHooks<LockdownComponent>.Landed);
+        Assert.Null(DeltaHooks<LockdownComponent>.Sending);
     }
-
-    /// <summary>What the delta path reports once it has written the server's value onto an entity.</summary>
-    private static void Landed(Settlement town)
-        => DeltaApplyNotifier.Landed(typeof(LockdownComponent), EntityHandle.Of(town).Id);
 
     /// <summary>
     /// A guess with no raise waiting on an answer would stand for the rest of the session, so it says so

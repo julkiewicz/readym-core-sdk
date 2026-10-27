@@ -1,67 +1,65 @@
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using ReadyM.Api.Mapping.Data;
+using ReadyM.Api.Multiplayer.ECS.Components;
+using ReadyM.Api.Multiplayer.ECS.Jobs;
 using ReadyM.SDK.Entities;
 
 namespace ReadyM.SDK.Events;
 
 /// <exclude />
 /// <summary>
-/// The guessed values of one predictable member, by the entity each belongs to. One registry per member, so a
-/// read costs a count while nothing is guessed, which is almost always and includes every read on the server.
+/// The guesses at one predictable member, by the entity each stands on. A guess is written into the component
+/// itself, because the component is what the game is told about, and the server's value is kept here until
+/// the guess is answered or taken back.
 /// </summary>
 /// <remarks>
-/// Game thread only, like the entities it is keyed by. A handle carries the world it came from, so two worlds
-/// in one process never read each other's guesses.
+/// <para>
+/// A guess must never reach the server as the value, so every write here leaves the field out of the next
+/// delta, and while a guess stands the field is held out of what is sent whatever else marks it changed. Both
+/// writes go in as changes from the API, which is the mark that has the game take a value from the ECS.
+/// </para>
+/// <para>
+/// The delta path is listened to only while a guess stands, so with none it pays a null check. Game thread
+/// only, like the entities it is keyed by. A handle carries the world it came from, so two worlds in one
+/// process never answer each other's guesses.
+/// </para>
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public sealed class GuessedValueRegistry<T>
+public sealed class GuessedValueRegistry<TComponent, T>
+    where TComponent : struct, INetworkedComponent
 {
     private readonly Dictionary<EntityHandle, Held> _guessed = new();
 
-    /// <summary>Reused, so dropping an answered guess allocates nothing on a path the server walks too.</summary>
+    /// <summary>Reused, so a delta answering guesses allocates nothing.</summary>
     private readonly List<EntityHandle> _answered = [];
 
     private readonly string _member;
 
+    private readonly Field<TComponent, T> _field;
+
+    private readonly DeltaHooks<TComponent>.Arrival _landing;
+
+    private readonly DeltaHooks<TComponent>.Arrival _landed;
+
+    private readonly Action _sending;
+
     private long _stamped;
 
     /// <param name="member">The value this holds guesses at, for the message when one cannot be made.</param>
-    /// <param name="component">
-    /// What the value is stored in, so a delta carrying it says the guess has been answered. The component
-    /// rather than the field: the server sends the component, and nothing downstream of that knows which of
-    /// its fields moved. Dropping a guess because the field beside it changed is early, never wrong, since
-    /// the read then falls through to the server's own value.
-    /// </param>
-    public GuessedValueRegistry(string member, Type component)
+    /// <param name="field">Where the value lives, which is where a guess is written and the server's value put back.</param>
+    public GuessedValueRegistry(string member, Field<TComponent, T> field)
     {
         _member = member;
-        GuessedValues.Holds(component, Answered);
-    }
-
-    /// <summary>The guess standing for this entity, where one is.</summary>
-    public bool TryGet(in EntityHandle handle, out T value)
-    {
-        if (_guessed.Count == 0)
-        {
-            value = default!;
-
-            return false;
-        }
-
-        if (!_guessed.TryGetValue(handle, out var held))
-        {
-            value = default!;
-
-            return false;
-        }
-
-        value = held.Value;
-
-        return true;
+        _field = field;
+        _landing = Landing;
+        _landed = Landed;
+        _sending = Sending;
     }
 
     /// <summary>
-    /// Holds the value as a guess. Nothing reaches the entity, and it is dropped when the guess is answered:
-    /// the read then falls through to whatever the server says at that moment.
+    /// Writes the value into the component as a guess, keeping the server's value to put back. A guess on top
+    /// of a guess keeps the value from before the first: that one is the server's, and the first guess is not.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Nothing is being guessed at here, so there is no raise waiting on an answer to take this back and it
@@ -75,46 +73,128 @@ public sealed class GuessedValueRegistry<T>
                 + "being guessed at. Nothing here is waiting on an answer that would take the guess back.");
 
         var entity = handle;
+        ref var component = ref entity.GetComponent<TComponent>();
+        var kept = _guessed.TryGetValue(entity, out var standing) ? standing.Kept : _field.Get(component);
         var stamp = ++_stamped;
 
-        _guessed[entity] = new Held(value, stamp);
-        NetworkedEventGuesses.Took(() => Drop(entity, stamp));
-    }
-
-    /// <summary>
-    /// Takes back one raise's guess, and only its own. A later raise guessing at the same value on the same
-    /// entity replaces it, and the earlier raise's deadline must not then drop what replaced it.
-    /// </summary>
-    private void Drop(EntityHandle entity, long stamp)
-    {
-        if (_guessed.TryGetValue(entity, out var held) && held.Stamp == stamp)
-            _guessed.Remove(entity);
-    }
-
-    /// <summary>
-    /// The server's own value has arrived, so every guess at it on this entity is answered, whichever raise
-    /// made it. Dropping twice is ordinary: the raise's own deadline comes round later and finds nothing.
-    /// </summary>
-    private void Answered(int entity)
-    {
         if (_guessed.Count == 0)
+            Listen();
+
+        _guessed[entity] = new Held(kept, value, stamp);
+        Show(ref component, value, entity);
+        NetworkedEventGuesses.Took(() => TakeBack(entity, stamp));
+    }
+
+    /// <summary>
+    /// Puts the server's value back for one raise's guess, and only its own. A later raise guessing at the
+    /// same value on the same entity replaces it, and the earlier raise's deadline must not then take back
+    /// what replaced it.
+    /// </summary>
+    private void TakeBack(EntityHandle entity, long stamp)
+    {
+        if (!_guessed.TryGetValue(entity, out var held) || held.Stamp != stamp)
             return;
 
-        foreach (var held in _guessed.Keys)
-            if (held.Id == entity)
-                _answered.Add(held);
+        _guessed.Remove(entity);
 
-        foreach (var held in _answered)
-            _guessed.Remove(held);
+        // Gone is ordinary, say a creature dying to the hit being guessed at, and leaves nothing to put back
+        if (Present(entity))
+            Show(ref entity.GetComponent<TComponent>(), held.Kept, entity);
 
-        _answered.Clear();
+        if (_guessed.Count == 0)
+            Quiet();
     }
 
-    private readonly struct Held(T value, long stamp)
+    /// <summary>The server's value back in place, so the delta about to be read lands on what the server has.</summary>
+    private void Landing(ref TComponent component)
     {
-        public T Value { get; } = value;
+        // Walked as pairs: netstandard2.0 has no deconstruction for them
+        foreach (var guessed in _guessed)
+            if (Is(guessed.Key, ref component))
+                Show(ref component, guessed.Value.Kept, guessed.Key);
+    }
 
-        /// <summary>Which guess this is, so an older raise's deadline cannot drop a newer raise's guess.</summary>
+    /// <summary>
+    /// The delta has been read. A field it moved off the server's value was answered, and keeps what arrived;
+    /// one it did not carry is still waiting, and gets its guess back. A delta carries only what changed, so
+    /// the field beside a guess moving says nothing about the guess.
+    /// </summary>
+    private void Landed(ref TComponent component)
+    {
+        foreach (var guessed in _guessed)
+        {
+            if (!Is(guessed.Key, ref component))
+                continue;
+
+            if (EqualityComparer<T>.Default.Equals(_field.Get(component), guessed.Value.Kept))
+                Show(ref component, guessed.Value.Guess, guessed.Key);
+            else
+                _answered.Add(guessed.Key);
+        }
+
+        foreach (var entity in _answered)
+            _guessed.Remove(entity);
+
+        _answered.Clear();
+
+        if (_guessed.Count == 0)
+            Quiet();
+    }
+
+    /// <summary>
+    /// Keeps every guessed field out of what is about to be sent. The game copies the value it was shown back
+    /// into the component, and anything else may mark it changed, and none of that is the server's to hear.
+    /// </summary>
+    private void Sending()
+    {
+        foreach (var entity in _guessed.Keys)
+            if (Present(entity))
+                entity.GetComponent<TComponent>().ClearDirty(_field.Id);
+    }
+
+    /// <summary>
+    /// Writes a value for the game to show and the server never to hear: as a change from the API, which is
+    /// what has the game take it, and then out of the next delta.
+    /// </summary>
+    private void Show(ref TComponent component, T value, in EntityHandle entity)
+    {
+        _field.SetFromApi(ref component, value, entity.Id);
+        component.ClearDirty(_field.Id);
+    }
+
+    /// <summary>
+    /// Whether the component the delta path handed over is this entity's, in this entity's world. The id
+    /// alone is not enough: a server and its clients share a process in tests and in a listen server.
+    /// </summary>
+    private static bool Is(in EntityHandle entity, ref TComponent component)
+        => Present(entity) && Unsafe.AreSame(ref entity.GetComponent<TComponent>(), ref component);
+
+    /// <summary>Whether the entity is still there with the value on it. Asking a deleted one for a component throws.</summary>
+    private static bool Present(in EntityHandle entity)
+        => entity.IsAlive() && entity.HasComponent<TComponent>();
+
+    private void Listen()
+    {
+        DeltaHooks<TComponent>.Landing += _landing;
+        DeltaHooks<TComponent>.Landed += _landed;
+        DeltaHooks<TComponent>.Sending += _sending;
+    }
+
+    private void Quiet()
+    {
+        DeltaHooks<TComponent>.Landing -= _landing;
+        DeltaHooks<TComponent>.Landed -= _landed;
+        DeltaHooks<TComponent>.Sending -= _sending;
+    }
+
+    private readonly struct Held(T kept, T guess, long stamp)
+    {
+        /// <summary>The server's value, from before any guess stood on the entity.</summary>
+        public T Kept { get; } = kept;
+
+        public T Guess { get; } = guess;
+
+        /// <summary>Which guess this is, so an older raise's deadline cannot take back a newer raise's guess.</summary>
         public long Stamp { get; } = stamp;
     }
 }

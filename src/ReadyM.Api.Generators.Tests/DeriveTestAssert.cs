@@ -230,12 +230,9 @@ public static class DeriveTestAssert
         return method.Invoke(instance, args);
     }
 
+    /// <summary>By name and by how many arguments it is handed, since a generated method may be overloaded.</summary>
     public static object? Invoke(object instance, string methodName, params object[] args)
-    {
-        var method = instance.GetType().GetMethod(methodName);
-        Assert.NotNull(method);
-        return method.Invoke(instance, args);
-    }
+        => Invoke(instance, args.Length, methodName, args);
 
     public static void SetProperty(object instance, string propertyName, object? value)
     {

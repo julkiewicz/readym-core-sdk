@@ -6,9 +6,9 @@ using Xunit;
 namespace ReadyM.Api.Generators.Tests.Archetypes;
 
 /// <summary>
-/// [Predictable] on a value, and what the generator owes it: somewhere to hold a client's guess, a getter that
-/// reads it in front of the server's value, a setter that puts it there, and a mark on every projection of the
-/// value so the analyzer can tell a guess from an ordinary write.
+/// [Predictable] on a value, and what the generator owes it: somewhere that writes a client's guess into the
+/// component and keeps the server's value aside, a call of its own to make one, and every read left as the
+/// component's, since the guess is in the component for the game to see.
 /// </summary>
 public class PredictableTests(ITestOutputHelper output)
 {
@@ -42,28 +42,34 @@ public class PredictableTests(ITestOutputHelper output)
         }
         """;
 
-    /// <summary>One registry per member, so a read of a value nobody guessed at is a count and nothing else.</summary>
+    /// <summary>One registry per member, holding the server's value aside for each entity a guess stands on.</summary>
     [Fact]
-    public void A_guessable_value_gets_somewhere_to_hold_the_guess()
+    public void A_guessable_value_gets_somewhere_to_keep_the_servers_value()
     {
         var generated = Generated(Run(Shapes));
 
-        Assert.Contains($"private static readonly {Guesses}<bool> ActiveGuesses", generated);
+        Assert.Contains($"private static readonly {Guesses}<global::Mod.CurseComponent, bool> ActiveGuesses", generated);
         Assert.DoesNotContain("TurnsGuesses", generated);
 
-        // The component, so a delta carrying it says the guess has been answered, and the member's own name,
-        // so a guess that cannot be made says which value it was about.
-        Assert.Contains("= new(\"Curse.Active\", typeof(global::Mod.CurseComponent));", generated);
+        // The field, which is what a guess is written into and the server's value put back through, and the
+        // member's own name, so a guess that cannot be made says which value it was about.
+        Assert.Contains("= new(\"Curse.Active\", global::Mod.CurseComponent.Fields.Active);", generated);
     }
 
     /// <summary>
-    /// The guess in front of the server's value, which is what lets the code reading it never learn one was
-    /// involved. A getter that read the component first would show the guess to nobody.
+    /// The guess is in the component, so a read of the component is a read of the guess. Looking anywhere
+    /// else first would be a second place the value lives, and the game only ever reads the one.
     /// </summary>
     [Fact]
-    public void The_getter_reads_the_guess_before_the_value()
-        => Assert.Contains(
-            "=> ActiveGuesses.TryGet(handle, out var guessed) ? guessed :", Generated(Run(Shapes)));
+    public void Every_read_of_it_is_the_components()
+    {
+        var generated = Generated(Run(Shapes));
+
+        Assert.Contains("public static bool GetActive(in global::ReadyM.SDK.Entities.EntityHandle handle) =>", generated);
+        Assert.Contains("GetActive(in global::ReadyM.SDK.Chunks.ComponentChunk chunk, int index)", generated);
+        Assert.DoesNotContain("ActiveGuesses.TryGet", generated);
+        Assert.DoesNotContain(Calls(generated, "GetActive("), call => call.Contains("Handle)"));
+    }
 
     /// <summary>
     /// Guessing is a call of its own, never a second meaning for the setter. Whether a write is a guess is
@@ -90,30 +96,6 @@ public class PredictableTests(ITestOutputHelper output)
         Assert.Contains(
             "public static void SetActive(in global::ReadyM.SDK.Entities.EntityHandle handle, bool value)",
             generated);
-    }
-
-    /// <summary>A read that cannot see the guess is a wrong value, so every read of it merges.</summary>
-    [Fact]
-    public void Every_way_of_reading_it_merges_the_guess()
-    {
-        var generated = Generated(Run(Shapes));
-
-        Assert.Contains("if (ActiveGuesses.TryGet(handle, out value))", generated);
-        Assert.Contains("ActiveGuesses.TryGet(handle, out var guessed) ? guessed : chunk.As<", generated);
-    }
-
-    /// <summary>
-    /// A chunk row is not an entity and a guess is held by one, so the row's handle has to travel with the
-    /// read. Only a guessable value asks for it; nothing else is handed something it would not look at.
-    /// </summary>
-    [Fact]
-    public void A_chunk_read_of_it_is_handed_the_row_it_sits_on()
-    {
-        var generated = Generated(Run(Shapes));
-
-        Assert.Contains("GetActive(in global::ReadyM.SDK.Chunks.ComponentChunk chunk, int index, in ", generated);
-        Assert.Contains(Calls(generated, "GetActive("), call => call.EndsWith(", _index, Handle);"));
-        Assert.DoesNotContain(Calls(generated, "GetTurns("), call => call.Contains("Handle)"));
     }
 
     /// <summary>

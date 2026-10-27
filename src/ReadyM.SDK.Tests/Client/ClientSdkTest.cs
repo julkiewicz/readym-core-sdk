@@ -120,7 +120,16 @@ public abstract class ClientSdkTest : IDisposable
         return count;
     }
 
-    public void Dispose() => _container.Dispose();
+    public void Dispose()
+    {
+        TearDown();
+        _container.Dispose();
+    }
+
+    /// <summary>What a test leaves behind outside the world, put right while the world is still there.</summary>
+    protected virtual void TearDown()
+    {
+    }
 
     private sealed class TestContainer : DependencyContainerBase;
 }
