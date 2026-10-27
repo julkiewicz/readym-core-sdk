@@ -1,6 +1,5 @@
 ﻿using System.Reflection;
 using ReadyM.SDK.Archetypes;
-using ReadyM.SDK.Entities;
 using ReadyM.SDK.Tests.Client.Fixtures;
 
 namespace ReadyM.SDK.Tests.Client;

@@ -148,7 +148,7 @@ public class IndexedTests : ClientSdkTest
 
     /// <summary>
     /// A chunk write moves nothing in an index, so an indexed value is read-only from a view and
-    /// written through the handle instead.
+    /// written through the shape instead.
     /// </summary>
     [Fact]
     public void An_indexed_value_is_read_only_from_a_chunk()
@@ -159,7 +159,7 @@ public class IndexedTests : ClientSdkTest
         {
             Assert.Equal(3, ticketed.Ticket);
 
-            ticketed.Handle.TryAs<Registered>(out var registered);
+            ticketed.Keep().TryAs<Registered>(out var registered);
             registered.Ticket = 4;
         }
 
