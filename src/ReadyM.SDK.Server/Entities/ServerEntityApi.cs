@@ -26,6 +26,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
     private readonly QueryInScopeDelegate _queryInScope;
     private readonly TryGetEntityScopeDelegate _tryGetEntityScope;
     private readonly IsEntityAliveDelegate _isEntityAlive;
+    private readonly IsOnWorldThreadDelegate _isOnWorldThread;
     private readonly CreateLocalEntityDelegate _createLocalEntity;
     private readonly CreateLocalEntityInScopeDelegate _createLocalEntityInScope;
     private readonly CreateNetworkedEntityDelegate _createNetworkedEntity;
@@ -40,6 +41,9 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
     private readonly ComponentIndexes _indexes = new();
     private QueryScope _scope = new();
 
+    /// <summary>Whether the caller is on the thread the host runs the world on.</summary>
+    internal bool IsOnWorldThread => _isOnWorldThread() != 0;
+
     public ServerEntityApi(EcsApiPointers pointers, ArchetypePointers archetypes, ModComponentIds registry)
     {
         _registry = registry;
@@ -50,6 +54,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         _queryInScope = Marshal.GetDelegateForFunctionPointer<QueryInScopeDelegate>(pointers.QueryInScope);
         _tryGetEntityScope = Marshal.GetDelegateForFunctionPointer<TryGetEntityScopeDelegate>(pointers.TryGetEntityScope);
         _isEntityAlive = Marshal.GetDelegateForFunctionPointer<IsEntityAliveDelegate>(pointers.IsEntityAlive);
+        _isOnWorldThread = Marshal.GetDelegateForFunctionPointer<IsOnWorldThreadDelegate>(pointers.IsOnWorldThread);
         _createLocalEntity = Marshal.GetDelegateForFunctionPointer<CreateLocalEntityDelegate>(pointers.CreateLocalEntity);
         _createLocalEntityInScope = Marshal.GetDelegateForFunctionPointer<CreateLocalEntityInScopeDelegate>(pointers.CreateLocalEntityInScope);
         _createNetworkedEntity = Marshal.GetDelegateForFunctionPointer<CreateNetworkedEntityDelegate>(pointers.CreateNetworkedEntity);

@@ -1,4 +1,6 @@
 using ReadyM.Api.DI;
+using ReadyM.SDK.Entities;
+using ReadyM.SDK.Server.Entities;
 using ReadyM.Api.Idents;
 using ReadyM.SDK.Events;
 
@@ -12,13 +14,28 @@ internal sealed class ServerNetworkedEvents(IDependencyContainer container) : IN
 {
     public INetworkedEventRaise Raise<T>(T networkEvent) where T : struct, INetworkedEvent
     {
+        NetworkedEventThread.Require<T>(OnWorldThread());
         Dispatch<T>().Raise(networkEvent, PlayerId.Server, true);
 
         return ServerRaise.Instance;
     }
 
     public void RaiseAs<T>(PlayerId origin, T networkEvent) where T : struct, INetworkedEvent
-        => Dispatch<T>().Raise(networkEvent, origin, true);
+    {
+        NetworkedEventThread.Require<T>(OnWorldThread());
+        Dispatch<T>().Raise(networkEvent, origin, true);
+    }
+
+    /// <summary>
+    /// Asked of the host through the entity api, since a mod runs on the far side of the host's boundary and has
+    /// no world of its own to ask.
+    /// </summary>
+    private bool OnWorldThread()
+        => container.Resolve<IEntityApi>() is ServerEntityApi api
+            ? api.IsOnWorldThread
+            : throw new InvalidOperationException(
+                $"The server's entity api is {container.Resolve<IEntityApi>().GetType().Name}, which cannot say "
+                + "which thread the world runs on, so whether this raise is on it cannot be checked.");
 
     private INetworkedEventDispatch<T> Dispatch<T>() where T : struct, INetworkedEvent
         => container.Resolve<INetworkedEventDispatch<T>>();

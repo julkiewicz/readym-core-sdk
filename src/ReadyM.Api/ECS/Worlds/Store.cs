@@ -174,9 +174,12 @@ internal sealed partial class Store : IArchetypeRegistry, IArchetypeNames
         _thread = newThread;
     }
 
+    /// <summary>Whether the caller is on the thread the world runs on, the one its host marked with <see cref="SetThread"/>.</summary>
+    internal bool IsOnOwnThread => Thread.CurrentThread == _thread;
+
     private void AssertThreadId()
     {
-        if (Thread.CurrentThread != _thread)
+        if (!IsOnOwnThread)
         {
             throw new InvalidOperationException("Store can only be accessed from the thread it was created on.");
         }
