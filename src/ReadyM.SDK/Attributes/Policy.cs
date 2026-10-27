@@ -3,9 +3,7 @@ namespace ReadyM.SDK.Attributes;
 /// <summary>Who may raise a network event. The server may always raise, whatever this says.</summary>
 public enum Policy
 {
-    /// <summary>
-    /// Any client, including the server. This is the default for events that don't declare a policy.
-    /// </summary>
+    /// <summary>Any client, and the server. Every event names a policy, so nothing takes this by default.</summary>
     Anyone,
     
     /// <summary>The client that runs the subject.</summary>

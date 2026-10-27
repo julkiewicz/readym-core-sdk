@@ -49,8 +49,11 @@ public class PredictableTests(ITestOutputHelper output)
         var generated = Generated(Run(Shapes));
 
         Assert.Contains($"private static readonly {Guesses}<bool> ActiveGuesses", generated);
-        Assert.Contains("= new(\"Curse.Active\");", generated);
         Assert.DoesNotContain("TurnsGuesses", generated);
+
+        // The component, so a delta carrying it says the guess has been answered, and the member's own name,
+        // so a guess that cannot be made says which value it was about.
+        Assert.Contains("= new(\"Curse.Active\", typeof(global::Mod.CurseComponent));", generated);
     }
 
     /// <summary>

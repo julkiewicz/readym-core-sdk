@@ -213,7 +213,7 @@ internal static class AccessorEmitter
         {
             writer.Line();
             writer.Line($"private static readonly {ArchetypeNames.Guesses}<{accessor.Type}> {Guesses(accessor)}");
-            writer.Line($"    = new(\"{declaring}.{accessor.Name}\");");
+            writer.Line($"    = new(\"{declaring}.{accessor.Name}\", typeof({component}));");
         }
 
         writer.Line();

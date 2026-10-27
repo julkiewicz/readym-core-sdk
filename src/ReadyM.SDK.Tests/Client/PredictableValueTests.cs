@@ -1,4 +1,6 @@
+using ReadyM.Api.Multiplayer.ECS.Jobs;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
+using ReadyM.SDK.Entities;
 using ReadyM.SDK.Events;
 using ReadyM.SDK.Tests.Client.Fixtures;
 using Xunit;
@@ -14,7 +16,7 @@ public class PredictableValueTests : ClientSdkTest
 {
     private const RelayMessageCode Code = RelayMessageCode.MaxServerRpcEvent;
 
-    private readonly NetworkEventPredictions _predictions = new();
+    private readonly NetworkedEventPredictions _predictions = new();
 
     private Settlement Town() => Entities.Create<Settlement>();
 
@@ -75,7 +77,7 @@ public class PredictableValueTests : ClientSdkTest
         var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
-        _predictions.Expire(NetworkEventPredictions.Ttl);
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
 
         Assert.False(town.LockdownActive);
     }
@@ -139,10 +141,66 @@ public class PredictableValueTests : ClientSdkTest
         var town = Town();
 
         town.LockdownActive = true;
-        _predictions.Expire(NetworkEventPredictions.Ttl * 10);
+        _predictions.Expire(NetworkedEventPredictions.Ttl * 10);
 
         Assert.True(town.LockdownActive);
     }
+
+    /// <summary>
+    /// The server's own value arriving is what answers an accepted guess, long before the deadline would.
+    /// Standing one out after the truth has landed is what makes a filtered value show wrong for a while.
+    /// </summary>
+    [Fact]
+    public void The_value_arriving_from_the_server_answers_the_guess()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        Assert.True(town.LockdownActive);
+
+        Landed(town);
+
+        Assert.False(town.LockdownActive);
+        Assert.Equal(1, _predictions.Outstanding);
+    }
+
+    /// <summary>A delta for one entity says nothing about a guess standing on another.</summary>
+    [Fact]
+    public void A_value_arriving_for_one_entity_leaves_another_entitys_guess_alone()
+    {
+        var answered = Town();
+        var waiting = Town();
+
+        _predictions.Open(Code, 0).Predicting(() =>
+        {
+            answered.PredictLockdownActive(true);
+            waiting.PredictLockdownActive(true);
+        });
+
+        Landed(answered);
+
+        Assert.False(answered.LockdownActive);
+        Assert.True(waiting.LockdownActive);
+    }
+
+    /// <summary>
+    /// A delta for a component nothing is guessed in is most of them, and must leave every guess standing.
+    /// </summary>
+    [Fact]
+    public void A_value_arriving_for_another_component_leaves_the_guess_alone()
+    {
+        var town = Town();
+
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+
+        DeltaApplyNotifier.Landed(typeof(HealthComponent), EntityHandle.Of(town).Id);
+
+        Assert.True(town.LockdownActive);
+    }
+
+    /// <summary>What the delta path reports once it has written the server's value onto an entity.</summary>
+    private static void Landed(Settlement town)
+        => DeltaApplyNotifier.Landed(typeof(LockdownComponent), EntityHandle.Of(town).Id);
 
     /// <summary>
     /// A guess with no raise waiting on an answer would stand for the rest of the session, so it says so

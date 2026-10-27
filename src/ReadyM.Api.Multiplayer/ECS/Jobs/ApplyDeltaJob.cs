@@ -90,6 +90,7 @@ internal class ApplyDeltaJob<T>(
                     }
 
                     entity.Value.Set(comp);
+                    Landed(entity.Value.Id);
                 }
                 else
                 {
@@ -104,6 +105,7 @@ internal class ApplyDeltaJob<T>(
                     }
 
                     entity.Value.Add(comp);
+                    Landed(entity.Value.Id);
                 }
             }
             else
@@ -125,7 +127,19 @@ internal class ApplyDeltaJob<T>(
                     component.MarkChangedFromApi();
                     component.ClearDirty();
                 }
+
+                Landed(entity.Value.Id);
             }
         }
+    }
+
+    /// <summary>
+    /// The server's own value for this component has arrived, so a guess standing in front of it has been
+    /// answered and is dropped. Nothing is holding one almost always, which is the field read.
+    /// </summary>
+    private static void Landed(int entity)
+    {
+        if (DeltaApplyNotifier.Watched)
+            DeltaApplyNotifier.Landed(typeof(T), entity);
     }
 }

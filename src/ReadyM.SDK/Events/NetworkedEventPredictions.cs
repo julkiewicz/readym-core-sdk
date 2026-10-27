@@ -10,10 +10,15 @@ namespace ReadyM.SDK.Events;
 /// it accepts one.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public sealed class NetworkEventPredictions
+public sealed class NetworkedEventPredictions
 {
-    /// <summary>How long a guess stands unanswered, in seconds.</summary>
-    public const double Ttl = 0.4;
+    /// <summary>
+    /// How long a guess stands unanswered, in seconds. A fallback, not the way a guess normally ends: the
+    /// refusal takes back a refused one and the server's own value takes back an accepted one, both of which
+    /// arrive over a reliable channel well inside this. Reaching it means the player's connection is in
+    /// trouble, and holding a guess any longer than that would not help them.
+    /// </summary>
+    public const double Ttl = 0.5;
 
     private readonly List<Guess> _outstanding = [];
 
@@ -21,7 +26,7 @@ public sealed class NetworkEventPredictions
     public int Outstanding => _outstanding.Count;
 
     /// <summary>A raise that may or may not go on to guess anything.</summary>
-    public INetworkEventRaise Open(RelayMessageCode code, double now) => new Guess(this, code, now + Ttl);
+    public INetworkedEventRaise Open(RelayMessageCode code, double now) => new Guess(this, code, now + Ttl);
 
     /// <summary>The server refused an event of this kind, so every guess waiting on one is wrong.</summary>
     public void Refused(RelayMessageCode code) => Clear(guess => guess.Code == code);
@@ -39,8 +44,8 @@ public sealed class NetworkEventPredictions
             guess.Undo();
     }
 
-    private sealed class Guess(NetworkEventPredictions predictions, RelayMessageCode code, double deadline)
-        : INetworkEventRaise
+    private sealed class Guess(NetworkedEventPredictions predictions, RelayMessageCode code, double deadline)
+        : INetworkedEventRaise
     {
         /// <summary>What drops the guessed values a [Predictable] member's setter held for this raise.</summary>
         private Action? _drop;
@@ -51,11 +56,11 @@ public sealed class NetworkEventPredictions
 
         public double Deadline { get; } = deadline;
 
-        public INetworkEventRaise Predicting(Action guess)
+        public INetworkedEventRaise Predicting(Action guess)
         {
             // Inside here a [Predictable] member's setter holds the value beside the entity rather than
             // writing it, and says how to drop it again. A guess at anything else writes as it always does.
-            if (NetworkEventGuesses.Take(guess) is { } drop)
+            if (NetworkedEventGuesses.Take(guess) is { } drop)
                 _drop += drop;
 
             if (!predictions._outstanding.Contains(this))
@@ -64,7 +69,7 @@ public sealed class NetworkEventPredictions
             return this;
         }
 
-        public INetworkEventRaise Rollback(Action undo)
+        public INetworkedEventRaise Rollback(Action undo)
         {
             _undo = undo;
 

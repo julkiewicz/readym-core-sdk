@@ -21,9 +21,9 @@ public class GuessedValueTests : ClientSdkTest
 {
     private const RelayMessageCode Code = RelayMessageCode.MaxServerRpcEvent;
 
-    private readonly NetworkEventPredictions _predictions = new();
+    private readonly NetworkedEventPredictions _predictions = new();
 
-    private readonly GuessedValueRegistry<bool> _frozen = new("Chill.Frozen");
+    private readonly GuessedValueRegistry<bool> _frozen = new("Chill.Frozen", typeof(Client.Fixtures.LockdownComponent));
 
     private readonly Dictionary<EntityHandle, bool> _replicated = new();
 
@@ -78,7 +78,7 @@ public class GuessedValueTests : ClientSdkTest
         var entity = Entity();
 
         _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
-        _predictions.Expire(NetworkEventPredictions.Ttl);
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
 
         Assert.False(Read(entity));
     }
@@ -95,7 +95,7 @@ public class GuessedValueTests : ClientSdkTest
 
         _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
         Write(entity, true);
-        _predictions.Expire(NetworkEventPredictions.Ttl);
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
 
         Assert.True(Read(entity));
     }
@@ -120,7 +120,7 @@ public class GuessedValueTests : ClientSdkTest
     public void A_guess_at_one_member_says_nothing_about_another()
     {
         var entity = Entity();
-        var other = new GuessedValueRegistry<bool>("Chill.Numb");
+        var other = new GuessedValueRegistry<bool>("Chill.Numb", typeof(Client.Fixtures.LockdownComponent));
 
         _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
 
@@ -175,6 +175,27 @@ public class GuessedValueTests : ClientSdkTest
         _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
 
         Assert.Throws<InvalidOperationException>(() => Guess(entity, false));
+    }
+
+    /// <summary>
+    /// Two raises guessing at the same value on the same entity: the second replaces the first, and the
+    /// first's deadline coming round later must not take the second one's guess with it.
+    /// </summary>
+    [Fact]
+    public void An_earlier_raise_running_out_leaves_a_later_raises_guess_alone()
+    {
+        var entity = Entity();
+
+        var first = _predictions.Open(Code, 0);
+        first.Predicting(() => Guess(entity, true));
+
+        var second = _predictions.Open(Code, 1000);
+        second.Predicting(() => Guess(entity, true));
+
+        // Only the first one's deadline has passed
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
+
+        Assert.True(Read(entity));
     }
 
     /// <summary>
