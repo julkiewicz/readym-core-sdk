@@ -127,7 +127,7 @@ public class PredictableValueTests : ClientSdkTest
 
         _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
-        Assert.True(ReadyM.SDK.Entities.EntityHandle.Of(town).As<Lockdown>().Active);
+        Assert.True(town.As<Lockdown>().Active);
         Assert.True(town.LockdownActive);
     }
 

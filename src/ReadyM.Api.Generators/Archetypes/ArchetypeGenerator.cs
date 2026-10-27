@@ -154,13 +154,6 @@ internal class ArchetypeGenerator : IIncrementalGenerator
     {
         writer.Line();
         writer.Line("public bool IsValid => _handle.IsAlive();");
-        writer.Line();
-        writer.Line($"public bool Is<T>() where T : struct, {ArchetypeNames.Queryable} => _handle.Is<T>();");
-        writer.Line();
-        writer.Line($"public T As<T>() where T : struct, {ArchetypeNames.Queryable} => _handle.As<T>();");
-        writer.Line();
-        writer.Line($"public bool TryAs<T>(out T archetype) where T : struct, {ArchetypeNames.Queryable}");
-        writer.Line("    => _handle.TryAs(out archetype);");
     }
 
     private static void EmitScope(SourceWriter writer, DeclarationModel model)

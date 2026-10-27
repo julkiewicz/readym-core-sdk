@@ -104,8 +104,8 @@ public class ServerCompositionTests : ServerSdkTest
         Assert.True(quest.Is<QuestGiver>());
         Assert.False(plain.Is<QuestGiver>());
 
-        Assert.True(EntityHandle.Of(quest).TryAs<QuestGiver>(out var giver));
-        Assert.False(EntityHandle.Of(plain).TryAs<QuestGiver>(out _));
+        Assert.True(quest.TryAs<QuestGiver>(out var giver));
+        Assert.False(plain.TryAs<QuestGiver>(out _));
 
         giver.QuestId = 7;
         Assert.Equal(7, quest.QuestId);

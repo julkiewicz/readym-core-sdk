@@ -70,7 +70,7 @@ public class GeneratedShapesTests : ClientSdkTest
 
         var area = Entities.Create<CoreArea>();
 
-        Assert.True(EntityHandle.Of(area).Is<Weather>());
+        Assert.True(area.Is<Weather>());
         Assert.True(Entities.TryLookup<Station, int>(SpawnStation(7), out _));
     }
 

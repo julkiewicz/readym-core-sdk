@@ -29,7 +29,7 @@ public class ExtendsTests : ClientSdkTest
     {
         var area = Entities.Create<CoreArea>();
 
-        Assert.True(EntityHandle.Of(area).TryAs<Weather>(out var weather));
+        Assert.True(area.TryAs<Weather>(out var weather));
 
         weather.Storm = 3;
 
@@ -42,8 +42,8 @@ public class ExtendsTests : ClientSdkTest
     {
         var area = Entities.Create<CoreArea>();
 
-        Assert.True(EntityHandle.Of(area).TryAs<Weather>(out var weather));
-        Assert.True(EntityHandle.Of(area).TryAs<Music>(out var music));
+        Assert.True(area.TryAs<Weather>(out var weather));
+        Assert.True(area.TryAs<Music>(out var music));
 
         weather.Storm = 1;
         music.Track = 2;

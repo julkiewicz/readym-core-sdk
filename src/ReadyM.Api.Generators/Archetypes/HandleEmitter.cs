@@ -48,6 +48,22 @@ internal static class HandleEmitter
         writer.Line("/// changes when an include does.");
         writer.Line("/// </remarks>");
         writer.Line($"public {model.Name} Keep() => this;");
+        writer.Line();
+        Casts(writer);
+    }
+
+    /// <summary>
+    /// What else this entity is. On a mixin as well as an archetype, so a mod holding either never reaches
+    /// for the handle underneath to ask.
+    /// </summary>
+    private static void Casts(SourceWriter writer)
+    {
+        writer.Line($"public bool Is<T>() where T : struct, {ArchetypeNames.Queryable} => _handle.Is<T>();");
+        writer.Line();
+        writer.Line($"public T As<T>() where T : struct, {ArchetypeNames.Queryable} => _handle.As<T>();");
+        writer.Line();
+        writer.Line($"public bool TryAs<T>(out T archetype) where T : struct, {ArchetypeNames.Queryable}");
+        writer.Line("    => _handle.TryAs(out archetype);");
     }
 
     /// <summary>The set an accessor class exposes: its own component plus whatever it includes.</summary>

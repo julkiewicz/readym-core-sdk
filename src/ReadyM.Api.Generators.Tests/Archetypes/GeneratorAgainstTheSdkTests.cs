@@ -271,6 +271,24 @@ public class GeneratorAgainstTheSdkTests(ITestOutputHelper output)
     public void A_shape_keeps_as_itself(string shape)
         => Assert.Contains($"public {shape} Keep() => this;", Generated(Run()));
 
+    /// <summary>
+    /// A shape asks what else its entity is, so a mod never reaches for the handle underneath to do it.
+    /// </summary>
+    /// <remarks>A mixin is asked for here as well: an entity found by a mixin index is held as that mixin.</remarks>
+    [Theory]
+    [InlineData("Npc")]
+    [InlineData("Position")]
+    public void A_shape_casts_to_another(string shape)
+    {
+        var section = Run().GeneratedSyntaxTrees
+            .Select(tree => tree.GetText().ToString())
+            .Single(text => text.Contains($"partial struct {shape} : global::ReadyM.SDK.Archetypes.IArchetype"));
+
+        Assert.Contains("public bool Is<T>() where T : struct, global::ReadyM.SDK.Archetypes.IArchetypeQueryable", section);
+        Assert.Contains("public T As<T>() where T : struct, global::ReadyM.SDK.Archetypes.IArchetypeQueryable", section);
+        Assert.Contains("public bool TryAs<T>(out T archetype) where T : struct, global::ReadyM.SDK.Archetypes.IArchetypeQueryable", section);
+    }
+
     /// <summary>Collecting out of a loop compiles, whichever way the loop walks the shape.</summary>
     /// <remarks>
     /// Both members are asserted above. A shape that lost its chunk view cannot be staged here, since

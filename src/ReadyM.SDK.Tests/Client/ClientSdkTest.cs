@@ -94,7 +94,7 @@ public abstract class ClientSdkTest : IDisposable
         chest.X = x;
         chest.Y = y;
 
-        if (rarity.HasValue && EntityHandle.Of(chest).TryAs<Loot>(out var loot))
+        if (rarity.HasValue && chest.TryAs<Loot>(out var loot))
             loot.Rarity = rarity.Value;
 
         return chest;
