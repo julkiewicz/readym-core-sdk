@@ -59,7 +59,9 @@ public sealed class GuessedValueRegistry<TComponent, T>
 
     /// <summary>
     /// Writes the value into the component as a guess, keeping the server's value to put back. A guess on top
-    /// of a guess keeps the value from before the first: that one is the server's, and the first guess is not.
+    /// of a guess joins it: the value kept is the one from before the first, since that one is the server's,
+    /// and the stack keeps the first raise's deadline rather than taking the newest one's. A stream of raises,
+    /// damage over time say, would otherwise keep pushing the deadline out and never let the guess go.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Nothing is being guessed at here, so there is no raise waiting on an answer to take this back and it
@@ -74,25 +76,26 @@ public sealed class GuessedValueRegistry<TComponent, T>
 
         var entity = handle;
         ref var component = ref entity.GetComponent<TComponent>();
-        var kept = _guessed.TryGetValue(entity, out var standing) ? standing.Kept : _field.Get(component);
-        var stamp = ++_stamped;
+        var joins = _guessed.TryGetValue(entity, out var standing);
+        var kept = joins ? standing.Kept : _field.Get(component);
+        var stack = joins ? standing.Stack : ++_stamped;
 
         if (_guessed.Count == 0)
             Listen();
 
-        _guessed[entity] = new Held(kept, value, stamp);
+        _guessed[entity] = new Held(kept, value, stack);
         Show(ref component, value, entity);
-        NetworkedEventGuesses.Took(() => TakeBack(entity, stamp));
+        NetworkedEventGuesses.Took(() => TakeBack(entity, stack));
     }
 
     /// <summary>
-    /// Puts the server's value back for one raise's guess, and only its own. A later raise guessing at the
-    /// same value on the same entity replaces it, and the earlier raise's deadline must not then take back
-    /// what replaced it.
+    /// Puts the server's value back for one stack of guesses, and only that one. A stack an answer already
+    /// ended may have been followed by a new one on the same entity, and a raise from the old stack running
+    /// out later must not take back the new one.
     /// </summary>
-    private void TakeBack(EntityHandle entity, long stamp)
+    private void TakeBack(EntityHandle entity, long stack)
     {
-        if (!_guessed.TryGetValue(entity, out var held) || held.Stamp != stamp)
+        if (!_guessed.TryGetValue(entity, out var held) || held.Stack != stack)
             return;
 
         _guessed.Remove(entity);
@@ -187,14 +190,14 @@ public sealed class GuessedValueRegistry<TComponent, T>
         DeltaHooks<TComponent>.Sending -= _sending;
     }
 
-    private readonly struct Held(T kept, T guess, long stamp)
+    private readonly struct Held(T kept, T guess, long stack)
     {
         /// <summary>The server's value, from before any guess stood on the entity.</summary>
         public T Kept { get; } = kept;
 
         public T Guess { get; } = guess;
 
-        /// <summary>Which guess this is, so an older raise's deadline cannot take back a newer raise's guess.</summary>
-        public long Stamp { get; } = stamp;
+        /// <summary>Which stack this is, so a raise from an ended stack cannot take back a later one.</summary>
+        public long Stack { get; } = stack;
     }
 }

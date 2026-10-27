@@ -73,21 +73,21 @@ public class GuessedValueTests : ClientSdkTest
     }
 
     /// <summary>
-    /// Two raises guessing at the same value on the same entity: the second replaces the first, and the
-    /// first's deadline coming round later must not take the second one's guess with it.
+    /// A raise guessing on top of a standing guess joins it rather than restarting its clock. The stack goes
+    /// when the raise that started it runs out, so it stands at most one window however many raises add to it.
     /// </summary>
     [Fact]
-    public void An_earlier_raise_running_out_leaves_a_later_raises_guess_alone()
+    public void The_first_raise_running_out_takes_back_the_whole_stack()
     {
         var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
-        _predictions.Open(Code, 1000).Predicting(() => Guess(town, 7));
+        _predictions.Open(Code, 0.3).Predicting(() => Guess(town, 7));
 
         // Only the first one's deadline has passed
         _predictions.Expire(NetworkedEventPredictions.Ttl);
 
-        Assert.Equal(7, town.LockdownHour);
+        Assert.Equal(5, town.LockdownHour);
     }
 
     /// <summary>
@@ -100,11 +100,41 @@ public class GuessedValueTests : ClientSdkTest
         var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
-        _predictions.Open(Code, 1000).Predicting(() => Guess(town, 7));
+        _predictions.Open(Code, 0.3).Predicting(() => Guess(town, 7));
 
-        _predictions.Expire(1000 + NetworkedEventPredictions.Ttl);
+        _predictions.Expire(0.3 + NetworkedEventPredictions.Ttl);
 
         Assert.Equal(5, town.LockdownHour);
+    }
+
+    /// <summary>
+    /// Damage over time with nothing answering it, drowning say: a raise every tick, each guessing a step on
+    /// from the last. Were each raise to restart the clock the stack would never end and the guess would run
+    /// all the way down. It goes back to the server's value once a window has passed, and the next raise
+    /// starts a stack of its own from there.
+    /// </summary>
+    [Fact]
+    public void A_steady_stream_of_raises_is_taken_back_once_every_window()
+    {
+        var town = Town(hour: 20);
+
+        for (var tick = 0; tick < 5; tick++)
+            _predictions.Open(Code, tick * 0.1).Predicting(() => Guess(town, town.LockdownHour - 1));
+
+        Assert.Equal(15, town.LockdownHour);
+
+        _predictions.Expire(NetworkedEventPredictions.Ttl);
+
+        Assert.Equal(20, town.LockdownHour);
+
+        _predictions.Open(Code, 0.5).Predicting(() => Guess(town, town.LockdownHour - 1));
+        _predictions.Expire(0.9);
+
+        Assert.Equal(19, town.LockdownHour);
+
+        _predictions.Expire(0.5 + NetworkedEventPredictions.Ttl);
+
+        Assert.Equal(20, town.LockdownHour);
     }
 
     /// <summary>Each member has its own registry, so a guess at one leaves the other as the server left it.</summary>
