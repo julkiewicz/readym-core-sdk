@@ -9,21 +9,21 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace ReadyM.Api.Generators;
 
 /// <summary>
-/// Runs on the Common project. For each struct marked <c>[NetworkEvent]</c>, emits the marker interface, the
+/// Runs on the Common project. For each struct marked <c>[NetworkedEvent]</c>, emits the marker interface, the
 /// serialization of its members, and the manifest entry that gives it the same id on both ends. An event is only
 /// ever sent to the server, which decides who else receives it, so every event takes one code out of the
 /// server-directed space.
 /// </summary>
 [Generator]
-internal class NetworkEventContractGenerator : IIncrementalGenerator
+internal class NetworkedEventContractGenerator : IIncrementalGenerator
 {
-    private const string ManifestClassName = "NetworkEventManifest";
-    private const string Marker = "global::ReadyM.SDK.Events.INetworkEvent";
-    private const string Attribute = "ReadyM.SDK.Attributes.NetworkEventAttribute";
+    private const string ManifestClassName = "NetworkedEventManifest";
+    private const string Marker = "global::ReadyM.SDK.Events.INetworkedEvent";
+    private const string Attribute = "ReadyM.SDK.Attributes.NetworkedEventAttribute";
     private const string Attributes = "global::ReadyM.SDK.Attributes";
-    private const string Contract = "global::ReadyM.SDK.Events.INetworkEventContract";
-    private const string Core = "global::ReadyM.SDK.Events.NetworkEventDispatchCore";
-    private const string Codec = "global::ReadyM.SDK.Events.NetworkEventCodec";
+    private const string Contract = "global::ReadyM.SDK.Events.INetworkedEventContract";
+    private const string Core = "global::ReadyM.SDK.Events.NetworkedEventDispatchCore";
+    private const string Codec = "global::ReadyM.SDK.Events.NetworkedEventCodec";
     private const string Handle = "global::ReadyM.SDK.Entities.EntityHandle";
 
     private const string EditorBrowsable =
@@ -91,17 +91,17 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
             Report(context, location, "NEVT005", "Two subjects",
                 $"'{declared.Symbol.Name}' marks {declared.Subjects.Count} members [Subject]. An event is about one entity.");
 
-        if (declared.Scope == Scope.Single && declared.Target is null)
+        if (declared.Scope == EventScope.Single && declared.Target is null)
             Report(context, location, "NEVT001", "Missing [Target]",
-                $"'{declared.Symbol.Name}' is Scope.Single, so one member must be marked [Target] to say which player it goes to.");
+                $"'{declared.Symbol.Name}' is EventScope.Single, so one member must be marked [Target] to say which player it goes to.");
 
-        if (declared.Scope != Scope.Single && declared.Target is not null)
+        if (declared.Scope != EventScope.Single && declared.Target is not null)
             Report(context, location, "NEVT002", "Unused [Target]",
-                $"'{declared.Symbol.Name}' is Scope.{declared.Scope}, which goes to an audience rather than one player, so [Target] means nothing on it.");
+                $"'{declared.Symbol.Name}' is EventScope.{declared.Scope}, which goes to an audience rather than one player, so [Target] means nothing on it.");
 
-        if (declared.Scope is Scope.Area or Scope.Cell && declared.Subjects.Count == 0 && declared.ScopeMember is null)
+        if (declared.Scope is EventScope.Area or EventScope.Cell && declared.Subjects.Count == 0 && declared.ScopeMember is null)
             Report(context, location, "NEVT003", "No audience",
-                $"'{declared.Symbol.Name}' is Scope.{declared.Scope} with no [Subject] to take its audience from. Mark a subject, or an [{declared.Scope}] member naming it.");
+                $"'{declared.Symbol.Name}' is EventScope.{declared.Scope} with no [Subject] to take its audience from. Mark a subject, or an [{declared.Scope}] member naming it.");
 
         if (NeedsSubject(declared.Policy) && declared.Subjects.Count == 0)
             Report(context, location, "NEVT004", "No subject to check",
@@ -156,7 +156,7 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
 
         EmitContract(sb, declared);
 
-        context.AddSource($"{declared.Symbol.Name}.NetworkEvent.g.cs", sb.ToString());
+        context.AddSource($"{declared.Symbol.Name}.NetworkedEvent.g.cs", sb.ToString());
     }
 
     /// <summary>
@@ -178,7 +178,7 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
         sb.AppendLine("    public global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code");
         sb.AppendLine($"        => {ManifestClassName}.{name}Code + {ManifestClassName}.Offset;");
         sb.AppendLine();
-        sb.AppendLine($"    public {Attributes}.Scope Scope => {Attributes}.Scope.{declared.Scope};");
+        sb.AppendLine($"    public {Attributes}.EventScope Scope => {Attributes}.EventScope.{declared.Scope};");
         sb.AppendLine();
         sb.AppendLine($"    public {Attributes}.Policy Policy => {Attributes}.Policy.{declared.Policy};");
         sb.AppendLine();
@@ -313,7 +313,7 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
         sb.AppendLine("/// <exclude/>");
         sb.AppendLine("/// <summary>Where this assembly's network events are declared to the SDK.</summary>");
         sb.AppendLine($"[{EditorBrowsable}]");
-        sb.AppendLine("public static class NetworkEventDeclarations");
+        sb.AppendLine("public static class NetworkedEventDeclarations");
         sb.AppendLine("{");
         sb.AppendLine("    private static bool _declared;");
         sb.AppendLine();
@@ -334,13 +334,13 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
             var type = declared.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var contract = $"global::{declared.Symbol.ContainingNamespace.ToDisplayString()}.{declared.Symbol.Name}Contract";
 
-            sb.AppendLine($"        global::ReadyM.SDK.Events.NetworkEventRegistry.Declare<{type}>(new {contract}());");
+            sb.AppendLine($"        global::ReadyM.SDK.Events.NetworkedEventRegistry.Declare<{type}>(new {contract}());");
         }
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        context.AddSource("NetworkEventDeclarations.g.cs", sb.ToString());
+        context.AddSource("NetworkedEventDeclarations.g.cs", sb.ToString());
     }
 
     /// <summary>How one plain member reads itself back, cast where the wire carries the underlying type.</summary>
@@ -403,7 +403,7 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
     private static void Report(
         SourceProductionContext context, Location? location, string id, string title, string message)
         => context.ReportDiagnostic(Diagnostic.Create(
-            new DiagnosticDescriptor(id, title, message, "NetworkEvent", DiagnosticSeverity.Error, true),
+            new DiagnosticDescriptor(id, title, message, "NetworkedEvent", DiagnosticSeverity.Error, true),
             location));
 
     /// <summary>One declared event, with what its attribute and its members said.</summary>
@@ -414,8 +414,8 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
             Symbol = symbol;
 
             Scope = declaration.ConstructorArguments.Length > 0
-                ? AttributeUtils.EnumArgument(declaration.ConstructorArguments[0], Scope.Server)
-                : Scope.Server;
+                ? AttributeUtils.EnumArgument(declaration.ConstructorArguments[0], EventScope.Server)
+                : EventScope.Server;
 
             Policy = declaration.ConstructorArguments.Length > 1
                 ? AttributeUtils.EnumArgument(declaration.ConstructorArguments[1], Policy.ServerAuthoritative)
@@ -432,7 +432,7 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
 
         public INamedTypeSymbol Symbol { get; }
 
-        public Scope Scope { get; }
+        public EventScope Scope { get; }
 
         public Policy Policy { get; }
 
@@ -451,8 +451,8 @@ internal class NetworkEventContractGenerator : IIncrementalGenerator
             => member.GetAttributes().Any(a => a.AttributeClass?.Name == attribute);
     }
 
-    /// <summary>Mirrors <c>ReadyM.SDK.Attributes.Scope</c>, which a generator cannot reference.</summary>
-    private enum Scope
+    /// <summary>Mirrors <c>ReadyM.SDK.Attributes.EventScope</c>, which a generator cannot reference.</summary>
+    private enum EventScope
     {
         Server,
         Global,

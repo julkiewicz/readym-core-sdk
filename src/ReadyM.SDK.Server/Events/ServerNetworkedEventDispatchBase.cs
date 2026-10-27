@@ -18,7 +18,7 @@ namespace ReadyM.SDK.Server.Events;
 /// Its members are internal on purpose: a mod never reads them, and the generated class that derives from this
 /// never does either. Only the seams in this assembly do.
 /// </remarks>
-public abstract class ServerNetworkEventDispatchBase : NetworkEventDispatchCore, IHostedService
+public abstract class ServerNetworkedEventDispatchBase : NetworkedEventDispatchCore, IHostedService
 {
     /// <summary>Where a global event's recipients are found. Set by the host.</summary>
     internal IEntities? Lookup { get; set; }

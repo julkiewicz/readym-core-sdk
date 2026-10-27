@@ -10,18 +10,18 @@ namespace ReadyM.SDK.Events;
 /// that the two cannot disagree about the order mods run in, which would leave a client applying an event the
 /// server had already filtered differently.
 /// </summary>
-internal static class NetworkEventStages
+internal static class NetworkedEventStages
 {
     /// <summary>The mods in the order their handlers run, which is name order unless one names another.</summary>
-    public static IReadOnlyList<INetworkEventHandlers<T>> InOrder<T>(IEnumerable<INetworkEventHandlers<T>> mods)
-        where T : struct, INetworkEvent
+    public static IReadOnlyList<INetworkedEventHandlers<T>> InOrder<T>(IEnumerable<INetworkedEventHandlers<T>> mods)
+        where T : struct, INetworkedEvent
     {
         var all = mods.ToList();
 
         if (all.Count < 2)
             return all;
 
-        var order = NetworkEventOrder.Sort([.. all.Select(mod => (mod.Mod, mod.After))]);
+        var order = NetworkedEventOrder.Sort([.. all.Select(mod => (mod.Mod, mod.After))]);
 
         return [.. order.Select(name => all.First(mod => mod.Mod == name))];
     }
@@ -32,8 +32,8 @@ internal static class NetworkEventStages
     /// every stage after the one it happened in.
     /// </summary>
     public static void Run<T>(
-        IReadOnlyList<INetworkEventHandlers<T>> mods, Stage stage, ref T networkEvent, EventContext context)
-        where T : struct, INetworkEvent
+        IReadOnlyList<INetworkedEventHandlers<T>> mods, Stage stage, ref T networkEvent, EventContext context)
+        where T : struct, INetworkedEvent
     {
         var stoppable = Stops(stage);
 

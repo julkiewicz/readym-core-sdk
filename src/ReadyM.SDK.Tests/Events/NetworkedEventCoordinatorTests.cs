@@ -19,7 +19,7 @@ namespace ReadyM.SDK.Tests.Events;
 /// mod before the next stage starts, so a second mod's Validate can still refuse what the first one accepted,
 /// and it checks the policy and fans out once however many mods are listening.
 /// </summary>
-public class NetworkEventCoordinatorTests
+public class NetworkedEventCoordinatorTests
 {
     private const RelayMessageCode Wire = RelayMessageCode.MaxServerRpcEvent;
 
@@ -31,7 +31,7 @@ public class NetworkEventCoordinatorTests
 
     /// <summary>What a mod's generated handler set is, as the coordinator sees it.</summary>
     private sealed class Handlers(string name, List<string> ran, params string[] after)
-        : INetworkEventHandlers<Blow>
+        : INetworkedEventHandlers<Blow>
     {
         /// <summary>The stage this one refuses in, and the reason it gives.</summary>
         public (Stage Stage, object? Reason)? Refuses { get; init; }
@@ -56,7 +56,7 @@ public class NetworkEventCoordinatorTests
         }
     }
 
-    private struct Blow : INetworkEvent
+    private struct Blow : INetworkedEvent
     {
         public int Damage { get; set; }
 
@@ -66,11 +66,11 @@ public class NetworkEventCoordinatorTests
     }
 
     /// <summary>Stands in for what the Common project generates beside the event struct.</summary>
-    private sealed class Contract(Scope scope, Policy policy) : INetworkEventContract<Blow>
+    private sealed class Contract(EventScope scope, Policy policy) : INetworkedEventContract<Blow>
     {
         public RelayMessageCode Code => Wire;
 
-        public Scope Scope => scope;
+        public EventScope Scope => scope;
 
         public Policy Policy => policy;
 
@@ -78,7 +78,7 @@ public class NetworkEventCoordinatorTests
 
         public PlayerId Target(in Blow e) => PlayerId.Invalid;
 
-        public bool TryRead(NetworkEventDispatchCore world, NetDataReader reader, out Blow e)
+        public bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out Blow e)
         {
             e = new Blow { Damage = reader.GetInt() };
 
@@ -128,15 +128,15 @@ public class NetworkEventCoordinatorTests
         }
     }
 
-    private ServerNetworkEventCoordinator<Blow> OnServer(Policy policy, params Handlers[] mods)
-        => new(new Contract(Scope.Global, policy), mods);
+    private ServerNetworkedEventCoordinator<Blow> OnServer(Policy policy, params Handlers[] mods)
+        => new(new Contract(EventScope.Global, policy), mods);
 
-    private ServerNetworkEventCoordinator<Blow> OnServer(params Handlers[] mods) => OnServer(Policy.Anyone, mods);
+    private ServerNetworkedEventCoordinator<Blow> OnServer(params Handlers[] mods) => OnServer(Policy.Anyone, mods);
 
-    private static (ClientNetworkEventCoordinator<Blow> Coordinator, Relay Relay) OnClient(params Handlers[] mods)
+    private static (ClientNetworkedEventCoordinator<Blow> Coordinator, Relay Relay) OnClient(params Handlers[] mods)
     {
         var relay = new Relay();
-        var coordinator = new ClientNetworkEventCoordinator<Blow>(new Contract(Scope.Global, Policy.Anyone), mods)
+        var coordinator = new ClientNetworkedEventCoordinator<Blow>(new Contract(EventScope.Global, Policy.Anyone), mods)
         {
             Relay = relay,
         };
@@ -160,7 +160,7 @@ public class NetworkEventCoordinatorTests
                 payload.Put((int)part);
         }
 
-        return NetworkEventFrame.Write(refused, origin, payload);
+        return NetworkedEventFrame.Write(refused, origin, payload);
     }
 
     // -- one stage at a time, across every mod ---------------------------------------------------------
@@ -322,9 +322,9 @@ public class NetworkEventCoordinatorTests
     [Fact]
     public void A_client_with_no_handlers_still_takes_its_guess_back_on_a_refusal()
     {
-        var predictions = new NetworkEventPredictions();
+        var predictions = new NetworkedEventPredictions();
         var relay = new Relay();
-        var coordinator = new ClientNetworkEventCoordinator<Blow>(new Contract(Scope.Global, Policy.Anyone), [])
+        var coordinator = new ClientNetworkedEventCoordinator<Blow>(new Contract(EventScope.Global, Policy.Anyone), [])
         {
             Relay = relay,
             Predictions = predictions,

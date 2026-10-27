@@ -10,9 +10,9 @@ namespace ReadyM.SDK.Events;
 /// policy and fans out, the client only receives.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public interface INetworkEventCoordinators
+public interface INetworkedEventCoordinators
 {
     /// <summary>Registers this side's coordinator for one event, which is also what starts it listening.</summary>
-    void Register<T>(IDependencyContainer container, INetworkEventContract<T> contract)
-        where T : struct, INetworkEvent;
+    void Register<T>(IDependencyContainer container, INetworkedEventContract<T> contract)
+        where T : struct, INetworkedEvent;
 }

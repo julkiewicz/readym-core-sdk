@@ -2,7 +2,7 @@ namespace ReadyM.SDK.Attributes;
 
 /// <summary>
 /// Lets a client guess at this value while it waits for the server, inside
-/// <c>INetworkEventRaise.Predicting</c>. The getter reads the guess until it is taken back, so the code that
+/// <c>INetworkedEventRaise.Predicting</c>. The getter reads the guess until it is taken back, so the code that
 /// reads the value never learns one was involved.
 /// </summary>
 /// <remarks>

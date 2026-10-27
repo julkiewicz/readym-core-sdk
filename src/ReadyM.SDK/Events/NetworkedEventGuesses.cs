@@ -9,11 +9,11 @@ namespace ReadyM.SDK.Events;
 /// </summary>
 /// <remarks>
 /// Thread-static because a guess is one call on one thread: the scope lasts exactly as long as the callback
-/// handed to <see cref="INetworkEventRaise.Predicting"/>, and anything that callback starts elsewhere is not
+/// handed to <see cref="INetworkedEventRaise.Predicting"/>, and anything that callback starts elsewhere is not
 /// part of the guess.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class NetworkEventGuesses
+public static class NetworkedEventGuesses
 {
     [ThreadStatic]
     private static List<Action>? _taking;

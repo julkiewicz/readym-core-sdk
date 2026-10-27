@@ -1,7 +1,7 @@
 namespace ReadyM.SDK.Attributes;
 
 /// <summary>Who receives a network event.</summary>
-public enum Scope
+public enum EventScope
 {
     /// <summary>The server only. A damage report, a console command.</summary>
     Server,

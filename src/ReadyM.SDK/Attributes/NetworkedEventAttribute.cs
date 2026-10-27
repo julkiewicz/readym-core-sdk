@@ -8,10 +8,10 @@ namespace ReadyM.SDK.Attributes;
 /// <param name="scope">Who receives it.</param>
 /// <param name="policy">Who may raise it. The server may always raise.</param>
 [AttributeUsage(AttributeTargets.Struct)]
-public sealed class NetworkEventAttribute(Scope scope, Policy policy) : Attribute
+public sealed class NetworkedEventAttribute(EventScope scope, Policy policy) : Attribute
 {
     /// <summary>Who receives it.</summary>
-    public Scope Scope { get; } = scope;
+    public EventScope Scope { get; } = scope;
 
     /// <summary>Who may raise it.</summary>
     public Policy Policy { get; } = policy;

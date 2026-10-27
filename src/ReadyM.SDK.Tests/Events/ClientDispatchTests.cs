@@ -24,7 +24,7 @@ public class ClientDispatchTests
     private static readonly PlayerId Somebody = new(5);
 
     /// <summary>Stands in for the generated dispatch, which is what every real one is.</summary>
-    private sealed class Dispatch : NetworkEventDispatchBase
+    private sealed class Dispatch : NetworkedEventDispatchBase
     {
         public List<(bool Refused, PlayerId Origin, bool RaisedHere)> Arrivals { get; } = [];
 
@@ -34,7 +34,7 @@ public class ClientDispatchTests
 
         private void Arrived(ServerEventHeader header, NetDataReader reader)
         {
-            if (NetworkEventFrame.TryRead(reader, out var frame))
+            if (NetworkedEventFrame.TryRead(reader, out var frame))
                 Arrivals.Add((frame.Refused, frame.Origin, frame.Origin == Me));
         }
     }
@@ -92,7 +92,7 @@ public class ClientDispatchTests
     {
         var (dispatch, relay) = Listening();
 
-        relay.Deliver(Code, NetworkEventFrame.Write(false, Somebody, new NetDataWriter()));
+        relay.Deliver(Code, NetworkedEventFrame.Write(false, Somebody, new NetDataWriter()));
 
         Assert.Equal([(false, Somebody, false)], dispatch.Arrivals);
     }
@@ -103,7 +103,7 @@ public class ClientDispatchTests
     {
         var (dispatch, relay) = Listening();
 
-        relay.Deliver(Code, NetworkEventFrame.Write(false, Me, new NetDataWriter()));
+        relay.Deliver(Code, NetworkedEventFrame.Write(false, Me, new NetDataWriter()));
 
         Assert.Equal([(false, Me, true)], dispatch.Arrivals);
     }
@@ -113,7 +113,7 @@ public class ClientDispatchTests
     {
         var (dispatch, relay) = Listening();
 
-        relay.Deliver(Code, NetworkEventFrame.Write(true, Me, new NetDataWriter()));
+        relay.Deliver(Code, NetworkedEventFrame.Write(true, Me, new NetDataWriter()));
 
         Assert.Equal([(true, Me, true)], dispatch.Arrivals);
     }
@@ -142,7 +142,7 @@ public class ClientDispatchTests
         var dispatch = new Dispatch { Relay = relay };
         dispatch.OnScopeStart();
 
-        relay.Deliver(Code, NetworkEventFrame.Write(false, Somebody, new NetDataWriter()));
+        relay.Deliver(Code, NetworkedEventFrame.Write(false, Somebody, new NetDataWriter()));
 
         Assert.Equal([(false, Somebody, false)], dispatch.Arrivals);
     }

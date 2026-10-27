@@ -14,9 +14,9 @@ internal sealed class ModSystemUpdates : BaseSystem
 
     private ulong _count;
 
-    private List<Events.ClientNetworkEvents>? _events;
+    private List<Events.ClientNetworkedEvents>? _events;
 
-    private List<NetworkEventPredictions>? _predictions;
+    private List<NetworkedEventPredictions>? _predictions;
 
     public ModSystemUpdates(IDependencyContainer services)
     {
@@ -44,8 +44,8 @@ internal sealed class ModSystemUpdates : BaseSystem
 
         // Before the mods, so a guess that ran out is already gone by the time one of them reads anything.
         // Asked for as a set, because a host that wired no event raising has none and that is not an error.
-        _predictions ??= _services.ResolveAll<NetworkEventPredictions>().ToList();
-        _events ??= _services.ResolveAll<INetworkEvents>().OfType<Events.ClientNetworkEvents>().ToList();
+        _predictions ??= _services.ResolveAll<NetworkedEventPredictions>().ToList();
+        _events ??= _services.ResolveAll<INetworkedEvents>().OfType<Events.ClientNetworkedEvents>().ToList();
 
         foreach (var events in _events)
             events.Now = Tick.time;

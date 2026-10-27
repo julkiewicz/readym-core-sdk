@@ -15,12 +15,12 @@ namespace ReadyM.SDK.Events;
 /// per mod. A client that only raises an event still gets this one, which is how a refusal of its own event
 /// finds the guess it has to take back.
 /// </remarks>
-internal sealed class ClientNetworkEventCoordinator<T>(
-    INetworkEventContract<T> contract, IEnumerable<INetworkEventHandlers<T>> mods)
-    : NetworkEventDispatchBase
-    where T : struct, INetworkEvent
+internal sealed class ClientNetworkedEventCoordinator<T>(
+    INetworkedEventContract<T> contract, IEnumerable<INetworkedEventHandlers<T>> mods)
+    : NetworkedEventDispatchBase
+    where T : struct, INetworkedEvent
 {
-    private readonly IReadOnlyList<INetworkEventHandlers<T>> _mods = NetworkEventStages.InOrder(mods);
+    private readonly IReadOnlyList<INetworkedEventHandlers<T>> _mods = NetworkedEventStages.InOrder(mods);
 
     protected override RelayMessageCode Code() => contract.Code;
 
@@ -28,7 +28,7 @@ internal sealed class ClientNetworkEventCoordinator<T>(
 
     private void Arrived(ServerEventHeader header, NetDataReader reader)
     {
-        if (!NetworkEventFrame.TryRead(reader, out var frame) || !contract.TryRead(this, reader, out var e))
+        if (!NetworkedEventFrame.TryRead(reader, out var frame) || !contract.TryRead(this, reader, out var e))
             return;
 
         if (frame.Refused)
@@ -39,11 +39,11 @@ internal sealed class ClientNetworkEventCoordinator<T>(
 
         var context = new EventContext(frame.Origin, frame.Origin == Me, new EventCancellation());
 
-        NetworkEventStages.Run(_mods, Stage.Apply, ref e, context);
-        NetworkEventStages.Run(_mods, Stage.Observe, ref e, context);
+        NetworkedEventStages.Run(_mods, Stage.Apply, ref e, context);
+        NetworkedEventStages.Run(_mods, Stage.Observe, ref e, context);
     }
 
-    private void Refused(ref T networkEvent, NetDataReader reader, NetworkEventHeader frame)
+    private void Refused(ref T networkEvent, NetDataReader reader, NetworkedEventHeader frame)
     {
         GuessFailed();
 
@@ -53,6 +53,6 @@ internal sealed class ClientNetworkEventCoordinator<T>(
 
         var context = new EventContext(frame.Origin, frame.Origin == Me, cancellation);
 
-        NetworkEventStages.Run(_mods, Stage.Rejected, ref networkEvent, context);
+        NetworkedEventStages.Run(_mods, Stage.Rejected, ref networkEvent, context);
     }
 }

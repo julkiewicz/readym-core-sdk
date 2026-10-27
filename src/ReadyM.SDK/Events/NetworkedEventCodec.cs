@@ -16,11 +16,11 @@ namespace ReadyM.SDK.Events;
 /// sides go through the same seam because both hold the same kind of world.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class NetworkEventCodec
+public static class NetworkedEventCodec
 {
     /// <summary>Reads a required entity member and finds what it names.</summary>
     public static bool TryRead<T>(
-        NetworkEventDispatchCore dispatch, NetDataReader reader, out T shape, string networkEvent, string member)
+        NetworkedEventDispatchCore dispatch, NetDataReader reader, out T shape, string networkEvent, string member)
         where T : struct, IArchetypeQueryable
     {
         if (dispatch.Entities is { } world)
@@ -32,7 +32,7 @@ public static class NetworkEventCodec
 
     /// <summary>Reads an optional entity member, which may have been sent as null.</summary>
     public static bool TryReadOptional<T>(
-        NetworkEventDispatchCore dispatch, NetDataReader reader, out T? shape, string networkEvent, string member)
+        NetworkedEventDispatchCore dispatch, NetDataReader reader, out T? shape, string networkEvent, string member)
         where T : struct, IArchetypeQueryable
     {
         if (dispatch.Entities is { } world)

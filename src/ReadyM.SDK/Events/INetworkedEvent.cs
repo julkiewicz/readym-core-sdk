@@ -5,7 +5,7 @@ using ReadyM.Api.Multiplayer.Protocol.Enums;
 namespace ReadyM.SDK.Events;
 
 /// <summary>
-/// What the generator adds to a struct marked <see cref="Attributes.NetworkEventAttribute"/>. A mod never writes
+/// What the generator adds to a struct marked <see cref="Attributes.NetworkedEventAttribute"/>. A mod never writes
 /// it.
 /// </summary>
 /// <remarks>
@@ -15,7 +15,7 @@ namespace ReadyM.SDK.Events;
 /// </remarks>
 /// <exclude />
 [EditorBrowsable(EditorBrowsableState.Never)]
-public interface INetworkEvent
+public interface INetworkedEvent
 {
     /// <summary>This event's code on the wire, once the host has placed its mod's block.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]

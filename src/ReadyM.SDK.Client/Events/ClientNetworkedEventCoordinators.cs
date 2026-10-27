@@ -11,12 +11,12 @@ namespace ReadyM.SDK.Client.Events;
 /// somewhere for a refusal of it to land.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public sealed class ClientNetworkEventCoordinators : INetworkEventCoordinators
+public sealed class ClientNetworkedEventCoordinators : INetworkedEventCoordinators
 {
-    public void Register<T>(IDependencyContainer container, INetworkEventContract<T> contract)
-        where T : struct, INetworkEvent
+    public void Register<T>(IDependencyContainer container, INetworkedEventContract<T> contract)
+        where T : struct, INetworkedEvent
     {
         container.RegisterSingleton(contract);
-        container.RegisterSingleton<ClientNetworkEventCoordinator<T>>();
+        container.RegisterSingleton<ClientNetworkedEventCoordinator<T>>();
     }
 }

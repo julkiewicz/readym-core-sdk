@@ -13,33 +13,33 @@ namespace ReadyM.SDK.Events;
 [EditorBrowsable(EditorBrowsableState.Never)]
 public readonly struct EventAudience
 {
-    private EventAudience(Scope scope, PlayerId player, AreaId area, FullCellId cell)
+    private EventAudience(EventScope scope, PlayerId player, AreaId area, FullCellId cell)
         => (Kind, Player, Area, Cell) = (scope, player, area, cell);
 
     /// <summary>Which of the audiences below this is.</summary>
-    public Scope Kind { get; }
+    public EventScope Kind { get; }
 
-    /// <summary>The one player, for <see cref="Scope.Single"/>.</summary>
+    /// <summary>The one player, for <see cref="EventScope.Single"/>.</summary>
     public PlayerId Player { get; }
 
-    /// <summary>The area, for <see cref="Scope.Area"/>.</summary>
+    /// <summary>The area, for <see cref="EventScope.Area"/>.</summary>
     public AreaId Area { get; }
 
-    /// <summary>The cell, for <see cref="Scope.Cell"/>.</summary>
+    /// <summary>The cell, for <see cref="EventScope.Cell"/>.</summary>
     public FullCellId Cell { get; }
 
     /// <summary>Nobody. The event stops at the server.</summary>
-    public static EventAudience Server { get; } = new(Scope.Server, default, default, default);
+    public static EventAudience Server { get; } = new(EventScope.Server, default, default, default);
 
     /// <summary>Every connected player.</summary>
-    public static EventAudience Global { get; } = new(Scope.Global, default, default, default);
+    public static EventAudience Global { get; } = new(EventScope.Global, default, default, default);
 
     /// <summary>One player.</summary>
-    public static EventAudience Single(PlayerId player) => new(Scope.Single, player, default, default);
+    public static EventAudience Single(PlayerId player) => new(EventScope.Single, player, default, default);
 
     /// <summary>Everyone in an area.</summary>
-    public static EventAudience InArea(AreaId area) => new(Scope.Area, default, area, default);
+    public static EventAudience InArea(AreaId area) => new(EventScope.Area, default, area, default);
 
     /// <summary>Everyone in a cell.</summary>
-    public static EventAudience InCell(FullCellId cell) => new(Scope.Cell, default, default, cell);
+    public static EventAudience InCell(FullCellId cell) => new(EventScope.Cell, default, default, cell);
 }

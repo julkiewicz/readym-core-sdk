@@ -117,18 +117,18 @@ public class EventLadderTests
 
     [Fact]
     public void A_server_audience_names_nobody_else()
-        => Assert.Equal(Scope.Server, EventAudience.Server.Kind);
+        => Assert.Equal(EventScope.Server, EventAudience.Server.Kind);
 
     [Fact]
     public void A_global_audience_names_every_player()
-        => Assert.Equal(Scope.Global, EventAudience.Global.Kind);
+        => Assert.Equal(EventScope.Global, EventAudience.Global.Kind);
 
     [Fact]
     public void A_single_audience_carries_the_one_player()
     {
         var audience = EventAudience.Single(Raiser);
 
-        Assert.Equal(Scope.Single, audience.Kind);
+        Assert.Equal(EventScope.Single, audience.Kind);
         Assert.Equal(Raiser, audience.Player);
     }
 
@@ -138,7 +138,7 @@ public class EventLadderTests
         var area = new AreaId(3);
         var audience = EventAudience.InArea(area);
 
-        Assert.Equal(Scope.Area, audience.Kind);
+        Assert.Equal(EventScope.Area, audience.Kind);
         Assert.Equal(area, audience.Area);
     }
 
@@ -148,7 +148,7 @@ public class EventLadderTests
         var cell = new FullCellId(new AreaId(3), new CellId("cell-1"));
         var audience = EventAudience.InCell(cell);
 
-        Assert.Equal(Scope.Cell, audience.Kind);
+        Assert.Equal(EventScope.Cell, audience.Kind);
         Assert.Equal(cell, audience.Cell);
     }
 

@@ -16,12 +16,12 @@ namespace ReadyM.SDK.Server.Events;
 /// client that raises what its policy forbids has the event refused here, which is where spoofing stops.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class ServerNetworkEventPolicy
+public static class ServerNetworkedEventPolicy
 {
     /// <summary>Whether <paramref name="origin"/> was allowed to raise an event about <paramref name="subject"/>.</summary>
     /// <param name="subject">The entity the event is about, or null for an event that is about nobody.</param>
     public static bool Allows(
-        ServerNetworkEventDispatchBase dispatch, Policy policy, EntityHandle? subject, PlayerId origin)
+        ServerNetworkedEventDispatchBase dispatch, Policy policy, EntityHandle? subject, PlayerId origin)
     {
         // The server may always raise, which is what lets it act for a bot without the policy refusing it
         if (origin == PlayerId.Server)
@@ -40,9 +40,9 @@ public static class ServerNetworkEventPolicy
 
     /// <summary>The scope the subject is in, for the two policies that ask who simulates it.</summary>
     private static bool Simulated<TScope>(
-        ServerNetworkEventDispatchBase dispatch, EntityHandle? subject, out TScope scope)
+        ServerNetworkedEventDispatchBase dispatch, EntityHandle? subject, out TScope scope)
         where TScope : struct, IArchetypeQueryable, IScope
-        => ServerNetworkEventScopes.TryScope(dispatch, Needs(subject), out scope);
+        => ServerNetworkedEventScopes.TryScope(dispatch, Needs(subject), out scope);
 
     /// <summary>
     /// The subject a policy that checks one must have been handed. The generator refuses that pairing

@@ -14,13 +14,13 @@ namespace ReadyM.SDK.Events;
 /// the event be fanned out once however many mods are handling it.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public interface INetworkEventContract<T> where T : struct, INetworkEvent
+public interface INetworkedEventContract<T> where T : struct, INetworkedEvent
 {
     /// <summary>This event's code on the wire, once the host has placed its mod's block.</summary>
     RelayMessageCode Code { get; }
 
     /// <summary>Who receives it once it is accepted.</summary>
-    Scope Scope { get; }
+    EventScope Scope { get; }
 
     /// <summary>Who may raise it.</summary>
     Policy Policy { get; }
@@ -28,11 +28,11 @@ public interface INetworkEventContract<T> where T : struct, INetworkEvent
     /// <summary>The entity it is about, which the policy checks and a scoped audience is read from.</summary>
     EntityHandle? Subject(in T networkEvent);
 
-    /// <summary>The one player a <see cref="Attributes.Scope.Single"/> event goes to.</summary>
+    /// <summary>The one player a <see cref="Attributes.EventScope.Single"/> event goes to.</summary>
     PlayerId Target(in T networkEvent);
 
     /// <summary>Reads the event back, failing where it names an entity this end does not have.</summary>
-    bool TryRead(NetworkEventDispatchCore world, NetDataReader reader, out T networkEvent);
+    bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out T networkEvent);
 
     /// <summary>Writes a refusal's reason, of the type the declaration named, or its absence.</summary>
     void WriteReason(NetDataWriter writer, object? reason);

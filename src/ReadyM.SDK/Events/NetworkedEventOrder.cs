@@ -14,7 +14,7 @@ namespace ReadyM.SDK.Events;
 /// the same string on every machine, which is what the manifest ids are for.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class NetworkEventOrder
+public static class NetworkedEventOrder
 {
     /// <exception cref="InvalidOperationException">The mods name a cycle, which has no order to run in.</exception>
     public static List<string> Sort(IReadOnlyList<(string Mod, IReadOnlyList<string> After)> mods)

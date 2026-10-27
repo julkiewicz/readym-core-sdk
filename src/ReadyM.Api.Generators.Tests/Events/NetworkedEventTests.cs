@@ -11,12 +11,12 @@ namespace ReadyM.Api.Generators.Tests.Events;
 /// stage names rather than a priority number. These describe what the generators owe that design, and all of
 /// them fail until the generators exist.
 /// </summary>
-public class NetworkEventTests(ITestOutputHelper output)
+public class NetworkedEventTests(ITestOutputHelper output)
 {
     private static readonly Assembly[] Common =
     [
         typeof(Api.Multiplayer.ClientToClientsAttribute).Assembly,
-        typeof(SDK.Attributes.NetworkEventAttribute).Assembly
+        typeof(SDK.Attributes.NetworkedEventAttribute).Assembly
     ];
 
     private static readonly Assembly[] Server = [.. Common, typeof(SDK.Server.Entities.IEntities).Assembly];
@@ -29,7 +29,7 @@ public class NetworkEventTests(ITestOutputHelper output)
         typeof(Relay.Server.Sdk.Rpc.ServerRpcHandlersBase).Assembly.GetName().Name!,
     ];
 
-    private const string Marker = "global::ReadyM.SDK.Events.INetworkEvent";
+    private const string Marker = "global::ReadyM.SDK.Events.INetworkedEvent";
 
     private const string Codec = "global::ReadyM.SDK.Entities.RpcEntityCodec";
 
@@ -53,7 +53,7 @@ public class NetworkEventTests(ITestOutputHelper output)
 
         public enum HitReject { OutOfRange, Invulnerable }
 
-        [NetworkEvent(Scope.Cell, Policy.SubjectOwner, Reject = typeof(HitReject))]
+        [NetworkedEvent(EventScope.Cell, Policy.SubjectOwner, Reject = typeof(HitReject))]
         public partial struct HitEvent
         {
             [Subject] public Hero Attacker { get; set; }
@@ -61,13 +61,13 @@ public class NetworkEventTests(ITestOutputHelper output)
             public int Damage { get; set; }
         }
 
-        [NetworkEvent(Scope.Server, Policy.ServerAuthoritative)]
+        [NetworkedEvent(EventScope.Server, Policy.ServerAuthoritative)]
         public partial struct AuditEvent
         {
             [Subject] public Hero Who { get; set; }
         }
 
-        [NetworkEvent(Scope.Single, Policy.ServerAuthoritative)]
+        [NetworkedEvent(EventScope.Single, Policy.ServerAuthoritative)]
         public partial struct WhisperEvent
         {
             [Subject] public Hero From { get; set; }
@@ -145,7 +145,7 @@ public class NetworkEventTests(ITestOutputHelper output)
     {
         var common = Generated(RunCommon());
 
-        Assert.Contains("class NetworkEventManifest", common);
+        Assert.Contains("class NetworkedEventManifest", common);
         Assert.Contains("public const string Id = \"Other.Common\";", common);
         Assert.Contains("AuditEventCode", common);
         Assert.Contains("HitEventCode", common);
@@ -193,7 +193,7 @@ public class NetworkEventTests(ITestOutputHelper output)
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
             [Archetype] public readonly partial struct Hero { }
-            [NetworkEvent(Scope.Single, Policy.ServerAuthoritative)]
+            [NetworkedEvent(EventScope.Single, Policy.ServerAuthoritative)]
             public partial struct Lonely { [Subject] public Hero Who { get; set; } }
             """);
 
@@ -204,7 +204,7 @@ public class NetworkEventTests(ITestOutputHelper output)
             using ReadyM.SDK.Archetypes.Core;
             namespace Other.Common;
             [Archetype] public readonly partial struct Hero { }
-            [NetworkEvent(Scope.Cell, Policy.SubjectOwner)]
+            [NetworkedEvent(EventScope.Cell, Policy.SubjectOwner)]
             public partial struct Misaimed
             {
                 [Subject] public Hero Who { get; set; }
@@ -217,7 +217,7 @@ public class NetworkEventTests(ITestOutputHelper output)
         => AssertError("NEVT003", """
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
-            [NetworkEvent(Scope.Area, Policy.ServerAuthoritative)]
+            [NetworkedEvent(EventScope.Area, Policy.ServerAuthoritative)]
             public partial struct Nowhere { public int What { get; set; } }
             """);
 
@@ -226,7 +226,7 @@ public class NetworkEventTests(ITestOutputHelper output)
         => AssertError("NEVT004", """
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
-            [NetworkEvent(Scope.Global, Policy.SubjectOwner)]
+            [NetworkedEvent(EventScope.Global, Policy.SubjectOwner)]
             public partial struct Subjectless { public int What { get; set; } }
             """);
 
@@ -236,7 +236,7 @@ public class NetworkEventTests(ITestOutputHelper output)
         => AssertNoError("""
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
-            [NetworkEvent(Scope.Global, Policy.Anyone)]
+            [NetworkedEvent(EventScope.Global, Policy.Anyone)]
             public partial struct Shout { public int What { get; set; } }
             """);
 
@@ -246,7 +246,7 @@ public class NetworkEventTests(ITestOutputHelper output)
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
             [Archetype] public readonly partial struct Hero { }
-            [NetworkEvent(Scope.Cell, Policy.SubjectOwner)]
+            [NetworkedEvent(EventScope.Cell, Policy.SubjectOwner)]
             public partial struct Twofold
             {
                 [Subject] public Hero One { get; set; }
@@ -261,7 +261,7 @@ public class NetworkEventTests(ITestOutputHelper output)
             namespace Other.Common;
             [Archetype] public readonly partial struct Hero { }
             [Archetype(Networked = false)] public readonly partial struct Prop { }
-            [NetworkEvent(Scope.Cell, Policy.SubjectOwner)]
+            [NetworkedEvent(EventScope.Cell, Policy.SubjectOwner)]
             public partial struct Unsendable
             {
                 [Subject] public Hero Who { get; set; }
@@ -467,9 +467,9 @@ public class NetworkEventTests(ITestOutputHelper output)
 
     // -- what the contract says about the event --------------------------------------------------------
 
-    private const string Contract = "global::ReadyM.SDK.Events.INetworkEventContract";
+    private const string Contract = "global::ReadyM.SDK.Events.INetworkedEventContract";
 
-    private const string Handlers = "global::ReadyM.SDK.Events.INetworkEventHandlers";
+    private const string Handlers = "global::ReadyM.SDK.Events.INetworkedEventHandlers";
 
     private const string Attributes = "global::ReadyM.SDK.Attributes";
 
@@ -497,7 +497,7 @@ public class NetworkEventTests(ITestOutputHelper output)
 
         namespace Other.Common;
 
-        [NetworkEvent(Scope.Global, Policy.Anyone)]
+        [NetworkedEvent(EventScope.Global, Policy.Anyone)]
         public partial struct ShoutEvent
         {
             public int Line { get; set; }
@@ -542,7 +542,7 @@ public class NetworkEventTests(ITestOutputHelper output)
     [Fact]
     public void The_contract_carries_the_events_code()
         => Assert.Contains(
-            "        => NetworkEventManifest.HitEventCode + NetworkEventManifest.Offset;",
+            "        => NetworkedEventManifest.HitEventCode + NetworkedEventManifest.Offset;",
             Generated(RunCommon()));
 
     [Fact]
@@ -550,9 +550,9 @@ public class NetworkEventTests(ITestOutputHelper output)
     {
         var common = Generated(RunCommon());
 
-        Assert.Contains($"public {Attributes}.Scope Scope => {Attributes}.Scope.Cell;", common);
-        Assert.Contains($"public {Attributes}.Scope Scope => {Attributes}.Scope.Server;", common);
-        Assert.Contains($"public {Attributes}.Scope Scope => {Attributes}.Scope.Single;", common);
+        Assert.Contains($"public {Attributes}.EventScope Scope => {Attributes}.EventScope.Cell;", common);
+        Assert.Contains($"public {Attributes}.EventScope Scope => {Attributes}.EventScope.Server;", common);
+        Assert.Contains($"public {Attributes}.EventScope Scope => {Attributes}.EventScope.Single;", common);
     }
 
     /// <summary>
@@ -625,7 +625,7 @@ public class NetworkEventTests(ITestOutputHelper output)
     {
         var common = Generated(RunCommon());
 
-        Assert.Contains("public bool TryRead(global::ReadyM.SDK.Events.NetworkEventDispatchCore world,", common);
+        Assert.Contains("public bool TryRead(global::ReadyM.SDK.Events.NetworkedEventDispatchCore world,", common);
         Assert.Contains("world, reader, out var m0, \"HitEvent\", \"Attacker\"", common);
     }
 
@@ -641,9 +641,9 @@ public class NetworkEventTests(ITestOutputHelper output)
         foreach (var generated in new[] { Generated(RunServer()), Generated(RunClient()) })
         {
             Assert.Contains($") : {Handlers}<global::Other.Common.HitEvent>", generated);
-            Assert.DoesNotContain("NetworkEventDispatchBase", generated);
+            Assert.DoesNotContain("NetworkedEventDispatchBase", generated);
             Assert.DoesNotContain("FanOut", generated);
-            Assert.DoesNotContain("ServerNetworkEventPolicy", generated);
+            Assert.DoesNotContain("ServerNetworkedEventPolicy", generated);
         }
     }
 
@@ -695,12 +695,12 @@ public class NetworkEventTests(ITestOutputHelper output)
     public void An_assembly_lists_what_it_declared_so_a_host_can_run_it()
     {
         Assert.Contains(
-            "global::ReadyM.SDK.Events.NetworkEventRegistry.Declare<global::Other.Common.HitEvent>("
+            "global::ReadyM.SDK.Events.NetworkedEventRegistry.Declare<global::Other.Common.HitEvent>("
             + "new global::Other.Common.HitEventContract());",
             Generated(RunCommon()));
 
         Assert.Contains("public static void RegisterAll()", Generated(RunServer()));
-        Assert.Contains("global::ReadyM.SDK.Events.NetworkEventRegistry.Handle<", Generated(RunServer()));
+        Assert.Contains("global::ReadyM.SDK.Events.NetworkedEventRegistry.Handle<", Generated(RunServer()));
     }
 
     [Fact]
@@ -747,7 +747,7 @@ public class NetworkEventTests(ITestOutputHelper output)
     private SourceGeneratorTestHelper.GeneratorRunResult RunCommon(string events = Events)
         => SourceGeneratorTestHelper.RunGenerators(
             [("Shapes.cs", Shapes), ("Events.cs", events)],
-            [new ArchetypeGenerator(), new ArchetypeMixinGenerator(), new NetworkEventContractGenerator()],
+            [new ArchetypeGenerator(), new ArchetypeMixinGenerator(), new NetworkedEventContractGenerator()],
             output, Common,
             assemblyName: "Other.Common");
 
@@ -756,7 +756,7 @@ public class NetworkEventTests(ITestOutputHelper output)
 
     private SourceGeneratorTestHelper.GeneratorRunResult RunServerWith(string handlers, string events = Events)
         => SourceGeneratorTestHelper.RunGenerators(
-            [("Referee.cs", handlers)], [new NetworkEventHandlerGenerator()], output, Server,
+            [("Referee.cs", handlers)], [new NetworkedEventHandlerGenerator()], output, Server,
             alsoReferenceMetadata: [RunCommon(events).OutputCompilation.ToMetadataReference()]);
 
     private SourceGeneratorTestHelper.GeneratorRunResult RunClient(string handlers = ClientHandlers)
@@ -764,7 +764,7 @@ public class NetworkEventTests(ITestOutputHelper output)
 
     private SourceGeneratorTestHelper.GeneratorRunResult RunClientWith(string handlers, string events = Events)
         => SourceGeneratorTestHelper.RunGenerators(
-            [("HitView.cs", handlers)], [new NetworkEventHandlerGenerator()], output, Client,
+            [("HitView.cs", handlers)], [new NetworkedEventHandlerGenerator()], output, Client,
             alsoReferenceMetadata: [RunCommon(events).OutputCompilation.ToMetadataReference()],
             withoutReferences: AsAClientMod);
 }

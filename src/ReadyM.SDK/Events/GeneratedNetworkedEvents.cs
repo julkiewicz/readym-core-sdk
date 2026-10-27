@@ -14,13 +14,13 @@ namespace ReadyM.SDK.Events;
 /// this call that runs them.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class GeneratedNetworkEvents
+public static class GeneratedNetworkedEvents
 {
     /// <summary>The types a compilation gets when it declares events, or handlers for one.</summary>
     private static readonly (string Type, string Method)[] EntryPoints =
     [
-        ("ReadyM.SDK.Generated.NetworkEventDeclarations", "DeclareAll"),
-        ("ReadyM.SDK.Generated.NetworkEventHandlerRegistrations", "RegisterAll"),
+        ("ReadyM.SDK.Generated.NetworkedEventDeclarations", "DeclareAll"),
+        ("ReadyM.SDK.Generated.NetworkedEventHandlerRegistrations", "RegisterAll"),
     ];
 
     public static int ApplyAll(

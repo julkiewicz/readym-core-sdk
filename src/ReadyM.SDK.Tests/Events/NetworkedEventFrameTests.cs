@@ -9,7 +9,7 @@ namespace ReadyM.SDK.Tests.Events;
 /// What the server puts in front of an event it sends on, and what a client reads back. Both arrive on the
 /// event's own code, so the frame is the only thing that says which of the two this is and who raised it.
 /// </summary>
-public class NetworkEventFrameTests
+public class NetworkedEventFrameTests
 {
     private static readonly PlayerId Raiser = new(4);
 
@@ -18,7 +18,7 @@ public class NetworkEventFrameTests
         var body = new NetDataWriter();
         body.Put(payload);
 
-        var message = NetworkEventFrame.Write(refused, origin, body);
+        var message = NetworkedEventFrame.Write(refused, origin, body);
 
         // The code goes in front on the way out and is stripped before a handler sees the rest
         var reader = new NetDataReader(message.Data, 0, message.Length);
@@ -31,7 +31,7 @@ public class NetworkEventFrameTests
     {
         var reader = Sent(false, Raiser, 7);
 
-        Assert.True(NetworkEventFrame.TryRead(reader, out var frame));
+        Assert.True(NetworkedEventFrame.TryRead(reader, out var frame));
         Assert.False(frame.Refused);
         Assert.Equal(Raiser, frame.Origin);
         Assert.Equal(7, reader.GetInt());
@@ -42,7 +42,7 @@ public class NetworkEventFrameTests
     {
         var reader = Sent(true, Raiser, 7);
 
-        Assert.True(NetworkEventFrame.TryRead(reader, out var frame));
+        Assert.True(NetworkedEventFrame.TryRead(reader, out var frame));
         Assert.True(frame.Refused);
         Assert.Equal(Raiser, frame.Origin);
     }
@@ -56,7 +56,7 @@ public class NetworkEventFrameTests
     {
         var reader = Sent(false, PlayerId.Server, 1);
 
-        Assert.True(NetworkEventFrame.TryRead(reader, out var frame));
+        Assert.True(NetworkedEventFrame.TryRead(reader, out var frame));
         Assert.Equal(PlayerId.Server, frame.Origin);
     }
 
@@ -69,6 +69,6 @@ public class NetworkEventFrameTests
     {
         var reader = new NetDataReader(new byte[1]);
 
-        Assert.False(NetworkEventFrame.TryRead(reader, out _));
+        Assert.False(NetworkedEventFrame.TryRead(reader, out _));
     }
 }

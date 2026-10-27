@@ -9,13 +9,13 @@ namespace ReadyM.SDK.Tests.Events;
 /// A guess a client makes while it waits for the server's answer, and the three things that take it back: the
 /// refusal, its own deadline, and nothing else. Clearing runs the undo the caller gave; it never guesses one.
 /// </summary>
-public class NetworkEventPredictionTests
+public class NetworkedEventPredictionTests
 {
     private const RelayMessageCode Code = RelayMessageCode.MaxServerRpcEvent;
 
     private const RelayMessageCode Other = RelayMessageCode.MinServerRpcEvent;
 
-    private readonly NetworkEventPredictions _predictions = new();
+    private readonly NetworkedEventPredictions _predictions = new();
 
     private readonly List<string> _ran = [];
 
@@ -68,7 +68,7 @@ public class NetworkEventPredictionTests
     {
         _predictions.Open(Code, 1000).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
-        _predictions.Expire(1000 + NetworkEventPredictions.Ttl);
+        _predictions.Expire(1000 + NetworkedEventPredictions.Ttl);
 
         Assert.Equal(["guess", "undo"], _ran);
     }
@@ -78,7 +78,7 @@ public class NetworkEventPredictionTests
     {
         _predictions.Open(Code, 1000).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
-        _predictions.Expire(1000 + NetworkEventPredictions.Ttl - 0.001);
+        _predictions.Expire(1000 + NetworkedEventPredictions.Ttl - 0.001);
 
         Assert.Equal(["guess"], _ran);
     }
@@ -91,7 +91,7 @@ public class NetworkEventPredictionTests
 
         _predictions.Refused(Code);
         _predictions.Refused(Code);
-        _predictions.Expire(NetworkEventPredictions.Ttl * 10);
+        _predictions.Expire(NetworkedEventPredictions.Ttl * 10);
 
         Assert.Equal(["guess", "undo"], _ran);
     }
@@ -127,7 +127,7 @@ public class NetworkEventPredictionTests
     {
         _predictions.Open(Code, 0);
 
-        _predictions.Expire(NetworkEventPredictions.Ttl * 10);
+        _predictions.Expire(NetworkedEventPredictions.Ttl * 10);
 
         Assert.Empty(_ran);
         Assert.Equal(0, _predictions.Outstanding);

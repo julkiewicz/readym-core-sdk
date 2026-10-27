@@ -20,11 +20,11 @@ namespace ReadyM.SDK.Tests.Events;
 /// container from every handler set this side declared for it. Generated code never names a coordinator, so
 /// this is the only place the two halves meet.
 /// </summary>
-public class NetworkEventRegistryTests
+public class NetworkedEventRegistryTests
 {
     private readonly List<string> _ran = [];
 
-    private struct Knock : INetworkEvent
+    private struct Knock : INetworkedEvent
     {
         public RelayMessageCode Code => RelayMessageCode.MinServerRpcEvent;
 
@@ -33,11 +33,11 @@ public class NetworkEventRegistryTests
         }
     }
 
-    private sealed class Contract : INetworkEventContract<Knock>
+    private sealed class Contract : INetworkedEventContract<Knock>
     {
         public RelayMessageCode Code => RelayMessageCode.MinServerRpcEvent;
 
-        public Scope Scope => Scope.Server;
+        public EventScope Scope => EventScope.Server;
 
         public Policy Policy => Policy.Anyone;
 
@@ -45,7 +45,7 @@ public class NetworkEventRegistryTests
 
         public PlayerId Target(in Knock networkEvent) => PlayerId.Invalid;
 
-        public bool TryRead(NetworkEventDispatchCore world, NetDataReader reader, out Knock networkEvent)
+        public bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out Knock networkEvent)
         {
             networkEvent = default;
 
@@ -63,7 +63,7 @@ public class NetworkEventRegistryTests
     /// Stands in for what a mod generates. The container builds it, so it takes what it needs the way a real
     /// one takes its handler classes.
     /// </summary>
-    private abstract class Handlers(Ran ran) : INetworkEventHandlers<Knock>
+    private abstract class Handlers(Ran ran) : INetworkedEventHandlers<Knock>
     {
         public abstract string Mod { get; }
 
@@ -94,7 +94,7 @@ public class NetworkEventRegistryTests
 
     private sealed class Container : DependencyContainerBase;
 
-    private Container Registered(RpcSide side, INetworkEventCoordinators coordinators)
+    private Container Registered(RpcSide side, INetworkedEventCoordinators coordinators)
     {
         var container = new Container();
 
@@ -103,15 +103,15 @@ public class NetworkEventRegistryTests
         container.RegisterSingleton<ILogger>(NullLogger.Instance);
         container.RegisterSingleton(new Ran(_ran));
 
-        NetworkEventRegistry.Declare<Knock>(new Contract());
-        NetworkEventRegistry.Handle<Owner, Knock>(RpcSide.Server);
-        NetworkEventRegistry.Handle<Rules, Knock>(RpcSide.Server);
-        NetworkEventRegistry.RegisterAll(container, side, coordinators);
+        NetworkedEventRegistry.Declare<Knock>(new Contract());
+        NetworkedEventRegistry.Handle<Owner, Knock>(RpcSide.Server);
+        NetworkedEventRegistry.Handle<Rules, Knock>(RpcSide.Server);
+        NetworkedEventRegistry.RegisterAll(container, side, coordinators);
 
         return container;
     }
 
-    private Container OnServer() => Registered(RpcSide.Server, new ServerNetworkEventCoordinators());
+    private Container OnServer() => Registered(RpcSide.Server, new ServerNetworkedEventCoordinators());
 
     [Fact]
     public void A_declared_event_gets_one_coordinator_the_container_can_build()
@@ -119,7 +119,7 @@ public class NetworkEventRegistryTests
         using var container = OnServer();
 
         Assert.Same(
-            container.Resolve<INetworkEventDispatch<Knock>>(), container.Resolve<INetworkEventDispatch<Knock>>());
+            container.Resolve<INetworkedEventDispatch<Knock>>(), container.Resolve<INetworkedEventDispatch<Knock>>());
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public class NetworkEventRegistryTests
     {
         using var container = OnServer();
 
-        container.Resolve<INetworkEventDispatch<Knock>>().Raise(default, PlayerId.Server, true);
+        container.Resolve<INetworkedEventDispatch<Knock>>().Raise(default, PlayerId.Server, true);
 
         Assert.Equal(["Owner", "Rules"], _ran);
     }
@@ -144,7 +144,7 @@ public class NetworkEventRegistryTests
 
         container.StartHostedServices();
 
-        Assert.NotNull(container.Resolve<INetworkEventDispatch<Knock>>());
+        Assert.NotNull(container.Resolve<INetworkedEventDispatch<Knock>>());
     }
 
     /// <summary>
@@ -156,8 +156,8 @@ public class NetworkEventRegistryTests
     {
         using var container = OnServer();
 
-        NetworkEventRegistry.RegisterAll(container, RpcSide.Server, new ServerNetworkEventCoordinators());
-        container.Resolve<INetworkEventDispatch<Knock>>().Raise(default, PlayerId.Server, true);
+        NetworkedEventRegistry.RegisterAll(container, RpcSide.Server, new ServerNetworkedEventCoordinators());
+        container.Resolve<INetworkedEventDispatch<Knock>>().Raise(default, PlayerId.Server, true);
 
         Assert.Equal(["Owner", "Rules"], _ran);
     }
@@ -170,11 +170,11 @@ public class NetworkEventRegistryTests
     [Fact]
     public void A_client_gets_a_coordinator_without_the_servers_handlers()
     {
-        using var container = Registered(RpcSide.Client, new ClientNetworkEventCoordinators());
+        using var container = Registered(RpcSide.Client, new ClientNetworkedEventCoordinators());
 
         container.StartHostedServices();
 
-        Assert.NotNull(container.Resolve<ClientNetworkEventCoordinator<Knock>>());
-        Assert.Empty(container.ResolveAll<INetworkEventHandlers<Knock>>());
+        Assert.NotNull(container.Resolve<ClientNetworkedEventCoordinator<Knock>>());
+        Assert.Empty(container.ResolveAll<INetworkedEventHandlers<Knock>>());
     }
 }

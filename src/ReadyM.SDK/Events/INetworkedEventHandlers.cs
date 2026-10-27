@@ -11,7 +11,7 @@ namespace ReadyM.SDK.Events;
 /// starting the next one.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public interface INetworkEventHandlers<T> where T : struct, INetworkEvent
+public interface INetworkedEventHandlers<T> where T : struct, INetworkedEvent
 {
     /// <summary>The mod these belong to, as a refusal names it and as another mod's After names it.</summary>
     string Mod { get; }

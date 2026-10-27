@@ -6,7 +6,7 @@ using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Archetypes.Core;
 using ReadyM.SDK.Events;
 using ReadyM.SDK.Server.Entities;
-using Audience = ReadyM.SDK.Attributes.Scope;
+using Audience = ReadyM.SDK.Attributes.EventScope;
 
 namespace ReadyM.SDK.Server.Events;
 
@@ -17,11 +17,11 @@ namespace ReadyM.SDK.Server.Events;
 /// </summary>
 /// <remarks>A message is the event's code, then the frame, then the payload.</remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class ServerNetworkEventTransport
+public static class ServerNetworkedEventTransport
 {
     /// <summary>Sends an accepted event to the players its scope names.</summary>
     public static void FanOut(
-        ServerNetworkEventDispatchBase dispatch,
+        ServerNetworkedEventDispatchBase dispatch,
         RelayMessageCode code,
         EventAudience audience,
         PlayerId origin,
@@ -32,7 +32,7 @@ public static class ServerNetworkEventTransport
 
         var message = Framed(code, false, origin, payload);
 
-        // Scope.Server stops here: the event was for the server, so there is nobody downstream to tell
+        // EventScope.Server stops here: the event was for the server, so there is nobody downstream to tell
         switch (audience.Kind)
         {
             case Audience.Single:
@@ -54,7 +54,7 @@ public static class ServerNetworkEventTransport
 
     /// <summary>Tells the origin alone that its event was refused, and nobody else.</summary>
     public static void Reject(
-        ServerNetworkEventDispatchBase dispatch, RelayMessageCode code, PlayerId origin, NetDataWriter payload)
+        ServerNetworkedEventDispatchBase dispatch, RelayMessageCode code, PlayerId origin, NetDataWriter payload)
     {
         // A server-raised event has no connection to reply down, and nothing is waiting on one
         if (dispatch.Relay is not { } relay || origin == PlayerId.Server)
@@ -65,7 +65,7 @@ public static class ServerNetworkEventTransport
 
     private static NetDataWriter Framed(RelayMessageCode code, bool refused, PlayerId origin, NetDataWriter payload)
     {
-        var framed = NetworkEventFrame.Write(refused, origin, payload);
+        var framed = NetworkedEventFrame.Write(refused, origin, payload);
 
         var message = new NetDataWriter();
         message.Put((byte)code);
@@ -75,7 +75,7 @@ public static class ServerNetworkEventTransport
     }
 
     /// <summary>Every connected player, for an event the whole session hears.</summary>
-    private static List<PlayerId> Everyone(ServerNetworkEventDispatchBase dispatch)
+    private static List<PlayerId> Everyone(ServerNetworkedEventDispatchBase dispatch)
     {
         var players = new List<PlayerId>();
 
@@ -92,7 +92,7 @@ public static class ServerNetworkEventTransport
     /// The players in the audience's area or cell, as the relay tracks them. A scope nobody is in leaves
     /// nobody to tell rather than throwing: the last player can leave between a raise and its acceptance.
     /// </summary>
-    private static List<PlayerId> Inside(ServerNetworkEventDispatchBase dispatch, EventAudience audience)
+    private static List<PlayerId> Inside(ServerNetworkedEventDispatchBase dispatch, EventAudience audience)
     {
         var players = new List<PlayerId>();
 

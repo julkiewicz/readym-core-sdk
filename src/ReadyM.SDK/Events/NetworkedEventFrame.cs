@@ -10,7 +10,7 @@ namespace ReadyM.SDK.Events;
 /// raised it. Both arrive on the event's own code, so a receiver cannot tell them apart without this.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class NetworkEventFrame
+public static class NetworkedEventFrame
 {
     private const byte Accepted = 0;
 
@@ -29,7 +29,7 @@ public static class NetworkEventFrame
 
     /// <summary>Reads the frame, leaving the reader on the event itself.</summary>
     /// <returns>False when the message is too short to hold one, which is a peer sending garbage.</returns>
-    public static bool TryRead(NetDataReader reader, out NetworkEventHeader header)
+    public static bool TryRead(NetDataReader reader, out NetworkedEventHeader header)
     {
         header = default;
 
@@ -42,7 +42,7 @@ public static class NetworkEventFrame
         var origin = new PlayerId();
         origin.Deserialize(reader);
 
-        header = new NetworkEventHeader(refused, origin);
+        header = new NetworkedEventHeader(refused, origin);
         return true;
     }
 }
@@ -50,7 +50,7 @@ public static class NetworkEventFrame
 /// <exclude />
 /// <summary>What a frame said.</summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public readonly struct NetworkEventHeader(bool refused, PlayerId origin)
+public readonly struct NetworkedEventHeader(bool refused, PlayerId origin)
 {
     /// <summary>Whether this is a refusal of the event rather than the event.</summary>
     public bool Refused { get; } = refused;

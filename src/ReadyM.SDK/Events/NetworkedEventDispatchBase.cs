@@ -16,13 +16,13 @@ namespace ReadyM.SDK.Events;
 /// Its members are internal on purpose: a mod never reads them, and the generated class that derives from this
 /// never does either. Only the seams in this assembly do.
 /// </remarks>
-public abstract class NetworkEventDispatchBase : NetworkEventDispatchCore, IHostedService
+public abstract class NetworkedEventDispatchBase : NetworkedEventDispatchCore, IHostedService
 {
     /// <summary>Where a raised event is sent, which is only ever the server. Set by the host.</summary>
     internal IRpcClient? Relay { get; set; }
 
     /// <summary>The guesses this client is holding, so a refusal can take the matching one back. Set by the host.</summary>
-    internal NetworkEventPredictions? Predictions { get; set; }
+    internal NetworkedEventPredictions? Predictions { get; set; }
 
     private Action<ServerEventHeader, NetDataReader>? _listener;
 

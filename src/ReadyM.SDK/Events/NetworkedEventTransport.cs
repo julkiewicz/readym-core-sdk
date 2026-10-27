@@ -12,7 +12,7 @@ namespace ReadyM.SDK.Events;
 /// else receives it, which is what lets it validate, change or stop the event before anyone hears about it.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class NetworkEventTransport
+public static class NetworkedEventTransport
 {
     /// <summary>Sends a raised event to the server.</summary>
     /// <remarks>
@@ -21,7 +21,7 @@ public static class NetworkEventTransport
     /// what the two sides of the relay already do.
     /// </remarks>
     public static void SendToServer(
-        NetworkEventDispatchBase dispatch, RelayMessageCode code, NetDataWriter payload)
+        NetworkedEventDispatchBase dispatch, RelayMessageCode code, NetDataWriter payload)
     {
         if (dispatch.Relay is { } relay)
             SendToServer(relay, code, payload);

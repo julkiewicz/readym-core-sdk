@@ -16,10 +16,10 @@ namespace ReadyM.SDK.Server.Events;
 /// must not take the server down. The coordinator drops it, the way a failed shape lookup skips an RPC handler.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class ServerNetworkEventScopes
+public static class ServerNetworkedEventScopes
 {
     /// <summary>The cell the subject is in.</summary>
-    public static bool TryCellOf(ServerNetworkEventDispatchBase dispatch, EntityHandle subject, out FullCellId cell)
+    public static bool TryCellOf(ServerNetworkedEventDispatchBase dispatch, EntityHandle subject, out FullCellId cell)
     {
         if (TryScope<Cell>(dispatch, subject, out var found))
         {
@@ -34,7 +34,7 @@ public static class ServerNetworkEventScopes
     }
 
     /// <summary>The area the subject is in.</summary>
-    public static bool TryAreaOf(ServerNetworkEventDispatchBase dispatch, EntityHandle subject, out AreaId area)
+    public static bool TryAreaOf(ServerNetworkedEventDispatchBase dispatch, EntityHandle subject, out AreaId area)
     {
         if (TryScope<Area>(dispatch, subject, out var found))
         {
@@ -53,7 +53,7 @@ public static class ServerNetworkEventScopes
     /// in a cell is in that cell's area too.
     /// </summary>
     internal static bool TryScope<TScope>(
-        ServerNetworkEventDispatchBase dispatch, EntityHandle subject, out TScope scope)
+        ServerNetworkedEventDispatchBase dispatch, EntityHandle subject, out TScope scope)
         where TScope : struct, IArchetypeQueryable, IScope
     {
         if (dispatch.Entities is { } entities)

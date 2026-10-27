@@ -17,15 +17,15 @@ namespace ReadyM.SDK.Server.Events;
 /// There is one per event, not one per mod. That is what makes a second mod's Validate able to refuse what the
 /// event's own mod would have applied, and what keeps the event going out once however many mods handle it.
 /// </remarks>
-internal sealed class ServerNetworkEventCoordinator<T>(
-    INetworkEventContract<T> contract, IEnumerable<INetworkEventHandlers<T>> mods)
-    : ServerNetworkEventDispatchBase, INetworkEventDispatch<T>
-    where T : struct, INetworkEvent
+internal sealed class ServerNetworkedEventCoordinator<T>(
+    INetworkedEventContract<T> contract, IEnumerable<INetworkedEventHandlers<T>> mods)
+    : ServerNetworkedEventDispatchBase, INetworkedEventDispatch<T>
+    where T : struct, INetworkedEvent
 {
     /// <summary>What a policy refusal names as the thing that stopped it, since no mod's handler did.</summary>
     private const string ThePolicy = "policy";
 
-    private readonly IReadOnlyList<INetworkEventHandlers<T>> _mods = NetworkEventStages.InOrder(mods);
+    private readonly IReadOnlyList<INetworkedEventHandlers<T>> _mods = NetworkedEventStages.InOrder(mods);
 
     protected override RelayMessageCode Code() => contract.Code;
 
@@ -47,7 +47,7 @@ internal sealed class ServerNetworkEventCoordinator<T>(
         var cancellation = new EventCancellation();
         var context = new EventContext(origin, raisedHere, cancellation);
 
-        if (!vouched && !ServerNetworkEventPolicy.Allows(this, contract.Policy, contract.Subject(in networkEvent), origin))
+        if (!vouched && !ServerNetworkedEventPolicy.Allows(this, contract.Policy, contract.Subject(in networkEvent), origin))
         {
             cancellation.Entering(ThePolicy);
             cancellation.Cancel(null);
@@ -56,8 +56,8 @@ internal sealed class ServerNetworkEventCoordinator<T>(
             return;
         }
 
-        NetworkEventStages.Run(_mods, Stage.Validate, ref networkEvent, context);
-        NetworkEventStages.Run(_mods, Stage.Filter, ref networkEvent, context);
+        NetworkedEventStages.Run(_mods, Stage.Validate, ref networkEvent, context);
+        NetworkedEventStages.Run(_mods, Stage.Filter, ref networkEvent, context);
 
         if (cancellation.IsCancelled)
         {
@@ -66,19 +66,19 @@ internal sealed class ServerNetworkEventCoordinator<T>(
             return;
         }
 
-        NetworkEventStages.Run(_mods, Stage.Apply, ref networkEvent, context);
-        NetworkEventStages.Run(_mods, Stage.Observe, ref networkEvent, context);
+        NetworkedEventStages.Run(_mods, Stage.Apply, ref networkEvent, context);
+        NetworkedEventStages.Run(_mods, Stage.Observe, ref networkEvent, context);
 
         // A server-scoped event was for the server, so there is nobody downstream to tell
-        if (contract.Scope != Scope.Server && TryAudience(in networkEvent, out var audience))
-            ServerNetworkEventTransport.FanOut(this, Code(), audience, origin, Written(in networkEvent));
+        if (contract.Scope != EventScope.Server && TryAudience(in networkEvent, out var audience))
+            ServerNetworkedEventTransport.FanOut(this, Code(), audience, origin, Written(in networkEvent));
     }
 
     private void Refuse(ref T networkEvent, EventContext context, EventCancellation cancellation)
     {
-        ServerNetworkEventTransport.Reject(this, Code(), context.Origin, Refused(in networkEvent, cancellation));
+        ServerNetworkedEventTransport.Reject(this, Code(), context.Origin, Refused(in networkEvent, cancellation));
 
-        NetworkEventStages.Run(_mods, Stage.Rejected, ref networkEvent, context);
+        NetworkedEventStages.Run(_mods, Stage.Rejected, ref networkEvent, context);
     }
 
     /// <summary>
@@ -89,35 +89,35 @@ internal sealed class ServerNetworkEventCoordinator<T>(
     {
         switch (contract.Scope)
         {
-            case Scope.Global:
+            case EventScope.Global:
                 audience = EventAudience.Global;
 
                 return true;
 
-            case Scope.Single:
+            case EventScope.Single:
                 audience = EventAudience.Single(contract.Target(in networkEvent));
 
                 return true;
 
-            case Scope.Area when contract.Subject(in networkEvent) is { } inArea:
-                var foundArea = ServerNetworkEventScopes.TryAreaOf(this, inArea, out var area);
+            case EventScope.Area when contract.Subject(in networkEvent) is { } inArea:
+                var foundArea = ServerNetworkedEventScopes.TryAreaOf(this, inArea, out var area);
                 audience = EventAudience.InArea(area);
 
                 return foundArea;
 
-            case Scope.Cell when contract.Subject(in networkEvent) is { } inCell:
-                var foundCell = ServerNetworkEventScopes.TryCellOf(this, inCell, out var cell);
+            case EventScope.Cell when contract.Subject(in networkEvent) is { } inCell:
+                var foundCell = ServerNetworkedEventScopes.TryCellOf(this, inCell, out var cell);
                 audience = EventAudience.InCell(cell);
 
                 return foundCell;
 
-            case Scope.Area:
-            case Scope.Cell:
+            case EventScope.Area:
+            case EventScope.Cell:
                 audience = default;
 
                 return false;
 
-            case Scope.Server:
+            case EventScope.Server:
                 audience = EventAudience.Server;
 
                 return true;

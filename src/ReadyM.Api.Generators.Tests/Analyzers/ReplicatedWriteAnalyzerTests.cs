@@ -67,7 +67,7 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
 
               public static class Use
               {
-                  public static void Run(Vitals vitals, Mood mood, Curse curse, Npc npc, INetworkEventRaise raise)
+                  public static void Run(Vitals vitals, Mood mood, Curse curse, Npc npc, INetworkedEventRaise raise)
                   {
               {{body}}
                   }

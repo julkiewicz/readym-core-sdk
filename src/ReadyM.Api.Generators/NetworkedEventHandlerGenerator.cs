@@ -18,9 +18,9 @@ namespace ReadyM.Api.Generators;
 /// what keeps the event going out to the audience once however many mods are handling it.
 /// </remarks>
 [Generator]
-internal class NetworkEventHandlerGenerator : IIncrementalGenerator
+internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
 {
-    private const string EventAttribute = "ReadyM.SDK.Attributes.NetworkEventAttribute";
+    private const string EventAttribute = "ReadyM.SDK.Attributes.NetworkedEventAttribute";
     private const string HandlerAttribute = "EventHandlerAttribute";
     private const string Events = "global::ReadyM.SDK.Events";
     private const string Stages = "global::ReadyM.SDK.Attributes.Stage";
@@ -83,7 +83,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         foreach (var group in byEvent)
             EmitHandlers(sb, (INamedTypeSymbol)group.Key!, [.. group], mod, onServer);
 
-        context.AddSource("NetworkEventHandlers.g.cs", sb.ToString());
+        context.AddSource("NetworkedEventHandlers.g.cs", sb.ToString());
 
         EmitRegistrations(context, input.Compilation, mod, byEvent, onServer);
     }
@@ -128,7 +128,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine($"{Visibility(owners)} sealed class {declared.Name}Handlers(");
         sb.AppendLine(string.Join(",\n", owners.Select(o =>
             $"    {o!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {Field(o)}")));
-        sb.AppendLine($") : {Events}.INetworkEventHandlers<{type}>");
+        sb.AppendLine($") : {Events}.INetworkedEventHandlers<{type}>");
         sb.AppendLine("{");
         sb.AppendLine($"    public string Mod => \"{mod}\";");
         sb.AppendLine();
@@ -225,7 +225,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("/// <exclude/>");
         sb.AppendLine("/// <summary>Where this mod's network event handlers are registered with the SDK.</summary>");
         sb.AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
-        sb.AppendLine("public static class NetworkEventHandlerRegistrations");
+        sb.AppendLine("public static class NetworkedEventHandlerRegistrations");
         sb.AppendLine("{");
         sb.AppendLine("    private static bool _registered;");
         sb.AppendLine();
@@ -247,14 +247,14 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
             var type = declared.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var handlers = $"global::{mod}.Generated.{declared.Name}Handlers";
 
-            sb.AppendLine($"        {Events}.NetworkEventRegistry.Handle<{handlers}, {type}>(");
+            sb.AppendLine($"        {Events}.NetworkedEventRegistry.Handle<{handlers}, {type}>(");
             sb.AppendLine($"            global::ReadyM.Api.Multiplayer.RPC.RpcSide.{side});");
         }
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        context.AddSource("NetworkEventHandlerRegistrations.g.cs", sb.ToString());
+        context.AddSource("NetworkedEventHandlerRegistrations.g.cs", sb.ToString());
     }
 
     private static string Arguments(Handler handler, int index)
@@ -272,7 +272,7 @@ internal class NetworkEventHandlerGenerator : IIncrementalGenerator
     private static void Report(
         SourceProductionContext context, Location? location, string id, string title, string message)
         => context.ReportDiagnostic(Diagnostic.Create(
-            new DiagnosticDescriptor(id, title, message, "NetworkEvent", DiagnosticSeverity.Error, true),
+            new DiagnosticDescriptor(id, title, message, "NetworkedEvent", DiagnosticSeverity.Error, true),
             location));
 
     /// <summary>
