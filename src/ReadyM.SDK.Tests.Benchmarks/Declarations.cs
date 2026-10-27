@@ -3,14 +3,14 @@ using FrifloEntity = Friflo.Engine.ECS.Entity;
 
 namespace ReadyM.SDK.Tests.Benchmarks;
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Vitality
 {
     public partial float Hp { get; set; }
     public partial float MaxHp { get; set; }
 }
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Vitality))]
 public readonly partial struct Creep
 {
@@ -36,37 +36,37 @@ public readonly struct V0Creep(FrifloEntity entity)
 
 // Five mixins, so an entity's data is spread across five components the way a real archetype's is.
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Stamina
 {
     public partial float Endurance { get; set; }
 }
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Armor
 {
     public partial int Rating { get; set; }
 }
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Speed
 {
     public partial float Pace { get; set; }
 }
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Purse
 {
     public partial int Gold { get; set; }
 }
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Morale
 {
     public partial float Spirit { get; set; }
 }
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Stamina))]
 [Include(typeof(Armor))]
 [Include(typeof(Speed))]

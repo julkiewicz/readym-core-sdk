@@ -12,17 +12,9 @@ internal static class ReplicationRules
     public static readonly DiagnosticDescriptor NothingToReplicate = new(
         "READYM009",
         "Shape has nothing to replicate",
-        "'{0}' holds no values, so there is nothing to replicate. Creating the entity already tells "
-        + "the other side it is this shape.",
-        "ReadyM",
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor ComponentCannotReplicate = new(
-        "READYM010",
-        "Replication is stated on a borrowed component",
-        "'{0}' backs '{1}' and decides for itself whether it crosses the wire. Drop [Replicated]: a "
-        + "shape cannot send a component it does not own, and a networked one already sends itself.",
+        "'{0}' holds no values of its own, so there is nothing for Replication to decide. Use Replication.None "
+        + "on a mixin, and leave it off an archetype. Creating the entity already tells the other side it is this "
+        + "shape.",
         "ReadyM",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -37,30 +29,29 @@ internal static class ReplicationRules
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor PropagationUnstated = new(
+    public static readonly DiagnosticDescriptor ReplicationUnstated = new(
         "READYM014",
-        "Replicated shape does not say how its values travel",
-        "'{0}' replicates values of its own, so it has to say how they travel between the game and "
-        + "the ECS and who may write them: add [Propagates(...)]. Left unsaid, nothing stops a "
-        + "client writing a value it does not own.",
+        "Networked archetype does not say how its own values replicate",
+        "'{0}' is networked and declares values of its own, so it has to say whether they are sent and who may "
+        + "write them: add Replication = ... to [Archetype], Replication.None to keep them local. Left unsaid, "
+        + "nothing stops a client writing a value it does not own.",
         "ReadyM",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor PropagationDisagrees = new(
+    public static readonly DiagnosticDescriptor ReplicationDisagrees = new(
         "READYM015",
-        "Propagation is stated on a borrowed component",
-        "'{0}' says it propagates as {1}, but '{2}' backs it and carries that contract itself. The "
-        + "component a shape does not own decides this, and the runtime reads it there. Drop "
-        + "[Propagates].",
+        "Replication disagrees with the component behind the shape",
+        "'{0}' says Replication.{1}, but '{2}' backs it and is Replication.{3}. The component decides, so say "
+        + "Replication.{3}.",
         "ReadyM",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor PropagationNeedsReplication = new(
+    public static readonly DiagnosticDescriptor ReplicationOnLocalArchetype = new(
         "READYM016",
-        "Propagation is stated on a shape nothing sends",
-        "'{0}' sends no values of its own. Drop [Propagates], or replicate the shape.",
+        "Replication is stated on an archetype that is not networked",
+        "'{0}' is not networked, so nothing of it is sent. Drop Replication, or make it networked.",
         "ReadyM",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -75,15 +66,6 @@ internal static class ReplicationRules
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor ReplicatedOnArchetype = new(
-        "READYM036",
-        "Archetype states replication with [Replicated]",
-        "'{0}' is an archetype, which says whether it replicates on [Archetype(replicated: ...)]. Drop "
-        + "[Replicated], which is for mixins. How its own values travel is [Archetype(..., Delivery = ...)].",
-        "ReadyM",
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
     public static readonly DiagnosticDescriptor ValueCannotBeSent = new(
         "READYM046",
         "Replicated value cannot be sent",
@@ -94,22 +76,48 @@ internal static class ReplicationRules
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    /// <summary>What a shape says about propagating, and whether it is in a position to say it.</summary>
-    public static ImmutableArray<Diagnostic> CheckPropagation(DeclarationModel model)
+    public static readonly DiagnosticDescriptor DeliveryWithoutReplication = new(
+        "READYM050",
+        "Delivery is stated on a shape that sends nothing of its own",
+        "'{0}' sends no values of its own, so it has no Delivery to choose. Drop Delivery.",
+        "ReadyM",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>What a shape states about replicating, and whether it is in a position to state it.</summary>
+    public static ImmutableArray<Diagnostic> CheckStated(DeclarationModel model)
     {
+        var found = new List<Diagnostic>();
         var at = model.Symbol.Locations.FirstOrDefault() ?? Location.None;
+        var stated = model.Replication;
+        var holdsValues = model.Accessors.Count > 0;
 
-        if (model.Propagation is not { } propagation)
-            // A shape over a component it does not own takes that component's word for it.
-            return model.IsReplicated && model.EmitsComponent
-                ? [Diagnostic.Create(PropagationUnstated, at, model.Name)]
-                : [];
+        if (model.IsArchetype && model.Networked == false)
+        {
+            if (stated is not null)
+                found.Add(Diagnostic.Create(ReplicationOnLocalArchetype, at, model.Name));
+        }
+        else if (model.IsArchetype && holdsValues && stated is null)
+        {
+            found.Add(Diagnostic.Create(ReplicationUnstated, at, model.Name));
+        }
+        else if (model.ExplicitComponent is { } component)
+        {
+            // A shape over a component it does not own says what that component does, and is held to it
+            var actual = DeclarationModel.ReplicationOf(component);
 
-        if (model.ExplicitComponent is { } component)
-            return [Diagnostic.Create(PropagationDisagrees, at, model.Name, propagation, component.ToDisplayString())];
+            if (stated is { } said && said != actual)
+                found.Add(Diagnostic.Create(ReplicationDisagrees, at, model.Name, said, component.ToDisplayString(), actual));
+        }
+        else if (!holdsValues && stated is { } said && (model.IsArchetype || said != Replication.None))
+        {
+            found.Add(Diagnostic.Create(NothingToReplicate, at, model.Name));
+        }
 
-        // Nothing sends a local shape's values, so nothing has to be stopped from writing them.
-        return model.IsReplicated ? [] : [Diagnostic.Create(PropagationNeedsReplication, at, model.Name)];
+        if (model.StatesDelivery && !(model.ExplicitComponent is null && model.IsReplicated))
+            found.Add(Diagnostic.Create(DeliveryWithoutReplication, at, model.Name));
+
+        return [.. found];
     }
 
     public static ImmutableArray<Diagnostic> Check(DeclarationModel model)
@@ -117,14 +125,8 @@ internal static class ReplicationRules
         var found = new List<Diagnostic>();
         var at = model.Symbol.Locations.FirstOrDefault() ?? Location.None;
 
-        // Everything below that reads [Replicated] is then about a mixin.
-        if (model.IsArchetype && model.HasReplicatedAttribute)
-            return [Diagnostic.Create(ReplicatedOnArchetype, at, model.Name)];
-
-        if (model.ExplicitComponent is { } component)
-            return model.HasReplicatedAttribute
-                ? [Diagnostic.Create(ComponentCannotReplicate, at, component.ToDisplayString(), model.Name)]
-                : [];
+        if (model.ExplicitComponent is not null)
+            return [];
 
         // The collection rules hold whether or not the shape asked to replicate, because what a collection
         // is reachable by, and what nothing is reachable by, is decided before anything is sent.
@@ -144,9 +146,6 @@ internal static class ReplicationRules
                 found.Add(Diagnostic.Create(ValueCannotBeSent, declared, model.Name, accessor.Name,
                     property.Type.ToDisplayString()));
         }
-
-        if (model.HasReplicatedAttribute && model.Accessors.Count == 0)
-            found.Add(Diagnostic.Create(NothingToReplicate, at, model.Name));
 
         return [.. found];
     }

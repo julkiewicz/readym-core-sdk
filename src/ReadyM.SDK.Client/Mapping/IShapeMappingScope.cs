@@ -10,7 +10,7 @@ public interface IShapeMappingScope<TShape, out TContext>
     /// <summary>
     /// Declare a mapping between a single shape field and a single context object. Leaving out the
     /// push says the game owns the value and will not be told: a shape declaring
-    /// <c>Propagation.ToEcsOnly</c> has nothing to push.
+    /// <c>Replication.ToEcsOnly</c> has nothing to push.
     /// </summary>
     IShapeMappingScope<TShape, TContext> Map<TValue>(
         Value<TShape, TValue> value,

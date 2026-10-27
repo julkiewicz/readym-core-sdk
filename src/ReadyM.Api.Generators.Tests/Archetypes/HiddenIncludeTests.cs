@@ -32,27 +32,26 @@ public class HiddenIncludeTests(ITestOutputHelper output)
         namespace Mod;
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Plumbing
         {
             public partial int Seq { get; set; }
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [ArchetypeMixin]
-        [Replicated]
+        [ArchetypeMixin(Replication.OwnershipBased)]
         public readonly partial struct Intents
         {
             public partial global::Yooni.Native.Container.NativeList<int> Entries { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Health
         {
             public partial float Value { get; set; }
         }
 
-        [Archetype(replicated: false)]
+        [Archetype(Networked = false)]
         [Include(typeof(Plumbing))]
         [Include(typeof(Intents))]
         [Include(typeof(Health))]

@@ -59,7 +59,7 @@ internal static class HandleEmitter
         // what carries the archetype's word on replicating to the create call.
         if (model.IsArchetype)
         {
-            var replicated = model.DeclaredReplicated == true ? "true" : "false";
+            var replicated = model.Networked == true ? "true" : "false";
 
             return sets.Count == 0
                 ? $"{ArchetypeNames.ComponentSet}.Archetype({replicated})"

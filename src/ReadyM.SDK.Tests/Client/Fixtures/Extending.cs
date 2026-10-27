@@ -42,14 +42,14 @@ internal struct SequencesComponent : IComponent
     public void StartedNotifyChanged(int id) => _changes++;
 }
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 [Extends(typeof(CoreArea))]
 [ExplicitComponent(typeof(SequencesComponent))]
 [ExplicitCollection("Started")]
 public readonly partial struct Sequences;
 
 /// <summary>The archetype a core exposes, which mods extend without redeclaring.</summary>
-[Archetype(replicated: true)]
+[Archetype(Replication = Replication.None)]
 [ExplicitComponent(typeof(CoreMetadataComponent))]
 public readonly partial struct CoreArea
 {
@@ -57,7 +57,7 @@ public readonly partial struct CoreArea
 }
 
 /// <summary>A mod adding its own mixin to every area it creates.</summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 [Extends(typeof(CoreArea))]
 public readonly partial struct Weather
 {
@@ -65,7 +65,7 @@ public readonly partial struct Weather
 }
 
 /// <summary>A second mod doing the same, which must not collide with the first.</summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 [Extends(typeof(CoreArea))]
 public readonly partial struct Music
 {
@@ -73,7 +73,7 @@ public readonly partial struct Music
 }
 
 /// <summary>An archetype that includes a shape carrying a collection, to check flattening.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Sequences))]
 public readonly partial struct Cutscene
 {
@@ -81,7 +81,7 @@ public readonly partial struct Cutscene
 }
 
 /// <summary>A mod adding values that read as if CoreArea had always carried them.</summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 [Extends(typeof(CoreArea))]
 public readonly partial struct Climate
 {
@@ -91,17 +91,15 @@ public readonly partial struct Climate
 }
 
 /// <summary>The same, under a prefix, so two mods can both add a Temperature.</summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 [Extends(typeof(CoreArea), "Ambient")]
 public readonly partial struct Soundscape
 {
     public partial int Temperature { get; set; }
 }
 
-/// <summary>A mixin whose values go over the wire, which is the whole of what [Replicated] asks for.</summary>
-[ArchetypeMixin]
-[Replicated]
-[Propagates(Propagation.OwnershipBased)]
+/// <summary>A mixin whose values go over the wire, which is the whole of what a replicating Replication asks for.</summary>
+[ArchetypeMixin(Replication.OwnershipBased)]
 public readonly partial struct Telemetry
 {
     public partial int Ticks { get; set; }
@@ -113,8 +111,7 @@ public readonly partial struct Telemetry
 /// An archetype carrying the replicated mixin, so an entity can exist to write through. Its own value
 /// replicates with it, because a replicated archetype sends what it declares itself.
 /// </summary>
-[Archetype(replicated: true)]
-[Propagates(Propagation.OwnershipBased)]
+[Archetype(Replication = Replication.OwnershipBased)]
 [Include(typeof(Telemetry))]
 [Include(typeof(Roster))]
 public readonly partial struct Rig
@@ -123,9 +120,7 @@ public readonly partial struct Rig
 }
 
 /// <summary>Replaced often enough that a lost change is corrected by the next one.</summary>
-[ArchetypeMixin]
-[Replicated(Delivery.Unreliable)]
-[Propagates(Propagation.OwnershipBased)]
+[ArchetypeMixin(Replication.OwnershipBased, Delivery = Delivery.Unreliable)]
 public readonly partial struct Motion
 {
     public partial float Speed { get; set; }
@@ -135,7 +130,7 @@ public readonly partial struct Motion
 /// A shape over storage that already replicates. It says nothing about replicating; the component
 /// does, and the shape inherits it.
 /// </summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.OwnershipBased)]
 [Extends(typeof(CoreArea))]
 [ExplicitComponent(typeof(global::ReadyM.Api.Multiplayer.ECS.Components.EmptyScopeDeletionComponent))]
 public readonly partial struct Perishable;
@@ -144,9 +139,7 @@ public readonly partial struct Perishable;
 /// A replicated shape holding a native collection. Its component gets setter methods rather than a
 /// property for that value, so the accessors have to write it the other way round.
 /// </summary>
-[ArchetypeMixin]
-[Replicated]
-[Propagates(Propagation.OwnershipBased)]
+[ArchetypeMixin(Replication.OwnershipBased)]
 public readonly partial struct Roster
 {
     public partial int Size { get; set; }
@@ -158,8 +151,7 @@ public readonly partial struct Roster
 /// An archetype taking the same mixin twice over is not possible, so the prefix earns its place on
 /// a single include: the collection's members have to land under it too.
 /// </summary>
-[Archetype(replicated: true)]
-[Propagates(Propagation.OwnershipBased)]
+[Archetype(Replication = Replication.OwnershipBased)]
 [Include(typeof(Roster), "Crew")]
 public readonly partial struct Barge
 {
@@ -170,9 +162,7 @@ public readonly partial struct Barge
 /// A mixin carrying a collection and extending an archetype under a prefix, which is the pair the
 /// prefix has to reach: the values it declares and the members its collection forwards.
 /// </summary>
-[ArchetypeMixin]
-[Replicated]
-[Propagates(Propagation.OwnershipBased)]
+[ArchetypeMixin(Replication.OwnershipBased)]
 [Extends(typeof(CoreArea), "Guest")]
 public readonly partial struct Ledgered
 {
@@ -183,24 +173,24 @@ public readonly partial struct Ledgered
 
 /// <summary>
 /// The shape of a mod's own thing built entirely from storage the game owns and already sends: no
-/// component of its own, nothing declared [Replicated], and still an entity the other side has to
+/// component of its own, nothing of its own to replicate, and still an entity the other side has to
 /// hear about. Oblivion's Furniture is this shape.
 /// </summary>
-[Archetype(replicated: true)]
+[Archetype]
 [Include(typeof(Perishable))]
 public readonly partial struct Borrowed;
 
 /// <summary>A replicating shape no game registers an archetype for, which is the case a create has to refuse.</summary>
-[Archetype(replicated: true)]
+[Archetype]
 [Include(typeof(Telemetry))]
 public readonly partial struct Unbound;
 
 /// <summary>Rig's replicated mixin on an entity that stays on this side, and needs no binding for it.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Telemetry))]
 public readonly partial struct Gauge;
 
 /// <summary>Replicated with nothing that sends, so the entity is the whole of what crosses.</summary>
-[Archetype(replicated: true)]
+[Archetype]
 [Include(typeof(Placement))]
 public readonly partial struct Signpost;

@@ -5,7 +5,7 @@ using ReadyM.SDK.Attributes;
 namespace ReadyM.SDK.Archetypes.Core;
 
 /// <summary>A scope for one connected player, from connecting until disconnecting.</summary>
-[Archetype(replicated: true)]
+[Archetype(Replication = Replication.OwnershipBased)]
 [ExplicitComponent(typeof(PlayerScopeComponent))]
 public readonly partial struct Player : IScope
 {

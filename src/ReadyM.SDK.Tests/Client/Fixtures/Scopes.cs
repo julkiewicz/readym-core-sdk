@@ -13,24 +13,24 @@ internal struct TestAreaScopeComponent : IIndexedComponent<int>
 }
 
 /// <summary>An archetype declaring itself a scope, which is all IScope asks for.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [ExplicitComponent(typeof(TestAreaScopeComponent))]
 public readonly partial struct TestArea : IScope
 {
     public partial int AreaId { get; set; }
 }
 
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Patrol
 {
     public partial int Route { get; set; }
 }
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Health))]
 [Include(typeof(Patrol))]
 public readonly partial struct Guard;
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Health))]
 public readonly partial struct Critter;

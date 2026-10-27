@@ -7,7 +7,7 @@ namespace ReadyM.SDK.Tests.Client.Fixtures;
 /// Includes a mixin and an archetype declared in another assembly, whose components this assembly
 /// cannot name.
 /// </summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Placement))]
 [Include(typeof(Wallet))]
 [IncludeArchetype(typeof(Merchant))]

@@ -71,10 +71,11 @@ internal class ArchetypeGenerator : IIncrementalGenerator
             .AddRange(ReplicationRules.Check(model))
             .AddRange(InternedShapeRules.Check(model))
             .AddRange(IncludeRules.Check(model))
+            .AddRange(ShapeAttributeRules.Check(model))
             .AddRange(QuantizedShapeRules.Check(model))
             .AddRange(CreateHandlerEmitter.Check(model))
             .AddRange(DeleteHandlerEmitter.Check(model))
-            .AddRange(ReplicationRules.CheckPropagation(model));
+            .AddRange(ReplicationRules.CheckStated(model));
         // Accessors reachable from a chunk go on whenever the server SDK is there, because another
         // declaration may include this one. The view itself needs this shape to be walkable.
         var chunks = ChunkNames.Resolve(compilation);
@@ -179,7 +180,8 @@ internal class ArchetypeGenerator : IIncrementalGenerator
             AccessorEmitter.Forwarded(writer, forward, model.QualifiedAccessors);
 
         foreach (var (include, forward) in model.FlattenedForwards())
-            AccessorEmitter.Forwarded(writer, forward, include.Accessors, include.Named(forward), include.IsHidden);
+            AccessorEmitter.Forwarded(writer, forward, include.Accessors, include.Named(forward), include.IsHidden,
+                forward.IsComputed ? ArchetypeNames.DocSource(include.Type, forward.Name) : null);
     }
 
     /// <summary>Accessors of everything included, flattened onto the archetype.</summary>

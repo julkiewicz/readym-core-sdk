@@ -28,9 +28,7 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
 
         namespace Mod;
 
-        [ArchetypeMixin]
-        [Replicated]
-        [Propagates(Propagation.OwnershipBased)]
+        [ArchetypeMixin(Replication.OwnershipBased)]
         public readonly partial struct Vitals
         {
             public partial int Hp { get; set; }
@@ -38,13 +36,13 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
             private partial global::Yooni.Native.Container.NativeList<int> Marks { get; set; }
         }
 
-        [ArchetypeMixin]
+        [ArchetypeMixin(Replication.None)]
         public readonly partial struct Mood
         {
             public partial int Cheer { get; set; }
         }
 
-        [Archetype(replicated: false)]
+        [Archetype(Networked = false)]
         [Include(typeof(Vitals))]
         [Include(typeof(Mood))]
         public readonly partial struct Npc;

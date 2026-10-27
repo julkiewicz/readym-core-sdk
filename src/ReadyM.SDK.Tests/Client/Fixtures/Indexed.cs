@@ -4,7 +4,7 @@ using ReadyM.SDK.Attributes;
 namespace ReadyM.SDK.Tests.Client.Fixtures;
 
 /// <summary>Indexed by a property the SDK declares, so the component behind it is generated.</summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 public readonly partial struct Registered
 {
     [Index]
@@ -23,7 +23,7 @@ internal struct CoreTagComponent : IIndexedComponent<string>
 }
 
 /// <summary>Indexed because the component it borrows already is.</summary>
-[ArchetypeMixin]
+[ArchetypeMixin(Replication.None)]
 [ExplicitComponent(typeof(CoreTagComponent))]
 public readonly partial struct Tagged
 {
@@ -31,13 +31,13 @@ public readonly partial struct Tagged
     public partial int Weight { get; set; }
 }
 
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 [Include(typeof(Registered))]
 [Include(typeof(Tagged))]
 public readonly partial struct Ticketed;
 
 /// <summary>An archetype indexed by its own property.</summary>
-[Archetype(replicated: false)]
+[Archetype(Networked = false)]
 public readonly partial struct Station
 {
     [Index]
@@ -48,9 +48,7 @@ public readonly partial struct Station
 /// Replicated as well as indexed, so its values are reachable through tokens. That is the pair the
 /// token has to write back whole, the way an indexed setter does.
 /// </summary>
-[ArchetypeMixin]
-[Replicated]
-[Propagates(Propagation.OwnershipBased)]
+[ArchetypeMixin(Replication.OwnershipBased)]
 public readonly partial struct Berth
 {
     [Index]
@@ -59,6 +57,6 @@ public readonly partial struct Berth
     public partial int Deck { get; set; }
 }
 
-[Archetype(replicated: true)]
+[Archetype]
 [Include(typeof(Berth))]
 public readonly partial struct Docked;

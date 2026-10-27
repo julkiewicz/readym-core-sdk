@@ -5,7 +5,7 @@ using ReadyM.SDK.Attributes;
 namespace ReadyM.SDK.Archetypes.Core;
 
 /// <summary>A scope for one area of the world, holding what is in it while players are there.</summary>
-[Archetype(replicated: true)]
+[Archetype(Replication = Replication.OwnershipBased)]
 [ExplicitComponent(typeof(AreaScopeComponent))]
 public readonly partial struct Area : IScope
 {

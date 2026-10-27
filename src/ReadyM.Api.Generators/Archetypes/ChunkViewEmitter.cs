@@ -156,6 +156,10 @@ internal static class ChunkViewEmitter
             foreach (var forward in model.Forwards)
                 AccessorEmitter.ForwardedFromChunk(writer, forward, model.QualifiedAccessors, own.Field);
 
+        foreach (var computed in model.Computed)
+            AccessorEmitter.ForwardedFromChunk(writer, computed, model.QualifiedAccessors, field: "",
+                docSource: ArchetypeNames.DocSource(model.Symbol, computed.Name));
+
         foreach (var (include, forward) in model.FlattenedForwards())
         {
             var slot = slots.FirstOrDefault(candidate =>
@@ -163,7 +167,8 @@ internal static class ChunkViewEmitter
 
             if (slot is not null)
                 AccessorEmitter.ForwardedFromChunk(
-                    writer, forward, include.Accessors, slot.Field, include.Named(forward), include.IsHidden);
+                    writer, forward, include.Accessors, slot.Field, include.Named(forward), include.IsHidden,
+                    forward.IsComputed ? ArchetypeNames.DocSource(include.Type, forward.Name) : null);
         }
     }
 

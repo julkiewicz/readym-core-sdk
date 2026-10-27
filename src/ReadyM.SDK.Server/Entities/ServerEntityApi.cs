@@ -155,7 +155,7 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
                 $"{shape} is declared replicated, but this game registers no archetype for it. Bind it "
                 + "with IArchetypeShapeBindings on both the client and the server, or the entity would "
                 + "reach the other side under an id only this one knows. An archetype that never leaves "
-                + "this side is [Archetype(replicated: false)].");
+                + "this side is [Archetype(Networked = false)].");
 
         return null;
     }
