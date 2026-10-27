@@ -89,7 +89,7 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
         var reported = SourceGeneratorTestHelper.Analyze(
             result.OutputCompilation, new ReplicatedWriteAnalyzer(), properties);
 
-        return [.. reported.Where(diagnostic => diagnostic.Id is "READYM017" or "READYM019" or "READYM020")];
+        return [.. reported.Where(diagnostic => diagnostic.Id is "READYM017" or "READYM019")];
     }
 
     [Fact]
@@ -136,43 +136,39 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
     // -- a value a client may guess at ---------------------------------------------------------------
 
     /// <summary>
-    /// The one replicated value a client writes, and the one place it may: inside the callback guessing it,
-    /// where the write is held beside the entity until the server answers and never reaches the component.
+    /// A guess is its own call, so writing one is the ordinary refusal. What changes is where it sends the
+    /// reader: a mapping is not what they want, and the guess is.
     /// </summary>
     [Fact]
-    public void A_guessed_value_is_written_inside_the_guess()
-        => Assert.Empty(Report("        raise.Predicting(() => curse.Active = true);"));
-
-    [Fact]
-    public void The_same_write_on_a_projection_of_it_is_allowed_too()
-        => Assert.Empty(Report("        raise.Predicting(() => npc.CurseActive = true);"));
-
-    /// <summary>
-    /// Written anywhere else it would stand forever, because nothing is waiting on an answer to take it
-    /// back. READYM020 rather than 017: the value is writable here, just not from there.
-    /// </summary>
-    [Fact]
-    public void A_guessed_value_written_outside_a_guess_is_an_error()
+    public void Writing_a_guessable_value_sends_the_reader_to_the_guess()
     {
         var reported = Assert.Single(Report("        curse.Active = true;"));
 
-        Assert.Equal("READYM020", reported.Id);
+        Assert.Equal("READYM017", reported.Id);
+        Assert.Contains("PredictActive", reported.GetMessage());
+        Assert.DoesNotContain("Pull", reported.GetMessage());
     }
 
+    /// <summary>Its unmarked neighbour has nowhere else to go, so it is sent where it always was.</summary>
     [Fact]
-    public void A_guessed_value_written_in_some_other_callback_is_an_error()
-        => Assert.Single(Report("        System.Action run = () => curse.Active = true;"));
+    public void Writing_the_value_beside_it_sends_the_reader_to_a_mapping()
+    {
+        var reported = Assert.Single(Report("        curse.Turns = 3;"));
+
+        Assert.Contains("Pull", reported.GetMessage());
+        Assert.DoesNotContain("Predict", reported.GetMessage());
+    }
 
     /// <summary>
-    /// A guess is only ever at a value the attribute marks. Its unmarked neighbour is the server's alone
-    /// wherever it is written, inside the callback included.
+    /// Guessing is a call of its own, so there is nothing to decide about where it was called from. Whether
+    /// a write is a guess is a question about control flow, which is why the setter does not answer it.
     /// </summary>
     [Fact]
-    public void A_value_beside_it_that_is_not_marked_is_still_the_servers()
+    public void Guessing_at_it_is_left_alone_wherever_it_is_done()
     {
-        var reported = Assert.Single(Report("        raise.Predicting(() => curse.Turns = 3);"));
-
-        Assert.Equal("READYM017", reported.Id);
+        Assert.Empty(Report("        curse.PredictActive(true);"));
+        Assert.Empty(Report("        raise.Predicting(() => curse.PredictActive(true));"));
+        Assert.Empty(Report("        npc.PredictCurseActive(true);"));
     }
 
     /// <summary>The server writes the value itself, so nothing there is a guess.</summary>

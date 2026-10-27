@@ -43,7 +43,7 @@ internal static class AccessorEmitter
             writer.Line($"public static bool Has(in {ArchetypeNames.EntityHandle} handle) => handle.HasComponent<{component}>();");
 
             foreach (var accessor in model.Accessors)
-                Members(writer, accessor, component, model.IndexedBy, model.IsReplicated);
+                Members(writer, accessor, component, model.IndexedBy, model.IsReplicated, model.Name);
 
             foreach (var forward in model.Forwards)
                 Forward(writer, forward, component);
@@ -197,7 +197,8 @@ internal static class AccessorEmitter
         AccessorModel accessor,
         string component,
         string? indexedBy,
-        bool replicated)
+        bool replicated,
+        string declaring)
     {
         var access = $"handle.GetComponent<{component}>().{accessor.Field}";
         var read = accessor.Read(access);
@@ -211,7 +212,8 @@ internal static class AccessorEmitter
         if (accessor.IsPredictable)
         {
             writer.Line();
-            writer.Line($"private static readonly {ArchetypeNames.Guesses}<{accessor.Type}> {Guesses(accessor)} = new();");
+            writer.Line($"private static readonly {ArchetypeNames.Guesses}<{accessor.Type}> {Guesses(accessor)}");
+            writer.Line($"    = new(\"{declaring}.{accessor.Name}\");");
         }
 
         writer.Line();
@@ -236,21 +238,7 @@ internal static class AccessorEmitter
             writer.Line();
             writer.Line($"public static void Set{accessor.Name}(in {ArchetypeNames.EntityHandle} handle, {accessor.Type} value)");
 
-            if (indexedBy is null && accessor.IsPredictable)
-            {
-                using (writer.Braces(string.Empty))
-                {
-                    // A guess is held beside the entity and never reaches the component, which is what
-                    // lets a client write a value the server owns without any of it leaving the machine.
-                    writer.Line($"if ({Guesses(accessor)}.Guessing(handle, value))");
-                    writer.Line("    return;");
-                    writer.Line();
-                    writer.Line(marked
-                        ? $"handle.Write({Entry(accessor, component)}, value, {ArchetypeNames.WriteKind}.Mirror);"
-                        : $"{write};");
-                }
-            }
-            else if (indexedBy is null)
+            if (indexedBy is null)
             {
                 writer.Line(marked
                     ? $"    => handle.Write({Entry(accessor, component)}, value, {ArchetypeNames.WriteKind}.Mirror);"
@@ -278,6 +266,17 @@ internal static class AccessorEmitter
                     writer.Line($"handle.ReplaceIndexed<{component}, {indexedBy}>(updated);");
                 }
             }
+        }
+
+        if (accessor.IsPredictable)
+        {
+            // Its own call rather than a second meaning for the setter. Whether a write is a guess is a
+            // question about where control came from, which neither the compiler nor an analyzer can answer:
+            // a helper called from inside the callback looks the same as one called from anywhere else.
+            writer.Line();
+            writer.Line($"public static void Predict{accessor.Name}("
+                        + $"in {ArchetypeNames.EntityHandle} handle, {accessor.Type} value)");
+            writer.Line($"    => {Guesses(accessor)}.Guess(handle, value);");
         }
 
         writer.Line();

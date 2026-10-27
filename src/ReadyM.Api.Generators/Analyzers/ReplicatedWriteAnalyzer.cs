@@ -17,7 +17,7 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         "READYM017",
         "Replicated value is written directly",
-        "'{0}.{1}' is replicated - declare a mapping and use \"Pull\", or override the value",
+        "'{0}.{1}' is replicated - {2}",
         "ReadyM",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -36,19 +36,7 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
             + "the rule it keeps is the one a value keeps. A handler declared for it is handed the "
             + "collection to work, which is where a client changes one.");
 
-    private static readonly DiagnosticDescriptor Guess = new(
-        "READYM020",
-        "Guessed value is written outside .Predicting()",
-        "'{0}.{1}' is the server's to set, and a client may only guess at it. Move the write inside "
-        + ".Predicting() on the raise it is guessing at.",
-        "ReadyM",
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description: "A [Predictable] value keeps its setter on a client so a guess can be written, and "
-            + "a guess is held beside the entity until the server answers. Written anywhere else the same "
-            + "line would stand forever with nothing to take it back.");
-
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule, Collection, Guess];
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule, Collection];
 
     public override void Initialize(AnalysisContext context)
     {
@@ -112,33 +100,26 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
 
         if (target is not IPropertyReferenceOperation { Property: { SetMethod: not null } property }
             || property.ContainingType is not { } shape
+            || !replicates.GetOrAdd(shape, Replicates)
             || Authoring(context.ContainingSymbol))
-            return;
-
-        // A guessed value is the one replicated value a client writes. It is allowed exactly inside the
-        // callback that guesses it, where it never reaches the component, and nowhere else.
-        if (Guessable(property))
-        {
-            if (!Inside(target.Syntax, "Predicting", "INetworkEventRaise", context))
-                context.ReportDiagnostic(Diagnostic.Create(
-                    Guess, target.Syntax.GetLocation(), shape.Name, property.Name));
-
-            return;
-        }
-
-        if (!replicates.GetOrAdd(shape, Replicates))
             return;
 
         if (Inside(target.Syntax, "Map", "IShapeMappingScope", context))
             return;
 
+        // A guessable value has somewhere else to go, so say so rather than sending the reader to a
+        // mapping they do not want.
+        var instead = Guessable(property)
+            ? $"guess at it with Predict{property.Name} inside .Predicting()"
+            : "declare a mapping and use \"Pull\", or override the value";
+
         context.ReportDiagnostic(Diagnostic.Create(
-            Rule, target.Syntax.GetLocation(), shape.Name, property.Name));
+            Rule, target.Syntax.GetLocation(), shape.Name, property.Name, instead));
     }
 
     /// <summary>
-    /// Whether a client may guess at this value. The mark travels on the member, because a projection of it
-    /// sits on a shape that says nothing about where the value came from.
+    /// Whether a client may guess at this value, which only changes what the refusal tells them to do
+    /// instead. Read off the declaration a mod wrote, which is the only place the setter survives.
     /// </summary>
     private static bool Guessable(IPropertySymbol property)
         => property.GetAttributes().Any(attribute => attribute.AttributeClass?.Name == "PredictableAttribute");

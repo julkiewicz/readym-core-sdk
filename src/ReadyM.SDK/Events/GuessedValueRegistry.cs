@@ -13,7 +13,7 @@ namespace ReadyM.SDK.Events;
 /// in one process never read each other's guesses.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public sealed class GuessedValueRegistry<T>
+public sealed class GuessedValueRegistry<T>(string member)
 {
     private readonly Dictionary<EntityHandle, T> _guessed = new();
 
@@ -31,19 +31,22 @@ public sealed class GuessedValueRegistry<T>
     }
 
     /// <summary>
-    /// Takes the write as a guess, where one is being made. Nothing reaches the entity, and the value is
-    /// dropped when the guess is: the read then falls through to whatever the server says at that moment.
+    /// Holds the value as a guess. Nothing reaches the entity, and it is dropped when the guess is: the read
+    /// then falls through to whatever the server says at that moment.
     /// </summary>
-    /// <returns>Whether this was a guess, and so whether the caller's own write must not happen.</returns>
-    public bool Guessing(in EntityHandle handle, T value)
+    /// <exception cref="InvalidOperationException">
+    /// Nothing is being guessed at here, so there is no raise waiting on an answer to take this back and it
+    /// would stand for the rest of the session.
+    /// </exception>
+    public void Guess(in EntityHandle handle, T value)
     {
         if (!NetworkEventGuesses.Taking)
-            return false;
+            throw new InvalidOperationException(
+                $"'{member}' can only be guessed at inside the callback handed to .Predicting() on the raise "
+                + "being guessed at. Nothing here is waiting on an answer that would take the guess back.");
 
         var entity = handle;
         _guessed[entity] = value;
         NetworkEventGuesses.Took(() => _guessed.Remove(entity));
-
-        return true;
     }
 }

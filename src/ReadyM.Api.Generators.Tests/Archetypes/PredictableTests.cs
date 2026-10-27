@@ -23,8 +23,6 @@ public class PredictableTests(ITestOutputHelper output)
 
     private const string Guesses = "global::ReadyM.SDK.Events.GuessedValueRegistry";
 
-    private const string Mark = "[global::ReadyM.SDK.Attributes.Predictable]";
-
     private const string Shapes =
         """
         [ArchetypeMixin(Replication.ServerAuthoritative)]
@@ -50,7 +48,8 @@ public class PredictableTests(ITestOutputHelper output)
     {
         var generated = Generated(Run(Shapes));
 
-        Assert.Contains($"private static readonly {Guesses}<bool> ActiveGuesses = new();", generated);
+        Assert.Contains($"private static readonly {Guesses}<bool> ActiveGuesses", generated);
+        Assert.Contains("= new(\"Curse.Active\");", generated);
         Assert.DoesNotContain("TurnsGuesses", generated);
     }
 
@@ -64,16 +63,30 @@ public class PredictableTests(ITestOutputHelper output)
             "=> ActiveGuesses.TryGet(handle, out var guessed) ? guessed :", Generated(Run(Shapes)));
 
     /// <summary>
-    /// Nothing reaches the component while a guess is being made, which is the whole of why a client is
-    /// allowed to write a value the server owns.
+    /// Guessing is a call of its own, never a second meaning for the setter. Whether a write is a guess is
+    /// a question about where control came from, and a helper called from inside the callback that guesses
+    /// looks exactly like one called from anywhere else.
     /// </summary>
     [Fact]
-    public void The_setter_holds_the_guess_instead_of_writing_it()
+    public void Guessing_at_it_is_its_own_call()
     {
         var generated = Generated(Run(Shapes));
 
-        Assert.Contains("if (ActiveGuesses.Guessing(handle, value))", generated);
-        Assert.Contains("    return;", generated);
+        Assert.Contains("public static void PredictActive(", generated);
+        Assert.Contains("=> ActiveGuesses.Guess(handle, value);", generated);
+        Assert.DoesNotContain("PredictTurns", generated);
+    }
+
+    /// <summary>The setter keeps meaning the write it always meant, on both sides.</summary>
+    [Fact]
+    public void The_setter_is_left_alone()
+    {
+        var generated = Generated(Run(Shapes));
+
+        Assert.DoesNotContain("ActiveGuesses.Guess(handle, value))", generated);
+        Assert.Contains(
+            "public static void SetActive(in global::ReadyM.SDK.Entities.EntityHandle handle, bool value)",
+            generated);
     }
 
     /// <summary>A read that cannot see the guess is a wrong value, so every read of it merges.</summary>
@@ -101,30 +114,29 @@ public class PredictableTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// The mark travels onto every projection of the value, because the shape it came from is not reachable
-    /// from the archetype it was projected onto and the analyzer has only the member to go on.
+    /// Every way of reaching the value can guess at it, under the name the value is reached by there. A
+    /// projection that could not be guessed at would send a mod looking for the shape behind it.
     /// </summary>
     [Fact]
-    public void Every_projection_of_it_is_marked_for_the_analyzer()
+    public void Every_projection_of_it_can_be_guessed_at_under_its_own_name()
     {
         var generated = Generated(Run(Shapes));
 
-        Assert.Contains($"{Mark}\n    public bool CurseActive", generated);
-        Assert.DoesNotContain($"{Mark}\n    public int CurseTurns", generated);
+        Assert.Contains("public void PredictActive(bool value)", generated);
+        Assert.Contains("public void PredictCurseActive(bool value)", generated);
     }
 
     /// <summary>
-    /// A client is normally kept away from a replicated setter and writes through a mapping instead. The one
-    /// it may write is this one, so the setter has to still be there for the guess to go through.
+    /// A client is kept away from a replicated setter and writes through a mapping instead, which the guess
+    /// does not change: guessing is the separate call, so the setter needs no exception made for it.
     /// </summary>
     [Fact]
-    public void A_client_keeps_the_setter_it_is_otherwise_kept_from()
+    public void A_client_is_kept_from_the_setter_and_still_gets_the_guess()
     {
         var client = Generated(Run(Shapes, runtime: "Client"));
 
-        Assert.Contains("public bool CurseActive", client);
-        Assert.Contains("set => ", client);
-        Assert.DoesNotContain("public int CurseTurns\n    {", client);
+        Assert.Contains("public bool CurseActive => global::Mod.CurseAccessors.GetActive(_handle);", client);
+        Assert.Contains("public void PredictCurseActive(bool value)", client);
     }
 
     // -- where a guess cannot work -------------------------------------------------------------------

@@ -33,7 +33,7 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.LockdownActive = true);
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Assert.True(town.LockdownActive);
     }
@@ -47,7 +47,7 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.LockdownActive = true);
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
         _predictions.Refused(Code);
 
         Assert.False(town.LockdownActive);
@@ -62,7 +62,7 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.LockdownActive = true);
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
         town.LockdownActive = true;
         _predictions.Refused(Code);
 
@@ -74,7 +74,7 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.LockdownActive = true);
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
         _predictions.Expire(NetworkEventPredictions.Ttl);
 
         Assert.False(town.LockdownActive);
@@ -87,7 +87,7 @@ public class PredictableValueTests : ClientSdkTest
         var guessed = Town();
         var other = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => guessed.LockdownActive = true);
+        _predictions.Open(Code, 0).Predicting(() => guessed.PredictLockdownActive(true));
 
         Assert.True(guessed.LockdownActive);
         Assert.False(other.LockdownActive);
@@ -104,7 +104,7 @@ public class PredictableValueTests : ClientSdkTest
 
         _predictions.Open(Code, 0).Predicting(() =>
         {
-            town.LockdownActive = true;
+            town.PredictLockdownActive(true);
             town.LockdownHour = 22;
         });
 
@@ -123,18 +123,18 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.LockdownActive = true);
+        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Assert.True(ReadyM.SDK.Entities.EntityHandle.Of(town).As<Lockdown>().Active);
         Assert.True(town.LockdownActive);
     }
 
     /// <summary>
-    /// A write outside a guess is the server writing its own value, and has to reach the component. The guess
-    /// path is reached only from inside Predicting, so nothing else is quietly held back.
+    /// A write is a write wherever it is. Guessing is its own call, so nothing has to tell the two apart by
+    /// where control came from, and nothing is quietly held back.
     /// </summary>
     [Fact]
-    public void A_write_outside_a_guess_still_reaches_the_value()
+    public void A_write_is_a_write_and_reaches_the_value()
     {
         var town = Town();
 
@@ -142,5 +142,21 @@ public class PredictableValueTests : ClientSdkTest
         _predictions.Expire(NetworkEventPredictions.Ttl * 10);
 
         Assert.True(town.LockdownActive);
+    }
+
+    /// <summary>
+    /// A guess with no raise waiting on an answer would stand for the rest of the session, so it says so
+    /// rather than holding a value nothing will take back. The member is named, because the line that made
+    /// the guess is not always the line that reads it.
+    /// </summary>
+    [Fact]
+    public void Guessing_with_nothing_waiting_on_an_answer_says_so()
+    {
+        var town = Town();
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => town.PredictLockdownActive(true));
+
+        Assert.Contains("Lockdown.Active", thrown.Message);
+        Assert.False(town.LockdownActive);
     }
 }

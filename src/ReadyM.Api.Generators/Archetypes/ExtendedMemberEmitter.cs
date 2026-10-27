@@ -106,18 +106,18 @@ internal static class ExtendedMemberEmitter
         var name = $"{prefix}{accessor.Name}";
         var get = $"{model.QualifiedAccessors}.Get{accessor.Name}({handle})";
         var set = $"{model.QualifiedAccessors}.Set{accessor.Name}({handle}, value)";
+        var guess = $"{model.QualifiedAccessors}.Predict{accessor.Name}({handle}, value)";
 
         writer.Line();
 
-        // A client writes a replicated value through its token instead. A predictable one keeps its
-        // setter there: guessing at it is the one write a client may make, and it stays local.
-        if (!accessor.HasSetter
-            || (client && !accessor.IsPredictable && AccessorEmitter.Marked(accessor, model.IsReplicated)))
+        // A client writes a replicated value through its token instead.
+        if (!accessor.HasSetter || (client && AccessorEmitter.Marked(accessor, model.IsReplicated)))
         {
             Remarks(writer, remarks);
-            Mark(writer, accessor);
             writer.Line($"public {accessor.Type} {name}");
             writer.Line($"    => {get};");
+            Prediction(writer, accessor, guess, name);
+
             return;
         }
 
@@ -125,8 +125,6 @@ internal static class ExtendedMemberEmitter
         [
             $"/// Inside a query call <c>Set{name}</c> instead."
         ]);
-
-        Mark(writer, accessor);
 
         using (writer.Braces($"public {accessor.Type} {name}"))
         {
@@ -139,19 +137,25 @@ internal static class ExtendedMemberEmitter
         Remarks(writer, remarks, [
             "/// Use inside queries instead of the property setter."
         ]);
-        Mark(writer, accessor);
         writer.Line($"public void Set{name}({accessor.Type} value)");
         writer.Line($"    => {set};");
+
+        Prediction(writer, accessor, guess, name);
     }
 
     /// <summary>
-    /// Says a projected member is one a client may guess at, which is what the analyzer reads: the shape it
-    /// came from is not reachable from here, so the mark has to travel with the member.
+    /// The guess at a predictable value. A method rather than a setter, because a guess is not a write and
+    /// nothing reading the code could otherwise tell which of the two a line meant.
     /// </summary>
-    private static void Mark(SourceWriter writer, AccessorModel accessor)
+    private static void Prediction(SourceWriter writer, AccessorModel accessor, string guess, string name)
     {
-        if (accessor.IsPredictable)
-            writer.Line($"[{ArchetypeNames.Predictable}]");
+        if (!accessor.IsPredictable)
+            return;
+
+        writer.Line();
+        writer.Line("/// <summary>Guesses at the value, inside the callback handed to <c>.Predicting()</c>.</summary>");
+        writer.Line($"public void Predict{name}({accessor.Type} value)");
+        writer.Line($"    => {guess};");
     }
 
     /// <summary>

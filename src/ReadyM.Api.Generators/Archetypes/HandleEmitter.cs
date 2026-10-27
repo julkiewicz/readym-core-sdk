@@ -112,10 +112,6 @@ internal static class HandleEmitter
         if (hidden)
             writer.Line(ArchetypeNames.Hidden);
 
-        // Only on a projection: the shape's own declaration already carries the attribute a mod wrote.
-        if (accessor.IsPredictable && !partial)
-            writer.Line($"[{ArchetypeNames.Predictable}]");
-
         var declaration = partial
             ? $"{Keyword(accessor)} partial {accessor.Type} {called}"
             : $"{Keyword(accessor)} {accessor.Type} {called}";
@@ -123,15 +119,14 @@ internal static class HandleEmitter
         // A client writes a replicated value through its token, which is what carries the intent
         // and obeys the component's policy. The shape's own declaration keeps its setter because
         // C# requires the implementing part to implement every accessor the declaration has, so
-        // only a projected member can drop one. A predictable value keeps its setter on a client
-        // too: that is the one write a client is allowed to make, and it never leaves the machine.
-        var writable = accessor.HasSetter
-                       && !(client && !partial && !accessor.IsPredictable
-                            && AccessorEmitter.Marked(accessor, replicated));
+        // only a projected member can drop one.
+        var writable = accessor.HasSetter && !(client && !partial && AccessorEmitter.Marked(accessor, replicated));
 
         if (!writable)
         {
             writer.Line($"{declaration} => {accessors}.Get{accessor.Name}(_handle);");
+            Prediction(writer, accessor, accessors, name);
+
             return;
         }
 
@@ -140,6 +135,23 @@ internal static class HandleEmitter
             writer.Line($"get => {accessors}.Get{accessor.Name}(_handle);");
             writer.Line($"set => {accessors}.Set{accessor.Name}(_handle, value);");
         }
+
+        Prediction(writer, accessor, accessors, name);
+    }
+
+    /// <summary>
+    /// The guess at a predictable value. A method rather than a setter, because a guess is not a write and
+    /// nothing reading the code could otherwise tell which of the two a line meant.
+    /// </summary>
+    private static void Prediction(SourceWriter writer, AccessorModel accessor, string accessors, string? name)
+    {
+        if (!accessor.IsPredictable)
+            return;
+
+        writer.Line();
+        writer.Line("/// <summary>Guesses at the value, inside the callback handed to <c>.Predicting()</c>.</summary>");
+        writer.Line($"public void Predict{name ?? accessor.Name}({accessor.Type} value)");
+        writer.Line($"    => {accessors}.Predict{accessor.Name}(_handle, value);");
     }
 
     public static void Accessors(

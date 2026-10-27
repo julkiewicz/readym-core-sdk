@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Entities;
@@ -8,7 +9,7 @@ using Xunit;
 namespace ReadyM.SDK.Tests.Events;
 
 /// <summary>
-/// What a [Predictable] member's generated accessor stands on: a value held beside the entity while a guess is
+/// What a [Predictable] member's generated accessors stand on: a value held beside the entity while a guess is
 /// outstanding, read in front of the replicated one, and dropped when the guess is taken back.
 /// </summary>
 /// <remarks>
@@ -22,7 +23,7 @@ public class GuessedValueTests : ClientSdkTest
 
     private readonly NetworkEventPredictions _predictions = new();
 
-    private readonly GuessedValueRegistry<bool> _frozen = new();
+    private readonly GuessedValueRegistry<bool> _frozen = new("Chill.Frozen");
 
     private readonly Dictionary<EntityHandle, bool> _replicated = new();
 
@@ -32,17 +33,14 @@ public class GuessedValueTests : ClientSdkTest
     private bool Read(EntityHandle handle)
         => _frozen.TryGet(handle, out var guessed) ? guessed : _replicated.GetValueOrDefault(handle);
 
-    /// <summary>What a generated setter does: hold it as a guess, or write it through.</summary>
-    private void Write(EntityHandle handle, bool value)
-    {
-        if (_frozen.Guessing(handle, value))
-            return;
+    /// <summary>What a generated setter does, which has nothing to do with guessing.</summary>
+    private void Write(EntityHandle handle, bool value) => _replicated[handle] = value;
 
-        _replicated[handle] = value;
-    }
+    /// <summary>What a generated PredictX does.</summary>
+    private void Guess(EntityHandle handle, bool value) => _frozen.Guess(handle, value);
 
     [Fact]
-    public void A_write_outside_a_guess_goes_through_to_the_value_itself()
+    public void A_write_goes_through_to_the_value_itself()
     {
         var entity = Entity();
 
@@ -53,11 +51,11 @@ public class GuessedValueTests : ClientSdkTest
     }
 
     [Fact]
-    public void A_write_inside_a_guess_is_read_back_without_touching_the_value_itself()
+    public void A_guess_is_read_back_without_touching_the_value_itself()
     {
         var entity = Entity();
 
-        _predictions.Open(Code, 0).Predicting(() => Write(entity, true));
+        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
 
         Assert.True(Read(entity));
         Assert.False(_replicated.ContainsKey(entity));
@@ -68,7 +66,7 @@ public class GuessedValueTests : ClientSdkTest
     {
         var entity = Entity();
 
-        _predictions.Open(Code, 0).Predicting(() => Write(entity, true));
+        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
         _predictions.Refused(Code);
 
         Assert.False(Read(entity));
@@ -79,24 +77,24 @@ public class GuessedValueTests : ClientSdkTest
     {
         var entity = Entity();
 
-        _predictions.Open(Code, 0).Predicting(() => Write(entity, true));
+        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
         _predictions.Expire(NetworkEventPredictions.Ttl);
 
         Assert.False(Read(entity));
     }
 
     /// <summary>
-    /// The reason clearing drops the guess rather than putting a value back. The server accepting the event is
-    /// an ordinary replicated change that lands while the guess still stands, and the read has to end up on
-    /// it, not on what was true when the guess was made.
+    /// The reason dropping beats putting a value back. The server accepting the event is an ordinary
+    /// replicated change that lands while the guess still stands, and the read has to end up on it, not on
+    /// what was true when the guess was made.
     /// </summary>
     [Fact]
     public void An_authoritative_change_that_landed_meanwhile_is_not_clobbered()
     {
         var entity = Entity();
 
-        _predictions.Open(Code, 0).Predicting(() => Write(entity, true));
-        _replicated[entity] = true;
+        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
+        Write(entity, true);
         _predictions.Expire(NetworkEventPredictions.Ttl);
 
         Assert.True(Read(entity));
@@ -108,7 +106,7 @@ public class GuessedValueTests : ClientSdkTest
         var guessed = Entity();
         var other = Entity();
 
-        _predictions.Open(Code, 0).Predicting(() => Write(guessed, true));
+        _predictions.Open(Code, 0).Predicting(() => Guess(guessed, true));
 
         Assert.True(Read(guessed));
         Assert.False(Read(other));
@@ -122,9 +120,9 @@ public class GuessedValueTests : ClientSdkTest
     public void A_guess_at_one_member_says_nothing_about_another()
     {
         var entity = Entity();
-        var other = new GuessedValueRegistry<bool>();
+        var other = new GuessedValueRegistry<bool>("Chill.Numb");
 
-        _predictions.Open(Code, 0).Predicting(() => Write(entity, true));
+        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
 
         Assert.False(other.TryGet(entity, out _));
     }
@@ -137,31 +135,46 @@ public class GuessedValueTests : ClientSdkTest
 
         _predictions.Open(Code, 0).Predicting(() =>
         {
-            Write(entity, true);
-            Write(entity, false);
+            Guess(entity, true);
+            Guess(entity, false);
         });
 
         Assert.False(Read(entity));
 
-        _replicated[entity] = true;
+        Write(entity, true);
         _predictions.Refused(Code);
 
         Assert.True(Read(entity));
     }
 
     /// <summary>
-    /// The scope is the callback and nothing after it, or a later write meaning something else entirely would
-    /// be held back and silently never reach the entity.
+    /// Nothing is waiting on an answer out here, so the guess would stand for the rest of the session. It
+    /// says so rather than holding a value nothing will ever take back.
     /// </summary>
     [Fact]
-    public void A_write_after_the_guess_has_run_is_not_part_of_it()
+    public void Guessing_with_no_raise_waiting_on_an_answer_says_so()
     {
         var entity = Entity();
 
-        _predictions.Open(Code, 0).Predicting(() => Write(entity, true));
-        Write(entity, true);
+        var thrown = Assert.Throws<InvalidOperationException>(() => Guess(entity, true));
 
-        Assert.True(_replicated[entity]);
+        Assert.Contains("Chill.Frozen", thrown.Message);
+        Assert.Contains("Predicting", thrown.Message);
+        Assert.False(Read(entity));
+    }
+
+    /// <summary>
+    /// The scope is the callback and nothing after it, so a guess a step outside it is as unanswered as one
+    /// made anywhere else.
+    /// </summary>
+    [Fact]
+    public void Guessing_after_the_callback_has_run_is_outside_it()
+    {
+        var entity = Entity();
+
+        _predictions.Open(Code, 0).Predicting(() => Guess(entity, true));
+
+        Assert.Throws<InvalidOperationException>(() => Guess(entity, false));
     }
 
     /// <summary>
@@ -175,7 +188,7 @@ public class GuessedValueTests : ClientSdkTest
         var ran = new List<string>();
 
         _predictions.Open(Code, 0)
-            .Predicting(() => Write(entity, true))
+            .Predicting(() => Guess(entity, true))
             .Rollback(() => ran.Add("undo"));
 
         _predictions.Refused(Code);
