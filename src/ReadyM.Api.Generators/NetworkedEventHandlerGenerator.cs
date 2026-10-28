@@ -69,6 +69,8 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         foreach (var handler in handlers)
             Validate(context, handler, onServer);
 
+        ValidateOneEffect(context, handlers);
+
         var byEvent = handlers
             .GroupBy(h => h.Event, SymbolEqualityComparer.Default)
             .OrderBy(g => g.Key!.Name, System.StringComparer.Ordinal)
@@ -86,6 +88,28 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         context.AddSource("NetworkedEventHandlers.g.cs", sb.ToString());
 
         EmitRegistrations(context, input.Compilation, mod, byEvent, onServer);
+    }
+
+    /// <summary>
+    /// An event has one effect, written once by the mod that declared it. A second Apply is a second effect
+    /// whose order against the first nothing but a sort decides, which is an Observe under another name.
+    /// </summary>
+    private static void ValidateOneEffect(SourceProductionContext context, List<Handler> handlers)
+    {
+        var applies = handlers
+            .Where(h => h.Stage == Stage.Apply)
+            .GroupBy(h => h.Event, SymbolEqualityComparer.Default);
+
+        foreach (var effects in applies)
+        {
+            var first = effects.First();
+
+            foreach (var extra in effects.Skip(1))
+                Report(context, extra.Method.Locations.FirstOrDefault(), "NEVT015", "Two effects",
+                    $"'{extra.Owner.Name}.{extra.Method.Name}' is a second Stage.Apply for '{extra.Event.Name}', beside "
+                    + $"'{first.Owner.Name}.{first.Method.Name}'. An event has one Apply, which writes its effect; "
+                    + "anything else that should happen once it is accepted is a Stage.Observe.");
+        }
     }
 
     /// <summary>What a handler may not say. Each is a hard error rather than a handler that never fires.</summary>

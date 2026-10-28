@@ -40,12 +40,21 @@ internal static class NetworkedEventStages
         if (stoppable && context.Cancellation.IsCancelled)
             return;
 
-        foreach (var mod in mods)
-        {
-            mod.Run(stage, ref networkEvent, context);
+        context.Cancellation.Running(stage);
 
-            if (stoppable && context.Cancellation.IsCancelled)
-                return;
+        try
+        {
+            foreach (var mod in mods)
+            {
+                mod.Run(stage, ref networkEvent, context);
+
+                if (stoppable && context.Cancellation.IsCancelled)
+                    return;
+            }
+        }
+        finally
+        {
+            context.Cancellation.Running(null);
         }
     }
 

@@ -175,6 +175,49 @@ public class NetworkedEventCoordinatorTests
         return NetworkedEventFrame.Write(refused, origin, payload);
     }
 
+    // -- only the two stages before the effect may refuse ----------------------------------------------
+
+    /// <summary>
+    /// Apply is the effect, and refusing there would tell the origin "refused" about something already done. It
+    /// used to be ignored without a word, which is worse: the handler believed it had stopped the event.
+    /// </summary>
+    [Theory]
+    [InlineData(Stage.Apply)]
+    [InlineData(Stage.Observe)]
+    public void Refusing_after_the_event_has_been_accepted_says_so(Stage stage)
+    {
+        var late = new Handlers("Late", _ran) { Refuses = (stage, null) };
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => OnServer(late).Raise(default, PlayerId.Server, true));
+
+        Assert.Contains($"Stage.{stage}", thrown.Message);
+        Assert.Contains("Validate", thrown.Message);
+    }
+
+    /// <summary>Rejected runs because the event was refused already, so refusing it again means nothing.</summary>
+    [Fact]
+    public void Refusing_in_rejected_says_so()
+    {
+        var refuser = new Handlers("Refuser", _ran) { Refuses = (Stage.Validate, null) };
+        var late = new Handlers("Late", _ran) { Refuses = (Stage.Rejected, null) };
+
+        var thrown = Assert.Throws<InvalidOperationException>(
+            () => OnServer(refuser, late).Raise(default, PlayerId.Server, true));
+
+        Assert.Contains("Stage.Rejected", thrown.Message);
+    }
+
+    /// <summary>The policy's own refusal comes before any stage, and is not a handler refusing late.</summary>
+    [Fact]
+    public void A_refusal_before_any_stage_is_still_allowed()
+    {
+        var refuser = new Handlers("Refuser", _ran) { Refuses = (Stage.Filter, null) };
+
+        OnServer(refuser).Raise(default, PlayerId.Server, true);
+
+        Assert.DoesNotContain("Refuser:Apply:0", _ran);
+    }
+
     // -- one stage at a time, across every mod ---------------------------------------------------------
 
     /// <summary>

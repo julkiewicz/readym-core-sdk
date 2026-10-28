@@ -543,6 +543,36 @@ public class NetworkedEventTests(ITestOutputHelper output)
             """);
 
     /// <summary>
+    /// An event has one effect, written once. Two Apply handlers would be two effects whose order nothing but a
+    /// sort decides, which is an Observe with a different name.
+    /// </summary>
+    [Fact]
+    public void Two_apply_handlers_for_one_event_are_an_error()
+        => AssertServerError("NEVT015", """
+            using ReadyM.SDK.Attributes;
+            using ReadyM.SDK.Events;
+            using Other.Common;
+            namespace Other.Server;
+            [Service]
+            public partial class First
+            {
+                [EventHandler(Stage.Apply)]
+                public void Land(in HitEvent e) { }
+            }
+            [Service]
+            public partial class Second
+            {
+                [EventHandler(Stage.Apply)]
+                public void AlsoLand(in HitEvent e) { }
+            }
+            """);
+
+    /// <summary>One Apply beside handlers for every other stage is the ordinary shape, and no error.</summary>
+    [Fact]
+    public void One_apply_handler_beside_the_other_stages_is_no_error()
+        => Assert.Empty(RunServer().CompilationDiagnostics.Where(d => d.Id == "NEVT015"));
+
+    /// <summary>
     /// A mod writes the handler, so the generator emits the call: the reason is cast to the declared type on the
     /// way in, which is what makes a switch over it exhaustive.
     /// </summary>

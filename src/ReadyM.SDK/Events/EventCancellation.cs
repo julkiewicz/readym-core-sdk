@@ -23,6 +23,12 @@ public sealed class EventCancellation
     /// <summary>Whose handler is running now, which becomes <see cref="StoppedBy"/> if it refuses.</summary>
     private string _running = string.Empty;
 
+    /// <summary>The stage running now, or null before the first, which is where the policy refuses.</summary>
+    private Attributes.Stage? _stage;
+
+    /// <summary>Set by the ladder as each stage starts, so a refusal in one that may not refuse is caught.</summary>
+    internal void Running(Attributes.Stage? stage) => _stage = stage;
+
     /// <exclude />
     /// <summary>
     /// Called by generated dispatch before each handler, so a refusal names the mod without the handler saying
@@ -35,8 +41,35 @@ public sealed class EventCancellation
     /// Refuses the event. The first refusal is the one kept: it is the one the origin is owed, and the handlers
     /// that would have refused after it never run.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The stage running is Apply, Observe or Rejected. By Apply the event has been accepted, and refusing it
+    /// then would tell the origin it never happened when it has; by Rejected it was refused already.
+    /// </exception>
     public void Cancel(object? reason)
     {
+        switch (_stage)
+        {
+            case Attributes.Stage.Apply:
+            case Attributes.Stage.Observe:
+                throw new InvalidOperationException(
+                    $"'{_running}' refused the event at Stage.{_stage}. Only Stage.Validate and Stage.Filter may "
+                    + "refuse: by Apply the event has been accepted, and refusing then would tell the origin it never "
+                    + "happened when it has.");
+
+            case Attributes.Stage.Rejected:
+                throw new InvalidOperationException(
+                    $"'{_running}' refused the event at Stage.Rejected, which runs because it was refused already. "
+                    + "Only Stage.Validate and Stage.Filter may refuse.");
+
+            case null:
+            case Attributes.Stage.Validate:
+            case Attributes.Stage.Filter:
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(_stage), _stage, "Unhandled network event stage.");
+        }
+
         if (IsCancelled)
             return;
 
