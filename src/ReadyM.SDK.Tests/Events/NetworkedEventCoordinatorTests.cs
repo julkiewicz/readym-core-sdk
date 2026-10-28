@@ -76,6 +76,18 @@ public class NetworkedEventCoordinatorTests
 
         public EntityHandle? Subject(in Blow e) => null;
 
+        public bool TryArea(in Blow e, out AreaId area)
+        {
+            area = default;
+            return false;
+        }
+
+        public bool TryCell(in Blow e, out FullCellId cell)
+        {
+            cell = default;
+            return false;
+        }
+
         public PlayerId Target(in Blow e) => PlayerId.Invalid;
 
         public bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out Blow e)

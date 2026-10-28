@@ -43,6 +43,18 @@ public class NetworkedEventRegistryTests
 
         public EntityHandle? Subject(in Knock networkEvent) => null;
 
+        public bool TryArea(in Knock networkEvent, out AreaId area)
+        {
+            area = default;
+            return false;
+        }
+
+        public bool TryCell(in Knock networkEvent, out FullCellId cell)
+        {
+            cell = default;
+            return false;
+        }
+
         public PlayerId Target(in Knock networkEvent) => PlayerId.Invalid;
 
         public bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out Knock networkEvent)

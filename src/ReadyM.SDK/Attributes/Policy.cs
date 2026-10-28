@@ -9,10 +9,16 @@ public enum Policy
     /// <summary>The client that runs the subject.</summary>
     SubjectOwner,
 
-    /// <summary>The client simulating the subject's cell.</summary>
+    /// <summary>
+    /// The client simulating the cell the event names with <see cref="CellAttribute"/>. The sender is not named in
+    /// the event: it is whoever the server received it from.
+    /// </summary>
     CellMaster,
 
-    /// <summary>The client simulating the subject's area.</summary>
+    /// <summary>
+    /// The client simulating the area the event names with <see cref="AreaAttribute"/>. The sender is not named in
+    /// the event: it is whoever the server received it from.
+    /// </summary>
     AreaMaster,
 
     /// <summary>The server alone.</summary>

@@ -18,10 +18,21 @@ namespace ReadyM.SDK.Server.Events;
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class ServerNetworkedEventPolicy
 {
-    /// <summary>Whether <paramref name="origin"/> was allowed to raise an event about <paramref name="subject"/>.</summary>
+    /// <summary>Whether <paramref name="origin"/> was allowed to raise the event.</summary>
     /// <param name="subject">The entity the event is about, or null for an event that is about nobody.</param>
+    /// <param name="area">The area the event names with [Area], or null where it names none.</param>
+    /// <param name="cell">The cell the event names with [Cell], or null where it names none.</param>
+    /// <param name="origin">
+    /// Who sent it, as the server knows from the connection it came in on. Never something the event says about
+    /// itself, which is why a master policy compares the place's master with this and not with a member.
+    /// </param>
     public static bool Allows(
-        ServerNetworkedEventDispatchBase dispatch, Policy policy, EntityHandle? subject, PlayerId origin)
+        ServerNetworkedEventDispatchBase dispatch,
+        Policy policy,
+        EntityHandle? subject,
+        AreaId? area,
+        FullCellId? cell,
+        PlayerId origin)
     {
         // The server may always raise, which is what lets it act for a bot without the policy refusing it
         if (origin == PlayerId.Server)
@@ -32,17 +43,13 @@ public static class ServerNetworkedEventPolicy
             Policy.Anyone => true,
             Policy.ServerAuthoritative => false,
             Policy.SubjectOwner => Needs(subject).TryGetOwner(out var owner) && owner == origin,
-            Policy.CellMaster => Simulated<Cell>(dispatch, subject, out var cell) && cell.MasterClient == origin,
-            Policy.AreaMaster => Simulated<Area>(dispatch, subject, out var area) && area.MasterClient == origin,
+            Policy.CellMaster => ServerNetworkedEventScopes.TryCell(dispatch, Needs(cell, "[Cell]"), out var named)
+                && named.MasterClient == origin,
+            Policy.AreaMaster => ServerNetworkedEventScopes.TryArea(dispatch, Needs(area, "[Area]"), out var named)
+                && named.MasterClient == origin,
             _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, "Unhandled network event policy."),
         };
     }
-
-    /// <summary>The scope the subject is in, for the two policies that ask who simulates it.</summary>
-    private static bool Simulated<TScope>(
-        ServerNetworkedEventDispatchBase dispatch, EntityHandle? subject, out TScope scope)
-        where TScope : struct, IArchetypeQueryable, IScope
-        => ServerNetworkedEventScopes.TryScope(dispatch, Needs(subject), out scope);
 
     /// <summary>
     /// The subject a policy that checks one must have been handed. The generator refuses that pairing
@@ -52,4 +59,12 @@ public static class ServerNetworkedEventPolicy
     private static EntityHandle Needs(EntityHandle? subject)
         => subject ?? throw new ArgumentOutOfRangeException(
             nameof(subject), "This policy checks a subject, and this event has none.");
+
+    /// <summary>
+    /// The place a master policy must have been handed. The generator refuses an event that names none (NEVT007,
+    /// NEVT008), so reaching here means the declaration and this check have drifted apart.
+    /// </summary>
+    private static TId Needs<TId>(TId? place, string marker) where TId : struct
+        => place ?? throw new ArgumentOutOfRangeException(
+            nameof(place), $"This policy checks the place the event names with {marker}, and this event names none.");
 }

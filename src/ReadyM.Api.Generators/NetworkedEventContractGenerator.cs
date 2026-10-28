@@ -25,6 +25,10 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     private const string Core = "global::ReadyM.SDK.Events.NetworkedEventDispatchCore";
     private const string Codec = "global::ReadyM.SDK.Events.NetworkedEventCodec";
     private const string Handle = "global::ReadyM.SDK.Entities.EntityHandle";
+    private const string AreaId = "global::ReadyM.Api.Idents.AreaId";
+    private const string FullCellId = "global::ReadyM.Api.Idents.FullCellId";
+    private const string AreaShape = "global::ReadyM.SDK.Archetypes.Core.Area";
+    private const string CellShape = "global::ReadyM.SDK.Archetypes.Core.Cell";
 
     private const string EditorBrowsable =
         "global::System.ComponentModel.EditorBrowsable("
@@ -99,9 +103,26 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
             Report(context, location, "NEVT002", "Unused [Target]",
                 $"'{declared.Symbol.Name}' is EventScope.{declared.Scope}, which goes to an audience rather than one player, so [Target] means nothing on it.");
 
-        if (declared.Scope is EventScope.Area or EventScope.Cell && declared.Subjects.Count == 0 && declared.ScopeMember is null)
+        if (declared.Scope == EventScope.Area && declared.Subjects.Count == 0 && declared.AreaMember is null
+            || declared.Scope == EventScope.Cell && declared.Subjects.Count == 0 && declared.CellMember is null)
             Report(context, location, "NEVT003", "No audience",
                 $"'{declared.Symbol.Name}' is EventScope.{declared.Scope} with no [Subject] to take its audience from. Mark a subject, or an [{declared.Scope}] member naming it.");
+
+        if (declared.Policy == Policy.AreaMaster && declared.AreaMember is null)
+            Report(context, location, "NEVT007", "No area to check",
+                $"'{declared.Symbol.Name}' says Policy.AreaMaster, which checks who is master of the area the event is in, so one member must be marked [Area] to name it. The sender is not named: the server already knows who sent it.");
+
+        if (declared.Policy == Policy.CellMaster && declared.CellMember is null)
+            Report(context, location, "NEVT008", "No cell to check",
+                $"'{declared.Symbol.Name}' says Policy.CellMaster, which checks who is master of the cell the event is in, so one member must be marked [Cell] to name it. The sender is not named: the server already knows who sent it.");
+
+        if (declared.AreaMember is { } area && Named(area.Type, AreaId, AreaShape) is null)
+            Report(context, area.Locations.FirstOrDefault() ?? location, "NEVT009", "Not a place",
+                $"'{declared.Symbol.Name}.{area.Name}' is marked [Area] but is '{area.Type.ToDisplayString()}'. An area is named by an AreaId or an Area.");
+
+        if (declared.CellMember is { } cell && Named(cell.Type, FullCellId, CellShape) is null)
+            Report(context, cell.Locations.FirstOrDefault() ?? location, "NEVT009", "Not a place",
+                $"'{declared.Symbol.Name}.{cell.Name}' is marked [Cell] but is '{cell.Type.ToDisplayString()}'. A cell is named by a FullCellId or a Cell.");
 
         if (NeedsSubject(declared.Policy) && declared.Subjects.Count == 0)
             Report(context, location, "NEVT004", "No subject to check",
@@ -115,8 +136,36 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
         }
     }
 
-    private static bool NeedsSubject(Policy policy)
-        => policy is Policy.SubjectOwner or Policy.CellMaster or Policy.AreaMaster;
+    /// <summary>
+    /// Only the owner check reads the subject. The two master policies read the place the event names, and the
+    /// sender they compare it with is the origin, which the server knows without the event saying so.
+    /// </summary>
+    private static bool NeedsSubject(Policy policy) => policy == Policy.SubjectOwner;
+
+    /// <summary>How a member names a place: by its id, or by its shape, and whether it may be absent.</summary>
+    private enum NamedBy
+    {
+        Id,
+        OptionalId,
+        Shape,
+        OptionalShape,
+    }
+
+    /// <summary>How <paramref name="type"/> names the place, or null when it is neither the id nor the shape.</summary>
+    private static NamedBy? Named(ITypeSymbol type, string id, string shape)
+    {
+        var optional = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T };
+        var underlying = optional ? ((INamedTypeSymbol)type).TypeArguments[0] : type;
+        var name = underlying.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        if (name == id)
+            return optional ? NamedBy.OptionalId : NamedBy.Id;
+
+        if (name == shape)
+            return optional ? NamedBy.OptionalShape : NamedBy.Shape;
+
+        return null;
+    }
 
     private static void EmitEvent(SourceProductionContext context, EventInfo declared)
     {
@@ -189,10 +238,62 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
         sb.AppendLine($"        => {(declared.Target is { } target ? $"e.{target.Name}.PlayerId" : "global::ReadyM.Api.Idents.PlayerId.Invalid")};");
         sb.AppendLine();
 
+        EmitNamed(sb, type, "TryArea", "area", AreaId, AreaShape, "AreaId", declared.AreaMember);
+        EmitNamed(sb, type, "TryCell", "cell", FullCellId, CellShape, "FullCellId", declared.CellMember);
+
         EmitRead(sb, declared, type);
         EmitReason(sb, declared);
 
         sb.AppendLine("}");
+    }
+
+    /// <summary>
+    /// The place the event names with <c>[Area]</c> or <c>[Cell]</c>, as its id. The audience is taken from it
+    /// before the subject, and the master policies check it. An event that names none answers false.
+    /// </summary>
+    private static void EmitNamed(
+        StringBuilder sb, string type, string method, string output, string id, string shape, string idProperty,
+        IPropertySymbol? member)
+    {
+        sb.AppendLine($"    public bool {method}(in {type} e, out {id} {output})");
+        sb.AppendLine("    {");
+
+        switch (member is null ? null : Named(member.Type, id, shape))
+        {
+            case NamedBy.Id:
+                sb.AppendLine($"        {output} = e.{member!.Name};");
+                sb.AppendLine("        return true;");
+                break;
+
+            case NamedBy.Shape:
+                sb.AppendLine($"        {output} = e.{member!.Name}.{idProperty};");
+                sb.AppendLine("        return true;");
+                break;
+
+            case NamedBy.OptionalId:
+            case NamedBy.OptionalShape:
+                var read = Named(member!.Type, id, shape) == NamedBy.OptionalId ? "named" : $"named.{idProperty}";
+                sb.AppendLine($"        if (e.{member.Name} is {{ }} named)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            {output} = {read};");
+                sb.AppendLine("            return true;");
+                sb.AppendLine("        }");
+                sb.AppendLine();
+                sb.AppendLine($"        {output} = default;");
+                sb.AppendLine("        return false;");
+                break;
+
+            case null:
+                sb.AppendLine($"        {output} = default;");
+                sb.AppendLine("        return false;");
+                break;
+
+            default:
+                throw new System.ArgumentOutOfRangeException(nameof(member), "Unhandled way of naming a place.");
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine();
     }
 
     /// <summary>The entity the event is about, as a handle the server checks ownership and scope against.</summary>
@@ -427,7 +528,8 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
             Members = [.. symbol.GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsStatic && p.SetMethod is not null)];
             Subjects = [.. Members.Where(m => Marked(m, "SubjectAttribute"))];
             Target = Members.FirstOrDefault(m => Marked(m, "TargetAttribute"));
-            ScopeMember = Members.FirstOrDefault(m => Marked(m, "AreaAttribute") || Marked(m, "CellAttribute"));
+            AreaMember = Members.FirstOrDefault(m => Marked(m, "AreaAttribute"));
+            CellMember = Members.FirstOrDefault(m => Marked(m, "CellAttribute"));
         }
 
         public INamedTypeSymbol Symbol { get; }
@@ -445,7 +547,11 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
 
         public IPropertySymbol? Target { get; }
 
-        public IPropertySymbol? ScopeMember { get; }
+        /// <summary>The member marked [Area], naming the area the event is in.</summary>
+        public IPropertySymbol? AreaMember { get; }
+
+        /// <summary>The member marked [Cell], naming the cell the event is in.</summary>
+        public IPropertySymbol? CellMember { get; }
 
         private static bool Marked(ISymbol member, string attribute)
             => member.GetAttributes().Any(a => a.AttributeClass?.Name == attribute);

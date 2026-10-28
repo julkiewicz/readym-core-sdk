@@ -240,6 +240,113 @@ public class NetworkedEventTests(ITestOutputHelper output)
             public partial struct Shout { public int What { get; set; } }
             """);
 
+    /// <summary>
+    /// A master policy reads the area the event names, not a subject. The sender is the origin the server already
+    /// knows, so naming it again in the event would only be a way to name someone else.
+    /// </summary>
+    [Fact]
+    public void An_area_master_event_that_names_its_area_needs_no_subject()
+        => AssertNoError("""
+            using ReadyM.Api.Idents;
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Server, Policy.AreaMaster)]
+            public partial struct Weather
+            {
+                [Area] public AreaId Where { get; set; }
+                public int Kind { get; set; }
+            }
+            """);
+
+    [Fact]
+    public void A_cell_master_event_that_names_its_cell_needs_no_subject()
+        => AssertNoError("""
+            using ReadyM.Api.Idents;
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Server, Policy.CellMaster)]
+            public partial struct Respawn
+            {
+                [Cell] public FullCellId Where { get; set; }
+            }
+            """);
+
+    /// <summary>A subject does not stand in for the area: whose area it is in is not what the policy asks.</summary>
+    [Fact]
+    public void An_area_master_event_has_to_name_its_area()
+        => AssertError("NEVT007", """
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [Archetype] public readonly partial struct Hero { }
+            [NetworkedEvent(EventScope.Server, Policy.AreaMaster)]
+            public partial struct Unplaced { [Subject] public Hero Who { get; set; } }
+            """);
+
+    [Fact]
+    public void A_cell_master_event_has_to_name_its_cell()
+        => AssertError("NEVT008", """
+            using ReadyM.Api.Idents;
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Server, Policy.CellMaster)]
+            public partial struct Uncelled { [Area] public AreaId Where { get; set; } }
+            """);
+
+    [Fact]
+    public void An_area_member_has_to_be_an_area()
+        => AssertError("NEVT009", """
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Area, Policy.ServerAuthoritative)]
+            public partial struct Misnamed { [Area] public int Where { get; set; } }
+            """);
+
+    [Fact]
+    public void A_cell_member_has_to_be_a_cell()
+        => AssertError("NEVT009", """
+            using ReadyM.Api.Idents;
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Cell, Policy.ServerAuthoritative)]
+            public partial struct Misnamed { [Cell] public AreaId Where { get; set; } }
+            """);
+
+    /// <summary>A cell-scoped event takes its audience from a cell, so naming an area does not give it one.</summary>
+    [Fact]
+    public void A_cell_scoped_event_naming_only_an_area_has_no_audience()
+        => AssertError("NEVT003", """
+            using ReadyM.Api.Idents;
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Cell, Policy.ServerAuthoritative)]
+            public partial struct Astray { [Area] public AreaId Where { get; set; } }
+            """);
+
+    /// <summary>
+    /// What the coordinator reads the named area and cell through, for the audience and for the master
+    /// policies. An area named as an id is read as it is, and one named as the shape through its id.
+    /// </summary>
+    [Fact]
+    public void The_contract_reads_the_area_and_cell_the_event_names()
+    {
+        var generated = Generated(RunCommon("""
+            using ReadyM.Api.Idents;
+            using ReadyM.SDK.Attributes;
+            using ReadyM.SDK.Archetypes.Core;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Area, Policy.AreaMaster)]
+            public partial struct ById { [Area] public AreaId Where { get; set; } }
+            [NetworkedEvent(EventScope.Area, Policy.AreaMaster)]
+            public partial struct ByShape { [Area] public Area Where { get; set; } }
+            [NetworkedEvent(EventScope.Cell, Policy.CellMaster)]
+            public partial struct ByCell { [Cell] public FullCellId Where { get; set; } }
+            """));
+
+        Assert.Contains("area = e.Where;", generated);
+        Assert.Contains("area = e.Where.AreaId;", generated);
+        Assert.Contains("cell = e.Where;", generated);
+    }
+
     [Fact]
     public void Two_subjects_are_an_error()
         => AssertError("NEVT005", """

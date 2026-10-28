@@ -47,7 +47,13 @@ internal sealed class ServerNetworkedEventCoordinator<T>(
         var cancellation = new EventCancellation();
         var context = new EventContext(origin, raisedHere, cancellation);
 
-        if (!vouched && !ServerNetworkedEventPolicy.Allows(this, contract.Policy, contract.Subject(in networkEvent), origin))
+        if (!vouched && !ServerNetworkedEventPolicy.Allows(
+                this,
+                contract.Policy,
+                contract.Subject(in networkEvent),
+                contract.TryArea(in networkEvent, out var area) ? area : null,
+                contract.TryCell(in networkEvent, out var cell) ? cell : null,
+                origin))
         {
             cancellation.Entering(ThePolicy);
             cancellation.Cancel(null);
@@ -96,6 +102,16 @@ internal sealed class ServerNetworkedEventCoordinator<T>(
 
             case EventScope.Single:
                 audience = EventAudience.Single(contract.Target(in networkEvent));
+
+                return true;
+
+            case EventScope.Area when contract.TryArea(in networkEvent, out var namedArea):
+                audience = EventAudience.InArea(namedArea);
+
+                return true;
+
+            case EventScope.Cell when contract.TryCell(in networkEvent, out var namedCell):
+                audience = EventAudience.InCell(namedCell);
 
                 return true;
 

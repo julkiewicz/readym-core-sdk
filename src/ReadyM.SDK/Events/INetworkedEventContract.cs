@@ -25,8 +25,17 @@ public interface INetworkedEventContract<T> where T : struct, INetworkedEvent
     /// <summary>Who may raise it.</summary>
     Policy Policy { get; }
 
-    /// <summary>The entity it is about, which the policy checks and a scoped audience is read from.</summary>
+    /// <summary>The entity it is about, which the owner policy checks and a scoped audience falls back on.</summary>
     EntityHandle? Subject(in T networkEvent);
+
+    /// <summary>
+    /// The area it names with <c>[Area]</c>, which an area-scoped audience is read from first and the area master
+    /// policy checks. False where it names none.
+    /// </summary>
+    bool TryArea(in T networkEvent, out AreaId area);
+
+    /// <summary>The cell it names with <c>[Cell]</c>, the same way for cells.</summary>
+    bool TryCell(in T networkEvent, out FullCellId cell);
 
     /// <summary>The one player a <see cref="Attributes.EventScope.Single"/> event goes to.</summary>
     PlayerId Target(in T networkEvent);

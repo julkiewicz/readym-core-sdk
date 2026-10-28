@@ -48,6 +48,29 @@ public static class ServerNetworkedEventScopes
         return false;
     }
 
+    /// <summary>The area with this id, where the server has one.</summary>
+    public static bool TryArea(ServerNetworkedEventDispatchBase dispatch, AreaId id, out Area area)
+        => TryNamed(dispatch, id, out area);
+
+    /// <summary>The cell with this id, where the server has one.</summary>
+    public static bool TryCell(ServerNetworkedEventDispatchBase dispatch, FullCellId id, out Cell cell)
+        => TryNamed(dispatch, id, out cell);
+
+    private static bool TryNamed<TScope, TId>(ServerNetworkedEventDispatchBase dispatch, TId id, out TScope scope)
+        where TScope : struct, IArchetypeQueryable, IIndexed<TId>
+    {
+        if (dispatch.Entities is { } entities && IndexRegistry.TryFind<TScope, TId>(entities.Api, id, out var raw))
+        {
+            scope = new TScope { Handle = new EntityHandle(raw, entities.Api) };
+
+            return true;
+        }
+
+        scope = default;
+
+        return false;
+    }
+
     /// <summary>
     /// The nearest scope of a shape holding the subject. Upwards, not just the immediate holder, so an entity
     /// in a cell is in that cell's area too.
