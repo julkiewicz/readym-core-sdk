@@ -30,6 +30,9 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     private const string AreaShape = "global::ReadyM.SDK.Archetypes.Core.Area";
     private const string CellShape = "global::ReadyM.SDK.Archetypes.Core.Cell";
 
+    /// <summary>Where a component's vector fields are written from and read into, which an event's share.</summary>
+    private const string Vectors = "global::ReadyM.Api.Multiplayer.Extensions.VectorSerializationExtensions";
+
     private const string EditorBrowsable =
         "global::System.ComponentModel.EditorBrowsable("
         + "global::System.ComponentModel.EditorBrowsableState.Never)";
@@ -146,7 +149,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
             else if (!CanTravel(member.Type))
             {
                 Report(context, member.Locations.FirstOrDefault() ?? location, "NEVT014", "Member cannot travel",
-                    $"'{declared.Symbol.Name}.{member.Name}' is '{member.Type.ToDisplayString()}', which an event has no way to send. A member is a primitive, an enum, an INetSerializable, or a shape.");
+                    $"'{declared.Symbol.Name}.{member.Name}' is '{member.Type.ToDisplayString()}', which an event has no way to send. A member is a primitive, an enum, a System.Numerics vector, an INetSerializable, or a shape.");
 
                 sendable = false;
             }
@@ -158,6 +161,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     /// <summary>Whether a member that is not a shape has a way onto the wire, which is what the reader is asked for.</summary>
     private static bool CanTravel(ITypeSymbol type)
         => type.TypeKind == TypeKind.Enum
+           || SerializationHelper.IsVectorLike(type)
            || SerializationHelper.IsINetSerializable(type)
            || SerializationHelper.IsSerializablePrimitive(type.SpecialType);
 
@@ -219,6 +223,10 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
             {
                 var write = optional ? "WriteOptional" : "Write";
                 sb.AppendLine($"        {RpcEntityParams.Codec}.{write}(writer, {member.Name}, \"{member.Name}\");");
+            }
+            else if (SerializationHelper.IsVectorLike(member.Type))
+            {
+                sb.AppendLine($"        {Vectors}.Serialize({member.Name}, writer);");
             }
             else
             {
@@ -357,6 +365,11 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
                     $"        if (!{Codec}.{read}<{named}>("
                     + $"world, reader, out var m{i}, \"{declared.Symbol.Name}\", \"{member.Name}\"))");
                 sb.AppendLine("            return false;");
+            }
+            else if (SerializationHelper.IsVectorLike(member.Type))
+            {
+                sb.AppendLine($"        var m{i} = default({member.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)});");
+                sb.AppendLine($"        {Vectors}.Deserialize(ref m{i}, reader);");
             }
             else
             {

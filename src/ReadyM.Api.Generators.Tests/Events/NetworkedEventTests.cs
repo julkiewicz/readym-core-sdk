@@ -326,6 +326,41 @@ public class NetworkedEventTests(ITestOutputHelper output)
             public partial struct Vague { public int? Volume { get; set; } }
             """);
 
+    /// <summary>
+    /// A vector travels the way a component's vector field does, through the same extensions, so an event and a
+    /// component holding one put the same bytes on the wire.
+    /// </summary>
+    [Fact]
+    public void A_vector_member_travels_as_a_components_does()
+    {
+        var generated = Generated(RunCommon("""
+            using System.Numerics;
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Global, Policy.Anyone)]
+            public partial struct Landing
+            {
+                public Vector2 Flat { get; set; }
+                public Vector3 Where { get; set; }
+                public Vector4 Tint { get; set; }
+            }
+            """));
+
+        Assert.Contains("global::ReadyM.Api.Multiplayer.Extensions.VectorSerializationExtensions.Serialize(Where, writer);", generated);
+        Assert.Contains("global::ReadyM.Api.Multiplayer.Extensions.VectorSerializationExtensions.Deserialize(ref m1, reader);", generated);
+        Assert.DoesNotContain("writer.Put(Where)", generated);
+    }
+
+    [Fact]
+    public void A_vector_member_is_not_an_error()
+        => AssertNoError("""
+            using System.Numerics;
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Global, Policy.Anyone)]
+            public partial struct Landing { public Vector3 Where { get; set; } }
+            """);
+
     /// <summary>One event that cannot be sent does not take the rest of the assembly's events down with it.</summary>
     [Fact]
     public void An_event_that_cannot_travel_leaves_the_others_generated()
