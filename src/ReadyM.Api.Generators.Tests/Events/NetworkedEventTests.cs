@@ -543,12 +543,13 @@ public class NetworkedEventTests(ITestOutputHelper output)
             """);
 
     /// <summary>
-    /// An event has one effect, written once. Two Apply handlers would be two effects whose order nothing but a
-    /// sort decides, which is an Observe with a different name.
+    /// One Apply, in the mod that declared the event, is the guideline rather than a rule. More than one compiles,
+    /// in one mod or across several; they all run or none do, in no promised order among themselves, and every
+    /// Observe runs after the last of them.
     /// </summary>
     [Fact]
-    public void Two_apply_handlers_for_one_event_are_an_error()
-        => AssertServerError("NEVT015", """
+    public void Two_apply_handlers_for_one_event_compile()
+        => Assert.Empty(RunServer("""
             using ReadyM.SDK.Attributes;
             using ReadyM.SDK.Events;
             using Other.Common;
@@ -565,12 +566,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
                 [EventHandler(Stage.Apply)]
                 public void AlsoLand(in HitEvent e) { }
             }
-            """);
-
-    /// <summary>One Apply beside handlers for every other stage is the ordinary shape, and no error.</summary>
-    [Fact]
-    public void One_apply_handler_beside_the_other_stages_is_no_error()
-        => Assert.Empty(RunServer().CompilationDiagnostics.Where(d => d.Id == "NEVT015"));
+            """).CompilationDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
 
     /// <summary>
     /// A mod writes the handler, so the generator emits the call: the reason is cast to the declared type on the
