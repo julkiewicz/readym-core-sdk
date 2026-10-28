@@ -192,7 +192,6 @@ public class NetworkedEventTests(ITestOutputHelper output)
         => AssertError("NEVT001", """
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
-            [Archetype] public readonly partial struct Hero { }
             [NetworkedEvent(EventScope.Single, Policy.ServerAuthoritative)]
             public partial struct Lonely { [Subject] public Hero Who { get; set; } }
             """);
@@ -203,7 +202,6 @@ public class NetworkedEventTests(ITestOutputHelper output)
             using ReadyM.SDK.Attributes;
             using ReadyM.SDK.Archetypes.Core;
             namespace Other.Common;
-            [Archetype] public readonly partial struct Hero { }
             [NetworkedEvent(EventScope.Cell, Policy.SubjectOwner)]
             public partial struct Misaimed
             {
@@ -277,7 +275,6 @@ public class NetworkedEventTests(ITestOutputHelper output)
         => AssertError("NEVT007", """
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
-            [Archetype] public readonly partial struct Hero { }
             [NetworkedEvent(EventScope.Server, Policy.AreaMaster)]
             public partial struct Unplaced { [Subject] public Hero Who { get; set; } }
             """);
@@ -300,6 +297,51 @@ public class NetworkedEventTests(ITestOutputHelper output)
             [NetworkedEvent(EventScope.Area, Policy.ServerAuthoritative)]
             public partial struct Misnamed { [Area] public int Where { get; set; } }
             """);
+
+    /// <summary>
+    /// A nullable id has no way onto the wire, so it cannot name a place. A nullable shape can, since a shape
+    /// travels as its entity's id and may be absent.
+    /// </summary>
+    [Fact]
+    public void A_nullable_place_id_cannot_name_a_place()
+        => AssertError("NEVT009", """
+            using ReadyM.Api.Idents;
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Server, Policy.CellMaster)]
+            public partial struct Maybe { [Cell] public FullCellId? Where { get; set; } }
+            """);
+
+    /// <summary>
+    /// A member the event has no way to send is a mistake in the declaration, and says so. It used to throw inside
+    /// the generator, which the compiler reports only as a warning, and every event in the assembly then lost its
+    /// generated code without an error anywhere.
+    /// </summary>
+    [Fact]
+    public void A_member_that_cannot_travel_is_an_error_not_a_crash()
+        => AssertError("NEVT014", """
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Global, Policy.Anyone)]
+            public partial struct Vague { public int? Volume { get; set; } }
+            """);
+
+    /// <summary>One event that cannot be sent does not take the rest of the assembly's events down with it.</summary>
+    [Fact]
+    public void An_event_that_cannot_travel_leaves_the_others_generated()
+    {
+        var generated = Generated(RunCommon("""
+            using ReadyM.SDK.Attributes;
+            namespace Other.Common;
+            [NetworkedEvent(EventScope.Global, Policy.Anyone)]
+            public partial struct Vague { public int? Volume { get; set; } }
+            [NetworkedEvent(EventScope.Global, Policy.Anyone)]
+            public partial struct Clear { public int Volume { get; set; } }
+            """));
+
+        Assert.Contains("public sealed class ClearContract", generated);
+        Assert.DoesNotContain("public sealed class VagueContract", generated);
+    }
 
     [Fact]
     public void A_cell_member_has_to_be_a_cell()
@@ -352,7 +394,6 @@ public class NetworkedEventTests(ITestOutputHelper output)
         => AssertError("NEVT005", """
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
-            [Archetype] public readonly partial struct Hero { }
             [NetworkedEvent(EventScope.Cell, Policy.SubjectOwner)]
             public partial struct Twofold
             {
@@ -366,8 +407,6 @@ public class NetworkedEventTests(ITestOutputHelper output)
         => AssertError("NEVT006", """
             using ReadyM.SDK.Attributes;
             namespace Other.Common;
-            [Archetype] public readonly partial struct Hero { }
-            [Archetype(Networked = false)] public readonly partial struct Prop { }
             [NetworkedEvent(EventScope.Cell, Policy.SubjectOwner)]
             public partial struct Unsendable
             {

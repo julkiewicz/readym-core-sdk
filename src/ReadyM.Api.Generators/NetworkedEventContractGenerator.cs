@@ -71,24 +71,31 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
         if (events.Count == 0)
             return;
 
-        foreach (var declared in events)
-        {
-            Validate(context, declared);
+        // An event that cannot be sent is left out of everything generated rather than taking the rest with it.
+        // Its error fails the build either way; this keeps that error the only one the mod author sees.
+        var sendable = events.Where(declared => Validate(context, declared)).ToList();
+
+        if (sendable.Count == 0)
+            return;
+
+        foreach (var declared in sendable)
             EmitEvent(context, declared);
-        }
 
         EmitManifest(
             context,
-            events[0].Symbol.ContainingNamespace.ToDisplayString(),
-            events[0].Symbol.ContainingAssembly.Name,
-            events);
+            sendable[0].Symbol.ContainingNamespace.ToDisplayString(),
+            sendable[0].Symbol.ContainingAssembly.Name,
+            sendable);
 
-        EmitDeclarations(context, input.Compilation, events);
+        EmitDeclarations(context, input.Compilation, sendable);
     }
 
     /// <summary>What a declaration may not say. Each of these is a hard error rather than a silent oddity.</summary>
-    private static void Validate(SourceProductionContext context, EventInfo declared)
+    /// <returns>Whether the event can be generated at all, which a member with no way onto the wire rules out.</returns>
+    private static bool Validate(SourceProductionContext context, EventInfo declared)
     {
+        var sendable = true;
+
         var location = declared.Symbol.Locations.FirstOrDefault();
 
         if (declared.Subjects.Count > 1)
@@ -118,11 +125,11 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
 
         if (declared.AreaMember is { } area && Named(area.Type, AreaId, AreaShape) is null)
             Report(context, area.Locations.FirstOrDefault() ?? location, "NEVT009", "Not a place",
-                $"'{declared.Symbol.Name}.{area.Name}' is marked [Area] but is '{area.Type.ToDisplayString()}'. An area is named by an AreaId or an Area.");
+                $"'{declared.Symbol.Name}.{area.Name}' is marked [Area] but is '{area.Type.ToDisplayString()}'. An area is named by an AreaId, or by an Area, which may be absent.");
 
         if (declared.CellMember is { } cell && Named(cell.Type, FullCellId, CellShape) is null)
             Report(context, cell.Locations.FirstOrDefault() ?? location, "NEVT009", "Not a place",
-                $"'{declared.Symbol.Name}.{cell.Name}' is marked [Cell] but is '{cell.Type.ToDisplayString()}'. A cell is named by a FullCellId or a Cell.");
+                $"'{declared.Symbol.Name}.{cell.Name}' is marked [Cell] but is '{cell.Type.ToDisplayString()}'. A cell is named by a FullCellId, or by a Cell, which may be absent.");
 
         if (NeedsSubject(declared.Policy) && declared.Subjects.Count == 0)
             Report(context, location, "NEVT004", "No subject to check",
@@ -130,11 +137,29 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
 
         foreach (var member in declared.Members)
         {
-            if (RpcEntityParams.IsShape(member.Type, out var shape, out _) && !RpcEntityParams.CanBeOnTheNetwork(shape))
-                Report(context, member.Locations.FirstOrDefault() ?? location, "NEVT006", "Shape cannot travel",
-                    $"'{declared.Symbol.Name}.{member.Name}' is '{shape.Name}', whose entities never have a network id, so it cannot be sent.");
+            if (RpcEntityParams.IsShape(member.Type, out var shape, out _))
+            {
+                if (!RpcEntityParams.CanBeOnTheNetwork(shape))
+                    Report(context, member.Locations.FirstOrDefault() ?? location, "NEVT006", "Shape cannot travel",
+                        $"'{declared.Symbol.Name}.{member.Name}' is '{shape.Name}', whose entities never have a network id, so it cannot be sent.");
+            }
+            else if (!CanTravel(member.Type))
+            {
+                Report(context, member.Locations.FirstOrDefault() ?? location, "NEVT014", "Member cannot travel",
+                    $"'{declared.Symbol.Name}.{member.Name}' is '{member.Type.ToDisplayString()}', which an event has no way to send. A member is a primitive, an enum, an INetSerializable, or a shape.");
+
+                sendable = false;
+            }
         }
+
+        return sendable;
     }
+
+    /// <summary>Whether a member that is not a shape has a way onto the wire, which is what the reader is asked for.</summary>
+    private static bool CanTravel(ITypeSymbol type)
+        => type.TypeKind == TypeKind.Enum
+           || SerializationHelper.IsINetSerializable(type)
+           || SerializationHelper.IsSerializablePrimitive(type.SpecialType);
 
     /// <summary>
     /// Only the owner check reads the subject. The two master policies read the place the event names, and the
@@ -142,24 +167,26 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     /// </summary>
     private static bool NeedsSubject(Policy policy) => policy == Policy.SubjectOwner;
 
-    /// <summary>How a member names a place: by its id, or by its shape, and whether it may be absent.</summary>
+    /// <summary>
+    /// How a member names a place: by its id, or by its shape, which may be absent. A nullable id is not one of
+    /// them: a shape travels as its entity's id and may be missing, but a nullable id has no way onto the wire.
+    /// </summary>
     private enum NamedBy
     {
         Id,
-        OptionalId,
         Shape,
         OptionalShape,
     }
 
-    /// <summary>How <paramref name="type"/> names the place, or null when it is neither the id nor the shape.</summary>
+    /// <summary>How <paramref name="type"/> names the place, or null when it is not a form that can.</summary>
     private static NamedBy? Named(ITypeSymbol type, string id, string shape)
     {
         var optional = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T };
         var underlying = optional ? ((INamedTypeSymbol)type).TypeArguments[0] : type;
         var name = underlying.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-        if (name == id)
-            return optional ? NamedBy.OptionalId : NamedBy.Id;
+        if (name == id && !optional)
+            return NamedBy.Id;
 
         if (name == shape)
             return optional ? NamedBy.OptionalShape : NamedBy.Shape;
@@ -270,12 +297,10 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
                 sb.AppendLine("        return true;");
                 break;
 
-            case NamedBy.OptionalId:
             case NamedBy.OptionalShape:
-                var read = Named(member!.Type, id, shape) == NamedBy.OptionalId ? "named" : $"named.{idProperty}";
-                sb.AppendLine($"        if (e.{member.Name} is {{ }} named)");
+                sb.AppendLine($"        if (e.{member!.Name} is {{ }} named)");
                 sb.AppendLine("        {");
-                sb.AppendLine($"            {output} = {read};");
+                sb.AppendLine($"            {output} = named.{idProperty};");
                 sb.AppendLine("            return true;");
                 sb.AppendLine("        }");
                 sb.AppendLine();
