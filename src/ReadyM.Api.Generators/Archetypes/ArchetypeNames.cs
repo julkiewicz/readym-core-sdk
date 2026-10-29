@@ -30,7 +30,7 @@ internal static class ArchetypeNames
     public const string ComponentSet = "global::ReadyM.SDK.Archetypes.ComponentSet";
 
     /// <summary>Where a client holds its guess at one predictable value, by entity.</summary>
-    public const string Guesses = "global::ReadyM.SDK.Events.PredictedValueRegistry";
+    public const string Guesses = "global::ReadyM.SDK.Events.GuessedValueRegistry";
 
 
     /// <summary>Keeps a generated type or member out of IntelliSense and the docs.</summary>

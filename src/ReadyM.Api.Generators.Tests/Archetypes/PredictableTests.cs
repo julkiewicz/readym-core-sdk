@@ -21,7 +21,7 @@ public class PredictableTests(ITestOutputHelper output)
         typeof(Api.Multiplayer.ECS.Components.INetworkedComponent).Assembly
     ];
 
-    private const string Guesses = "global::ReadyM.SDK.Events.PredictedValueRegistry";
+    private const string Guesses = "global::ReadyM.SDK.Events.GuessedValueRegistry";
 
     private const string Shapes =
         """
