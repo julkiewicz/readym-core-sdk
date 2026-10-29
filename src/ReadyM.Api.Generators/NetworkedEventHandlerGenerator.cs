@@ -9,14 +9,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace ReadyM.Api.Generators;
 
 /// <summary>
-/// Runs on a mod project, client or server. Collects the <c>[EventHandler]</c> methods it declares and emits
-/// one handler set per event: this mod's handlers, grouped by stage, callable a stage at a time.
+/// Emits one handler set per event a mod handles, its <c>[EventHandler]</c> methods grouped by stage, and the
+/// declarations the SDK runs. The SDK's coordinator for the event runs every mod's set a stage at a time.
 /// </summary>
-/// <remarks>
-/// A mod emits no dispatch of its own. The coordinator that runs these lives in the SDK, one per event rather
-/// than one per mod, which is what lets another mod's Validate refuse what this one would have applied, and
-/// what keeps the event going out to the audience once however many mods are handling it.
-/// </remarks>
 [Generator]
 internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
 {
@@ -88,7 +83,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         EmitDeclarations(context, mod, byEvent, onServer);
     }
 
-    /// <summary>What a handler may not say. Each is a hard error rather than a handler that never fires.</summary>
+    /// <summary>Reports the handler declarations that are errors.</summary>
     private static void Validate(SourceProductionContext context, Handler handler, bool onServer)
     {
         var location = handler.Method.Locations.FirstOrDefault();
@@ -243,10 +238,8 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
             location));
 
     /// <summary>
-    /// A handler set takes its handlers as constructor parameters, so it can be no more accessible than the
-    /// least accessible of them. A mod that keeps a handler class to itself, which is the normal thing to do
-    /// since nothing outside the mod calls it, gets an internal set. Its own generated registration is in the
-    /// same assembly, so that is all it needs.
+    /// A handler set takes the mod's handler classes as constructor parameters, so it is internal unless every one
+    /// of them is public.
     /// </summary>
     private static string AccessibilityOf(List<ISymbol?> owners)
         => owners.All(PubliclyVisible) ? "public" : "internal";
