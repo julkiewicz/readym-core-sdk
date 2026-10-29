@@ -21,8 +21,6 @@ public class PredictableTests(ITestOutputHelper output)
         typeof(Api.Multiplayer.ECS.Components.INetworkedComponent).Assembly
     ];
 
-    private const string Guesses = "global::ReadyM.SDK.Events.GuessedValueRegistry";
-
     private const string Shapes =
         """
         [ArchetypeMixin(Replication.ServerAuthoritative)]
@@ -42,18 +40,18 @@ public class PredictableTests(ITestOutputHelper output)
         }
         """;
 
-    /// <summary>One registry per member, holding the server's value aside for each entity a guess stands on.</summary>
+    /// <summary>
+    /// A guess goes through the entity, which knows its world's guesses, with the field it is written into and the
+    /// member's own name, so a guess that cannot be made says which value it was about. Nothing is kept per member.
+    /// </summary>
     [Fact]
-    public void A_guessable_value_gets_somewhere_to_keep_the_servers_value()
+    public void A_guess_names_its_field_and_member_and_keeps_nothing_static()
     {
         var generated = Generated(Run(Shapes));
 
-        Assert.Contains($"private static readonly {Guesses}<global::Mod.CurseComponent, bool> ActiveGuesses", generated);
-        Assert.DoesNotContain("TurnsGuesses", generated);
-
-        // The field, which is what a guess is written into and the server's value put back through, and the
-        // member's own name, so a guess that cannot be made says which value it was about.
-        Assert.Contains("= new(\"Curse.Active\", global::Mod.CurseComponent.Fields.Active);", generated);
+        Assert.Contains(
+            "=> handle.Predict(global::Mod.CurseComponent.Fields.Active, value, \"Curse.Active\");", generated);
+        Assert.DoesNotContain("private static readonly", generated);
     }
 
     /// <summary>
@@ -67,7 +65,6 @@ public class PredictableTests(ITestOutputHelper output)
 
         Assert.Contains("public static bool GetActive(in global::ReadyM.SDK.Entities.EntityHandle handle) =>", generated);
         Assert.Contains("GetActive(in global::ReadyM.SDK.Chunks.ComponentChunk chunk, int index)", generated);
-        Assert.DoesNotContain("ActiveGuesses.TryGet", generated);
         Assert.DoesNotContain(Calls(generated, "GetActive("), call => call.Contains("Handle)"));
     }
 
@@ -82,7 +79,7 @@ public class PredictableTests(ITestOutputHelper output)
         var generated = Generated(Run(Shapes));
 
         Assert.Contains("public static void PredictActive(", generated);
-        Assert.Contains("=> ActiveGuesses.Guess(handle, value);", generated);
+        Assert.Contains("=> handle.Predict(", generated);
         Assert.DoesNotContain("PredictTurns", generated);
     }
 
@@ -92,7 +89,7 @@ public class PredictableTests(ITestOutputHelper output)
     {
         var generated = Generated(Run(Shapes));
 
-        Assert.DoesNotContain("ActiveGuesses.Guess(handle, value))", generated);
+        Assert.DoesNotContain(Calls(generated, "SetActive("), call => call.Contains("Predict("));
         Assert.Contains(
             "public static void SetActive(in global::ReadyM.SDK.Entities.EntityHandle handle, bool value)",
             generated);

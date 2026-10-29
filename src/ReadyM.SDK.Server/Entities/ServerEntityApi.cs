@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Friflo.Engine.ECS;
+using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Mapping.Data;
 using ReadyM.Api.Multiplayer.Interop;
@@ -315,6 +316,11 @@ internal sealed class ServerEntityApi : IEntityApi, IChunkSource
         field.SetFromApi(ref component, value, rawEntity.Id);
         return true;
     }
+
+    public void Predict<TComponent, TValue>(
+        RawEntity rawEntity, Field<TComponent, TValue> field, TValue value, string member)
+        where TComponent : struct, INetworkedComponent
+        => throw new InvalidOperationException($"Only a client predicts. '{member}' was predicted on the server.");
 
     public int ComponentIdOf(Type type) => _registry.Resolve(type);
 

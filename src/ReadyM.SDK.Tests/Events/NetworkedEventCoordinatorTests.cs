@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using LiteNetLib.Utils;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.Client;
 using ReadyM.Api.Multiplayer.Protocol;
@@ -131,7 +132,7 @@ public class NetworkedEventCoordinatorTests
     private ServerNetworkedEventCoordinator<Blow> OnServer(params Handlers[] mods) => OnServer(Policy.Anyone, mods);
 
     private (ClientNetworkedEventCoordinator<Blow> Coordinator, FakeRpcClient Relay) OnClient(
-        NetworkedEventPredictions predictions, params Handlers[] mods)
+        PredictedRaiseRegistry predictions, params Handlers[] mods)
     {
         var relay = new FakeRpcClient();
         var coordinator = new ClientNetworkedEventCoordinator<Blow>(
@@ -143,7 +144,7 @@ public class NetworkedEventCoordinatorTests
     }
 
     private (ClientNetworkedEventCoordinator<Blow> Coordinator, FakeRpcClient Relay) OnClient(params Handlers[] mods)
-        => OnClient(new NetworkedEventPredictions(), mods);
+        => OnClient(new PredictedRaiseRegistry(new GuessedValueRegistry(new PredictionDeltaHooks())), mods);
 
     /// <summary>What the server sends: the header, then the event.</summary>
     private static NetDataWriter Arriving(bool refused, PlayerId origin, int damage, params object[] refusal)
@@ -365,10 +366,10 @@ public class NetworkedEventCoordinatorTests
     [Fact]
     public void A_client_with_no_handlers_still_takes_its_guess_back_on_a_refusal()
     {
-        var predictions = new NetworkedEventPredictions();
+        var predictions = new PredictedRaiseRegistry(new GuessedValueRegistry(new PredictionDeltaHooks()));
         var (_, relay) = OnClient(predictions);
 
-        predictions.Open(Wire, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
+        predictions.StartRaise(Wire, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
         relay.Deliver(Wire, Arriving(true, Me, 1, "Someone", 0));
 

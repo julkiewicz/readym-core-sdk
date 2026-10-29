@@ -1,4 +1,5 @@
-﻿using ReadyM.Api.DI;
+﻿using ReadyM.Api.Multiplayer.ECS;
+using ReadyM.Api.DI;
 using Microsoft.Extensions.Logging;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Multiplayer.ECS.Archetypes;
@@ -78,7 +79,9 @@ internal static class DependencyInjectionExtensions
         container.RegisterSingleton<RpcEntities>();
         container.RegisterSingleton<NetworkedEventRegistry>();
         container.RegisterSingleton<INetworkedEventEntityReader, NetworkedEventEntityReader>();
-        container.RegisterSingleton<NetworkedEventPredictions>();
+        container.RegisterSingleton<PredictionDeltaHooks>();
+        container.RegisterSingleton<GuessedValueRegistry>();
+        container.RegisterSingleton<PredictedRaiseRegistry>();
         container.RegisterSingleton<INetworkedEvents, Events.ClientNetworkedEvents>();
 #if NET
         container.RegisterSingleton<IChunkSource, ClientChunkSource>();

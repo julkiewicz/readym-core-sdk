@@ -20,8 +20,16 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
     private readonly bool _clearFlags;
     private readonly QueryCacheHelper<SendContext, Entity?, ArchetypeQuery<MetadataComponent, T>> _queryCache;
 
-    protected SendComponentDeltaSystemBase(INetworkTime networkTime, NetworkedComponentId componentId, bool clearFlags)
+    private readonly PredictionDeltaHooks<T>? _predictionHooks;
+
+    /// <param name="predictionHooks">Null where nothing is ever predicted, which is the server.</param>
+    protected SendComponentDeltaSystemBase(
+        INetworkTime networkTime,
+        NetworkedComponentId componentId,
+        bool clearFlags,
+        PredictionDeltaHooks<T>? predictionHooks)
     {
+        _predictionHooks = predictionHooks;
         ComponentId = componentId;
         _clearFlags = clearFlags;
         _networkTime = networkTime;
@@ -84,7 +92,7 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
 
     protected void OnUpdate(SendContext context)
     {
-        PredictionDeltaHooks<T>.BeforeDeltaSend?.Invoke();
+        _predictionHooks?.BeforeDeltaSend?.Invoke();
 
         var maxPacketSize = GetMaxPacketSize();
         var owners = SentOwners();

@@ -28,13 +28,7 @@ public class PredictableValueTests : ClientSdkTest
 
     private const byte HourBit = 1 << 1;
 
-    private readonly NetworkedEventPredictions _predictions = new();
-
-    /// <summary>
-    /// Every guess taken back before the world goes. The registries are static, so a guess left standing
-    /// would still be listening to the delta path in the next test.
-    /// </summary>
-    protected override void TearDown() => _predictions.Expire(double.MaxValue);
+    private PredictionDeltaHooks<LockdownComponent> Hooks => DeltaHooks.For<LockdownComponent>();
 
     private Settlement Town()
     {
@@ -64,7 +58,7 @@ public class PredictableValueTests : ClientSdkTest
     /// The server's value arriving as the delta path delivers it: the hooks either side of the read, around a
     /// delta carrying only what changed on the server's copy.
     /// </summary>
-    private static void Arrives(Settlement town, bool? active = null, int? hour = null)
+    private void Arrives(Settlement town, bool? active = null, int? hour = null)
     {
         // Moved off the value first, so the write that follows is a change and the delta carries it
         var server = default(LockdownComponent);
@@ -87,10 +81,11 @@ public class PredictableValueTests : ClientSdkTest
         server.WriteDelta(writer);
 
         ref var component = ref Component(town);
+        var id = EntityHandle.Of(town).Id;
 
-        PredictionDeltaHooks<LockdownComponent>.BeforeDeltaRead?.Invoke(ref component);
-        component.ReadDeltaTracking(new NetDataReader(writer.CopyData()), EntityHandle.Of(town).Id);
-        PredictionDeltaHooks<LockdownComponent>.AfterDeltaRead?.Invoke(ref component);
+        Hooks.BeforeDeltaRead?.Invoke(id, ref component);
+        component.ReadDeltaTracking(new NetDataReader(writer.CopyData()), id);
+        Hooks.AfterDeltaRead?.Invoke(id, ref component);
     }
 
     [Fact]
@@ -108,7 +103,7 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Assert.True(town.LockdownActive);
     }
@@ -122,7 +117,7 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Assert.True(Component(town).Active);
         Assert.True(Component(town).ChangedFromApi);
@@ -137,7 +132,7 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Assert.False(Component(town).IsDirty);
         Assert.Equal(0, Outgoing(town));
@@ -152,11 +147,11 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Component(town).Active = false;
         Component(town).Hour = 22;
-        PredictionDeltaHooks<LockdownComponent>.BeforeDeltaSend?.Invoke();
+        Hooks.BeforeDeltaSend?.Invoke();
 
         Assert.Equal(HourBit, Outgoing(town));
     }
@@ -166,9 +161,9 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
         Component(town).ClearApiFlag();
-        _predictions.Refused(Code);
+        PredictedRaises.RollBackRefused(Code);
 
         Assert.False(town.LockdownActive);
         Assert.False(Component(town).Active);
@@ -181,8 +176,8 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.False(town.LockdownActive);
     }
@@ -194,7 +189,7 @@ public class PredictableValueTests : ClientSdkTest
         var guessed = Town();
         var other = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => guessed.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => guessed.PredictLockdownActive(true));
 
         Assert.True(guessed.LockdownActive);
         Assert.False(other.LockdownActive);
@@ -209,13 +204,13 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() =>
+        PredictedRaises.StartRaise(Code, 0).Predicting(() =>
         {
             town.PredictLockdownActive(true);
             town.LockdownHour = 22;
         });
 
-        _predictions.Refused(Code);
+        PredictedRaises.RollBackRefused(Code);
 
         Assert.False(town.LockdownActive);
         Assert.Equal(22, town.LockdownHour);
@@ -230,7 +225,7 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Assert.True(town.As<Lockdown>().Active);
         Assert.True(town.LockdownActive);
@@ -246,7 +241,7 @@ public class PredictableValueTests : ClientSdkTest
         var town = Town();
 
         town.LockdownActive = true;
-        _predictions.Expire(NetworkedEventPredictions.Ttl * 10);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout * 10);
 
         Assert.True(town.LockdownActive);
         Assert.Equal(ActiveBit, Outgoing(town));
@@ -261,10 +256,10 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Arrives(town, active: true);
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.True(town.LockdownActive);
         Assert.True(Component(town).Active);
@@ -281,11 +276,11 @@ public class PredictableValueTests : ClientSdkTest
         town.LockdownActive = true;
         Component(town).ClearDirty();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(false));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(false));
         Assert.False(town.LockdownActive);
 
         Arrives(town, active: false);
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.False(town.LockdownActive);
         Assert.False(Component(town).Active);
@@ -301,14 +296,14 @@ public class PredictableValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Arrives(town, hour: 7);
 
         Assert.True(town.LockdownActive);
         Assert.Equal(7, town.LockdownHour);
 
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.False(town.LockdownActive);
         Assert.Equal(7, town.LockdownHour);
@@ -321,36 +316,33 @@ public class PredictableValueTests : ClientSdkTest
         var answered = Town();
         var waiting = Town();
 
-        _predictions.Open(Code, 0).Predicting(() =>
+        PredictedRaises.StartRaise(Code, 0).Predicting(() =>
         {
             answered.PredictLockdownActive(true);
             waiting.PredictLockdownActive(true);
         });
 
         Arrives(answered, active: true);
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.True(answered.LockdownActive);
         Assert.False(waiting.LockdownActive);
     }
 
-    /// <summary>
-    /// The delta path asks about guesses only while one stands. With none it pays a null check per component
-    /// type, and every delta for every other type pays nothing at all.
-    /// </summary>
+    /// <summary>The delta path asks about guesses only while one stands. With none it pays a null check.</summary>
     [Fact]
     public void Nothing_listens_to_the_delta_path_once_no_guess_stands()
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
-        Assert.NotNull(PredictionDeltaHooks<LockdownComponent>.BeforeDeltaRead);
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        Assert.NotNull(Hooks.BeforeDeltaRead);
 
-        _predictions.Refused(Code);
+        PredictedRaises.RollBackRefused(Code);
 
-        Assert.Null(PredictionDeltaHooks<LockdownComponent>.BeforeDeltaRead);
-        Assert.Null(PredictionDeltaHooks<LockdownComponent>.AfterDeltaRead);
-        Assert.Null(PredictionDeltaHooks<LockdownComponent>.BeforeDeltaSend);
+        Assert.Null(Hooks.BeforeDeltaRead);
+        Assert.Null(Hooks.AfterDeltaRead);
+        Assert.Null(Hooks.BeforeDeltaSend);
     }
 
     /// <summary>

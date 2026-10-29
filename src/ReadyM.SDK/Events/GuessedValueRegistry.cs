@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using ReadyM.Api.Mapping.Data;
 using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.Multiplayer.ECS.Components;
@@ -7,186 +5,209 @@ using ReadyM.SDK.Entities;
 
 namespace ReadyM.SDK.Events;
 
-/// <exclude />
 /// <summary>
-/// The guesses at one predictable member. A guess is written into the component
-/// itself, because the component may be exposed to native game code, and the server's value is kept here until
-/// the guess is answered or taken back.
+/// The guessed values standing in one world. A guess is written into the component, so the game shows it, and
+/// the server's value is kept here until the server answers or the guess is rolled back.
 /// </summary>
 /// <remarks>
-/// A guess must never reach the server as the value, so every write here leaves the field out of the next
-/// delta, and while a guess stands the field is held out of what is sent whatever else marks it changed. Both
-/// writes go in as changes from the API, which is the mark that has the game take a value from the ECS.
+/// A guessed field never goes to the server: every write here clears its dirty bit, and while a guess stands the
+/// field is cleared again before each delta is sent. ECS thread only.
 /// </remarks>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public sealed class GuessedValueRegistry<TComponent, T>
-    where TComponent : struct, INetworkedComponent
+internal sealed class GuessedValueRegistry(PredictionDeltaHooks deltaHooks)
 {
-    private readonly Dictionary<EntityHandle, Held> _guessed = new();
+    private readonly Dictionary<(Type Component, int Field), object> _fields = [];
 
-    /// <summary>Reused, so a delta answering guesses allocates nothing.</summary>
-    private readonly List<EntityHandle> _answered = [];
-
-    private readonly string _member;
-
-    private readonly Field<TComponent, T> _field;
-
-    private readonly PredictionDeltaHooks<TComponent>.DeltaHook _onBeforeDeltaRead;
-    private readonly PredictionDeltaHooks<TComponent>.DeltaHook _onDeltaRead;
-
-    private readonly Action _beforeDeltaSend;
-
-    private long _stamped;
-
-    /// <param name="member">The value this holds guesses at, for the exception when one cannot be made.</param>
-    /// <param name="field">Where the value lives, which is where a guess is written and the server's value put back.</param>
-    public GuessedValueRegistry(string member, Field<TComponent, T> field)
-    {
-        _member = member;
-        _field = field;
-        _onBeforeDeltaRead = OnBeforeDeltaRead;
-        _onDeltaRead = OnDeltaRead;
-        _beforeDeltaSend = OnBeforeDeltaSend;
-    }
+    /// <summary>What rolls back the guesses made so far, while a prediction runs; null otherwise.</summary>
+    private List<Action>? _rollbacks;
 
     /// <summary>
-    /// Writes the value into the component as a guess, keeping the server's value to put back. A guess on top
-    /// of a guess joins it: the value kept is the one from before the first, since that one is the server's,
-    /// and the stack keeps the first raise's deadline rather than extending it. A stream of raises,
-    /// damage over time say, would otherwise keep pushing the deadline out and never let the guess go.
+    /// Runs a prediction, collecting how to roll back each guess it makes.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Nothing is being guessed at here, so there is no raise waiting on an answer to take this back and it
-    /// would stand for the rest of the session.
-    /// </exception>
-    public void Guess(in EntityHandle handle, T value)
+    /// <returns>What rolls back every guess the prediction made, or null when it made none.</returns>
+    public Action? RunPrediction(Action prediction)
     {
-        if (!NetworkedEventEcsValueGuesses.InsidePrediction)
-            throw new InvalidOperationException(
-                $"'{_member}' can only be guessed at inside the callback handed to .Predicting() on the raise "
-                + "being guessed at. Nothing here is waiting on an answer that would take the guess back.");
+        var outer = _rollbacks;
+        var rollbacks = new List<Action>();
+        _rollbacks = rollbacks;
 
-        var entity = handle;
-        ref var component = ref entity.GetComponent<TComponent>();
-        var joins = _guessed.TryGetValue(entity, out var standing);
-        var kept = joins ? standing.Kept : _field.Get(component);
-        var stack = joins ? standing.Stack : ++_stamped;
-
-        if (_guessed.Count == 0)
-            Listen();
-
-        _guessed[entity] = new Held(kept, value, stack);
-        Show(ref component, value, entity);
-        NetworkedEventEcsValueGuesses.PushRollback(() => TakeBack(entity, stack));
-    }
-
-    /// <summary>
-    /// Puts the server's value back for one stack of guesses.
-    /// </summary>
-    private void TakeBack(EntityHandle entity, long stack)
-    {
-        if (!_guessed.TryGetValue(entity, out var held) || held.Stack != stack)
-            return;
-
-        _guessed.Remove(entity);
-
-        // Could happen - a creature dying to the hit being guessed at leaves nowhere to put old value back
-        if (Present(entity))
-            Show(ref entity.GetComponent<TComponent>(), held.Kept, entity);
-
-        if (_guessed.Count == 0)
-            Quiet();
-    }
-
-    /// <summary>The server's value back in place, so the delta about to be read lands on what the server has.</summary>
-    private void OnBeforeDeltaRead(ref TComponent component)
-    {
-        // netstandard2.0 has no deconstruction for pairs
-        foreach (var guessed in _guessed)
-            if (Is(guessed.Key, ref component))
-                Show(ref component, guessed.Value.Kept, guessed.Key);
-    }
-
-    /// <summary>
-    /// The delta has been read. A field it moved off the server's value was answered, and keeps what arrived;
-    /// one it did not carry is still waiting, and gets its guess back. A delta carries only what changed, so
-    /// the field beside a guess moving says nothing about the guess.
-    /// </summary>
-    private void OnDeltaRead(ref TComponent component)
-    {
-        foreach (var guessed in _guessed)
+        try
         {
-            if (!Is(guessed.Key, ref component))
-                continue;
-
-            if (EqualityComparer<T>.Default.Equals(_field.Get(component), guessed.Value.Kept))
-                Show(ref component, guessed.Value.Guess, guessed.Key);
-            else
-                _answered.Add(guessed.Key);
+            prediction();
+        }
+        finally
+        {
+            _rollbacks = outer;
         }
 
-        foreach (var entity in _answered)
-            _guessed.Remove(entity);
-
-        _answered.Clear();
-
-        if (_guessed.Count == 0)
-            Quiet();
+        return rollbacks.Count == 0 ? null : () => rollbacks.ForEach(rollback => rollback());
     }
 
     /// <summary>
-    /// Keeps every guessed field out of what is about to be sent. The game copies the value it was shown back
-    /// into the component, and anything else may mark it changed.
+    /// Writes a guess into the component. A guess on an entity that already has one joins it: the server's value
+    /// kept is the one from before the first, and the first raise's timeout still applies.
     /// </summary>
-    private void OnBeforeDeltaSend()
+    /// <param name="member">The predictable member, as the exception names it.</param>
+    /// <exception cref="InvalidOperationException">Called outside a <c>.Predicting()</c> callback.</exception>
+    public void Guess<TComponent, T>(EntityHandle entity, Field<TComponent, T> field, T value, string member)
+        where TComponent : struct, INetworkedComponent
     {
-        foreach (var entity in _guessed.Keys)
-            if (Present(entity))
-                entity.GetComponent<TComponent>().ClearDirty(_field.Id);
+        if (_rollbacks is not { } rollbacks)
+            throw new InvalidOperationException(
+                $"'{member}' can only be predicted inside the callback passed to .Predicting().");
+
+        rollbacks.Add(FieldGuesses(field).Guess(entity, value));
     }
 
-    /// <summary>
-    /// Writes a value for the game to show.
-    /// </summary>
-    private void Show(ref TComponent component, T value, in EntityHandle entity)
+    private FieldGuessRegistry<TComponent, T> FieldGuesses<TComponent, T>(Field<TComponent, T> field)
+        where TComponent : struct, INetworkedComponent
     {
-        _field.SetFromApi(ref component, value, entity.Id);
-        component.ClearDirty(_field.Id);
+        var key = (typeof(TComponent), field.Id);
+
+        if (!_fields.TryGetValue(key, out var guesses))
+            _fields[key] = guesses = new FieldGuessRegistry<TComponent, T>(field, deltaHooks.For<TComponent>());
+
+        return (FieldGuessRegistry<TComponent, T>)guesses;
     }
 
-    /// <summary>
-    /// Whether the component the delta path handed over is this entity's, in this entity's world. The id
-    /// alone is not enough: a server and its clients share a process in tests and in a listen server.
-    /// </summary>
-    private static bool Is(in EntityHandle entity, ref TComponent component)
-        => Present(entity) && Unsafe.AreSame(ref entity.GetComponent<TComponent>(), ref component);
-
-    /// <summary>Whether the entity is still there with the value on it.</summary>
-    private static bool Present(in EntityHandle entity)
-        => entity.IsAlive() && entity.HasComponent<TComponent>();
-
-    private void Listen()
+    /// <summary>The guesses at one field, by the entity each stands on.</summary>
+    private sealed class FieldGuessRegistry<TComponent, T> where TComponent : struct, INetworkedComponent
     {
-        PredictionDeltaHooks<TComponent>.BeforeDeltaRead += _onBeforeDeltaRead;
-        PredictionDeltaHooks<TComponent>.AfterDeltaRead += _onDeltaRead;
-        PredictionDeltaHooks<TComponent>.BeforeDeltaSend += _beforeDeltaSend;
-    }
+        private readonly Dictionary<int, GuessedValue> _guesses = [];
 
-    private void Quiet()
-    {
-        PredictionDeltaHooks<TComponent>.BeforeDeltaRead -= _onBeforeDeltaRead;
-        PredictionDeltaHooks<TComponent>.AfterDeltaRead -= _onDeltaRead;
-        PredictionDeltaHooks<TComponent>.BeforeDeltaSend -= _beforeDeltaSend;
-    }
+        private readonly Field<TComponent, T> _field;
 
-    private readonly struct Held(T kept, T guess, long stack)
-    {
-        /// <summary>The server's value, from before any guess stood on the entity.</summary>
-        public T Kept { get; } = kept;
+        private readonly PredictionDeltaHooks<TComponent> _deltaHooks;
 
-        public T Guess { get; } = guess;
+        private readonly PredictionDeltaHooks<TComponent>.DeltaHook _beforeDeltaRead;
 
-        /// <summary>Which stack this is, so a raise from an ended stack cannot take back a later one.</summary>
-        public long Stack { get; } = stack;
+        private readonly PredictionDeltaHooks<TComponent>.DeltaHook _afterDeltaRead;
+
+        private readonly Action _beforeDeltaSend;
+
+        private long _lastGuessGroup;
+
+        public FieldGuessRegistry(Field<TComponent, T> field, PredictionDeltaHooks<TComponent> deltaHooks)
+        {
+            _field = field;
+            _deltaHooks = deltaHooks;
+            _beforeDeltaRead = BeforeDeltaRead;
+            _afterDeltaRead = AfterDeltaRead;
+            _beforeDeltaSend = BeforeDeltaSend;
+        }
+
+        /// <returns>What rolls this guess back.</returns>
+        public Action Guess(EntityHandle entity, T value)
+        {
+            ref var component = ref entity.GetComponent<TComponent>();
+
+            var joins = _guesses.TryGetValue(entity.Id, out var standing);
+            var serverValue = joins ? standing.ServerValue : _field.Get(component);
+            var group = joins ? standing.Group : ++_lastGuessGroup;
+
+            if (_guesses.Count == 0)
+                SubscribeToDeltaHooks();
+
+            _guesses[entity.Id] = new GuessedValue
+            {
+                Entity = entity,
+                ServerValue = serverValue,
+                Guess = value,
+                Group = group,
+            };
+
+            WriteWithoutReplicating(ref component, value, entity.Id);
+
+            return () => RestoreServerValue(entity.Id, group);
+        }
+
+        /// <summary>Rolls back one group of guesses, unless the server answered it or a newer group replaced it.</summary>
+        private void RestoreServerValue(int entityId, long group)
+        {
+            if (!_guesses.TryGetValue(entityId, out var guessed) || guessed.Group != group)
+                return;
+
+            _guesses.Remove(entityId);
+
+            // The entity may be gone, say a creature that died to the hit being guessed at
+            if (HasLiveComponent(guessed.Entity))
+                WriteWithoutReplicating(ref guessed.Entity.GetComponent<TComponent>(), guessed.ServerValue, entityId);
+
+            if (_guesses.Count == 0)
+                UnsubscribeFromDeltaHooks();
+        }
+
+        /// <summary>Puts the server's value back, so the delta about to be read applies to it.</summary>
+        private void BeforeDeltaRead(int entityId, ref TComponent component)
+        {
+            if (_guesses.TryGetValue(entityId, out var guessed))
+                WriteWithoutReplicating(ref component, guessed.ServerValue, entityId);
+        }
+
+        /// <summary>
+        /// A delta that changed the field answered the guess, and the new value stands. One that did not leaves the
+        /// guess waiting, so it goes back in.
+        /// </summary>
+        private void AfterDeltaRead(int entityId, ref TComponent component)
+        {
+            if (!_guesses.TryGetValue(entityId, out var guessed))
+                return;
+
+            if (!EqualityComparer<T>.Default.Equals(_field.Get(component), guessed.ServerValue))
+            {
+                _guesses.Remove(entityId);
+
+                if (_guesses.Count == 0)
+                    UnsubscribeFromDeltaHooks();
+
+                return;
+            }
+
+            WriteWithoutReplicating(ref component, guessed.Guess, entityId);
+        }
+
+        /// <summary>Keeps every guessed field out of the delta about to be sent, whatever marked it changed.</summary>
+        private void BeforeDeltaSend()
+        {
+            foreach (var guessed in _guesses.Values)
+                if (HasLiveComponent(guessed.Entity))
+                    guessed.Entity.GetComponent<TComponent>().ClearDirty(_field.Id);
+        }
+
+        /// <summary>Writes a value the game takes, and that never goes to the server.</summary>
+        private void WriteWithoutReplicating(ref TComponent component, T value, int entityId)
+        {
+            _field.SetFromApi(ref component, value, entityId);
+            component.ClearDirty(_field.Id);
+        }
+
+        private static bool HasLiveComponent(EntityHandle entity)
+            => entity.IsAlive() && entity.HasComponent<TComponent>();
+
+        private void SubscribeToDeltaHooks()
+        {
+            _deltaHooks.BeforeDeltaRead += _beforeDeltaRead;
+            _deltaHooks.AfterDeltaRead += _afterDeltaRead;
+            _deltaHooks.BeforeDeltaSend += _beforeDeltaSend;
+        }
+
+        private void UnsubscribeFromDeltaHooks()
+        {
+            _deltaHooks.BeforeDeltaRead -= _beforeDeltaRead;
+            _deltaHooks.AfterDeltaRead -= _afterDeltaRead;
+            _deltaHooks.BeforeDeltaSend -= _beforeDeltaSend;
+        }
+
+        private struct GuessedValue
+        {
+            public EntityHandle Entity;
+
+            /// <summary>The server's value from before the first guess in the group.</summary>
+            public T ServerValue;
+
+            public T Guess;
+
+            /// <summary>Which group of stacked guesses this is, so rolling back an old group misses a newer one.</summary>
+            public long Group;
+        }
     }
 }

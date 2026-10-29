@@ -9,6 +9,7 @@ namespace ReadyM.Api.Multiplayer.ECS.Jobs;
 internal class DefaultNetworkedComponentJobRegistration(
     INetworkedEntityManager netEntity,
     IPlayerIdProvider playerIdProvider,
+    PredictionDeltaHooks predictionHooks,
     ILogger logger) : INetworkedComponentJobRegistration
 {
     private class RegisterJobsCallback(DefaultNetworkedComponentJobRegistration owner, NetworkedComponentJobRegistry jobRegistry) : INetworkedComponentRegistryCallback
@@ -24,7 +25,8 @@ internal class DefaultNetworkedComponentJobRegistration(
             var id = registry.GetNetworkedComponentId<T>();
 
             owner._logger.LogDebug("Registering jobs for: {ComponentType} with ID {Id}", typeof(T).Name, id);
-            jobRegistry.RegisterApplyDeltaJob(id, new ApplyDeltaJob<T>(owner._netEntity, owner._playerIdProvider, owner._logger));
+            jobRegistry.RegisterApplyDeltaJob(id, new ApplyDeltaJob<T>(
+                owner._netEntity, owner._playerIdProvider, owner._predictionHooks.For<T>(), owner._logger));
             jobRegistry.RegisterApplySnapshotJob(id, new ApplySnapshotJob<T>(owner._netEntity));
             jobRegistry.RegisterWriteSnapshotJob(id, new WriteSnapshotJob<T>(id));
         }
@@ -33,6 +35,7 @@ internal class DefaultNetworkedComponentJobRegistration(
     private readonly ILogger _logger = logger;
     private readonly INetworkedEntityManager _netEntity = netEntity;
     private readonly IPlayerIdProvider _playerIdProvider = playerIdProvider;
+    private readonly PredictionDeltaHooks _predictionHooks = predictionHooks;
 
     public void Register(INetworkedComponentRegistry registry, NetworkedComponentJobRegistry jobRegistry)
     {

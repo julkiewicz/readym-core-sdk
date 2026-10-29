@@ -198,14 +198,6 @@ internal static class AccessorEmitter
         var target = $"handle.GetComponent<{component}>()";
         var write = replicated ? Write(target, accessor) : $"{access} = value";
 
-        if (accessor.IsPredictable)
-        {
-            // The guess is written into the component, so every read below is the component's and sees it
-            writer.Line();
-            writer.Line($"private static readonly {ArchetypeNames.Guesses}<{component}, {accessor.Type}> {Guesses(accessor)}");
-            writer.Line($"    = new(\"{declaring}.{accessor.Name}\", {Entry(accessor, component)});");
-        }
-
         writer.Line();
         writer.Line($"public static {accessor.Type} Get{accessor.Name}(in {ArchetypeNames.EntityHandle} handle) => {read};");
 
@@ -257,7 +249,7 @@ internal static class AccessorEmitter
             writer.Line();
             writer.Line($"public static void Predict{accessor.Name}("
                         + $"in {ArchetypeNames.EntityHandle} handle, {accessor.Type} value)");
-            writer.Line($"    => {Guesses(accessor)}.Guess(handle, value);");
+            writer.Line($"    => handle.Predict({Entry(accessor, component)}, value, \"{declaring}.{accessor.Name}\");");
         }
 
         writer.Line();
@@ -403,9 +395,6 @@ internal static class AccessorEmitter
     /// </summary>
     internal static bool Marked(AccessorModel accessor, bool replicated)
         => replicated && !accessor.IsNativeContainer;
-
-    /// <summary>Where the server's value is kept while this member is guessed at, one registry per member.</summary>
-    internal static string Guesses(AccessorModel accessor) => accessor.Name + "Guesses";
 
     private static string Entry(AccessorModel accessor, string component)
         => $"{component}.Fields.{accessor.FieldEntry}";

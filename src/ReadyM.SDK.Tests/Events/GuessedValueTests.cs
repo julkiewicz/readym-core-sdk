@@ -18,15 +18,6 @@ public class GuessedValueTests : ClientSdkTest
 {
     private const RelayMessageCode Code = RelayMessageCode.MaxServerRpcEvent;
 
-    private readonly NetworkedEventPredictions _predictions = new();
-
-    /// <summary>
-    /// Every guess taken back before the world goes. The registries are static, so a guess left standing
-    /// would still be listening to the delta path in the next test.
-    /// </summary>
-    protected override void TearDown() => _predictions.Expire(double.MaxValue);
-
-    private readonly GuessedValueRegistry<LockdownComponent, int> _hour = new("Curfew.Hour", LockdownComponent.Fields.Hour);
 
     private Settlement Town(int hour = 5)
     {
@@ -38,14 +29,15 @@ public class GuessedValueTests : ClientSdkTest
         return town;
     }
 
-    private void Guess(Settlement town, int hour) => _hour.Guess(EntityHandle.Of(town), hour);
+    private static void Guess(Settlement town, int hour)
+        => EntityHandle.Of(town).Predict(LockdownComponent.Fields.Hour, hour, "Curfew.Hour");
 
     [Fact]
     public void A_guess_reads_back_as_the_value()
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => Guess(town, 6));
 
         Assert.Equal(6, town.LockdownHour);
     }
@@ -56,7 +48,7 @@ public class GuessedValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() =>
+        PredictedRaises.StartRaise(Code, 0).Predicting(() =>
         {
             Guess(town, 6);
             Guess(town, 7);
@@ -64,7 +56,7 @@ public class GuessedValueTests : ClientSdkTest
 
         Assert.Equal(7, town.LockdownHour);
 
-        _predictions.Refused(Code);
+        PredictedRaises.RollBackRefused(Code);
 
         Assert.Equal(5, town.LockdownHour);
     }
@@ -78,11 +70,11 @@ public class GuessedValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
-        _predictions.Open(Code, 0.3).Predicting(() => Guess(town, 7));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => Guess(town, 6));
+        PredictedRaises.StartRaise(Code, 0.3).Predicting(() => Guess(town, 7));
 
         // Only the first one's deadline has passed
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.Equal(5, town.LockdownHour);
     }
@@ -96,10 +88,10 @@ public class GuessedValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
-        _predictions.Open(Code, 0.3).Predicting(() => Guess(town, 7));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => Guess(town, 6));
+        PredictedRaises.StartRaise(Code, 0.3).Predicting(() => Guess(town, 7));
 
-        _predictions.Expire(0.3 + NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(0.3 + PredictedRaiseRegistry.Timeout);
 
         Assert.Equal(5, town.LockdownHour);
     }
@@ -116,20 +108,20 @@ public class GuessedValueTests : ClientSdkTest
         var town = Town(hour: 20);
 
         for (var tick = 0; tick < 5; tick++)
-            _predictions.Open(Code, tick * 0.1).Predicting(() => Guess(town, town.LockdownHour - 1));
+            PredictedRaises.StartRaise(Code, tick * 0.1).Predicting(() => Guess(town, town.LockdownHour - 1));
 
         Assert.Equal(15, town.LockdownHour);
 
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.Equal(20, town.LockdownHour);
 
-        _predictions.Open(Code, 0.5).Predicting(() => Guess(town, town.LockdownHour - 1));
-        _predictions.Expire(0.9);
+        PredictedRaises.StartRaise(Code, 0.5).Predicting(() => Guess(town, town.LockdownHour - 1));
+        PredictedRaises.RollBackExpired(0.9);
 
         Assert.Equal(19, town.LockdownHour);
 
-        _predictions.Expire(0.5 + NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(0.5 + PredictedRaiseRegistry.Timeout);
 
         Assert.Equal(20, town.LockdownHour);
     }
@@ -140,11 +132,11 @@ public class GuessedValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => Guess(town, 6));
 
         Assert.False(town.LockdownActive);
 
-        _predictions.Refused(Code);
+        PredictedRaises.RollBackRefused(Code);
 
         Assert.False(town.LockdownActive);
         Assert.Equal(5, town.LockdownHour);
@@ -175,7 +167,7 @@ public class GuessedValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => Guess(town, 6));
 
         Assert.Throws<InvalidOperationException>(() => Guess(town, 7));
     }
@@ -190,11 +182,11 @@ public class GuessedValueTests : ClientSdkTest
         var town = Town();
         var ran = new List<string>();
 
-        _predictions.Open(Code, 0)
+        PredictedRaises.StartRaise(Code, 0)
             .Predicting(() => Guess(town, 6))
             .Rollback(() => ran.Add("undo"));
 
-        _predictions.Refused(Code);
+        PredictedRaises.RollBackRefused(Code);
 
         Assert.Equal(["undo"], ran);
         Assert.Equal(5, town.LockdownHour);
@@ -209,11 +201,11 @@ public class GuessedValueTests : ClientSdkTest
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => Guess(town, 6));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => Guess(town, 6));
         Entities.Delete(town);
 
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
-        Assert.Equal(0, _predictions.Outstanding);
+        Assert.Equal(0, PredictedRaises.PendingCount);
     }
 }

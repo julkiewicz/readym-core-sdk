@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using LiteNetLib.Utils;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.DI;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.Client;
@@ -128,7 +129,7 @@ public class NetworkedEventRegistryTests
         container.RegisterSingleton<IRpcClient>(new FakeRpcClient());
         container.RegisterSingleton<INetworkedEventEntityReader>(
             new NetworkedEventEntityReader(new RpcEntities(api, NullLogger.Instance)));
-        container.RegisterSingleton(new NetworkedEventPredictions());
+        container.RegisterSingleton(new PredictedRaiseRegistry(new GuessedValueRegistry(new PredictionDeltaHooks())));
         container.RegisterSingleton<ServerNetworkedEventScopes>();
         container.RegisterSingleton<ServerNetworkedEventPolicy>();
         container.RegisterSingleton(new ServerNetworkedEventSender(rpc, new ServerEntities(api), new FakePlayers()));

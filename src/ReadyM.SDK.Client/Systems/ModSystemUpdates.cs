@@ -16,7 +16,7 @@ internal sealed class ModSystemUpdates : BaseSystem
 
     private List<Events.ClientNetworkedEvents>? _events;
 
-    private List<NetworkedEventPredictions>? _predictions;
+    private List<PredictedRaiseRegistry>? _predictedRaises;
 
     public ModSystemUpdates(IDependencyContainer services)
     {
@@ -42,16 +42,16 @@ internal sealed class ModSystemUpdates : BaseSystem
 
         var moment = new UpdateTime(Tick.deltaTime, Tick.time, _count++);
 
-        // Before the mods, so a guess that ran out is already gone by the time one of them reads anything.
-        // Asked for as a set, because a host that wired no event raising has none and that is not an error.
-        _predictions ??= _services.ResolveAll<NetworkedEventPredictions>().ToList();
+        // Before the mods, so a prediction that timed out is rolled back before any of them reads anything.
+        // Asked for as a set, because a host that wired no event raising has none.
+        _predictedRaises ??= _services.ResolveAll<PredictedRaiseRegistry>().ToList();
         _events ??= _services.ResolveAll<INetworkedEvents>().OfType<Events.ClientNetworkedEvents>().ToList();
 
         foreach (var events in _events)
             events.Now = Tick.time;
 
-        foreach (var predictions in _predictions)
-            predictions.Expire(Tick.time);
+        foreach (var predictedRaises in _predictedRaises)
+            predictedRaises.RollBackExpired(Tick.time);
 
         foreach (var service in _updating)
             service.Update(in moment);

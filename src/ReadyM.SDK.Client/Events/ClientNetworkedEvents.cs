@@ -8,7 +8,7 @@ using ReadyM.SDK.Events;
 namespace ReadyM.SDK.Client.Events;
 
 /// <summary>Sends raised events to the server, which runs their stages and answers.</summary>
-internal sealed class ClientNetworkedEvents(IRpcClient relay, NetworkedEventPredictions predictions, Store world)
+internal sealed class ClientNetworkedEvents(IRpcClient relay, PredictedRaiseRegistry predictedRaises, Store world)
     : INetworkedEvents
 {
     /// <summary>Set from the client's update, so a prediction can time out while nothing answers it.</summary>
@@ -23,7 +23,7 @@ internal sealed class ClientNetworkedEvents(IRpcClient relay, NetworkedEventPred
         networkEvent.Serialize(message.Writer);
         relay.SendMessage(message);
 
-        return predictions.Open(networkEvent.Code, Now);
+        return predictedRaises.StartRaise(networkEvent.Code, Now);
     }
 
     public void RaiseAs<T>(PlayerId origin, T networkEvent) where T : struct, INetworkedEvent

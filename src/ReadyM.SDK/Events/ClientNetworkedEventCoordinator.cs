@@ -13,7 +13,7 @@ internal sealed class ClientNetworkedEventCoordinator<T>(
     IEnumerable<INetworkedEventHandlers<T>> handlers,
     IRpcClient relay,
     INetworkedEventEntityReader entities,
-    NetworkedEventPredictions predictions)
+    PredictedRaiseRegistry predictedRaises)
     : NetworkedEventCoordinatorBase<T>(handlers), IHostedService
     where T : struct, INetworkedEvent
 {
@@ -53,7 +53,7 @@ internal sealed class ClientNetworkedEventCoordinator<T>(
 
     private void OnRefusalReceived(ref T networkEvent, NetDataReader reader, PlayerId origin)
     {
-        predictions.Refused(contract.Code);
+        predictedRaises.RollBackRefused(contract.Code);
 
         var cancellation = EventCancellation.Cancelled(reader.GetString(), contract.ReadReason(reader));
         RunStage(Stage.Rejected, ref networkEvent, new EventContext(origin, cancellation));

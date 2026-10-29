@@ -1,6 +1,7 @@
 using Friflo.Engine.ECS;
 using LiteNetLib.Utils;
 using Microsoft.Extensions.Logging.Abstractions;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.DI;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.ECS.Worlds;
@@ -59,7 +60,7 @@ public class NetworkedEventThreadTests : IDisposable
 
     public void Dispose() => _server.Dispose();
 
-    private INetworkedEvents Client() => new ClientNetworkedEvents(_relay, new NetworkedEventPredictions(), _world);
+    private INetworkedEvents Client() => new ClientNetworkedEvents(_relay, new PredictedRaiseRegistry(new GuessedValueRegistry(new PredictionDeltaHooks())), _world);
 
     private INetworkedEvents Server() => new ServerNetworkedEvents(_server, _server.Resolve<IEntityApi>());
 

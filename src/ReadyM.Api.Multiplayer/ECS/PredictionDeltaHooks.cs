@@ -1,26 +1,32 @@
 using System;
+using System.Collections.Generic;
 using ReadyM.Api.Multiplayer.ECS.Components;
-
-// ReSharper disable StaticMemberInGenericType
 
 namespace ReadyM.Api.Multiplayer.ECS;
 
-/// <summary>
-/// Allows subscribing to the delta packing/unpacking process for a component type.
-/// Used by the prediction system.
-/// </summary>
-internal static class PredictionDeltaHooks<T> where T : struct, INetworkedComponent
+/// <summary>One world's hooks into reading and sending deltas, per component type. Used by prediction.</summary>
+internal sealed class PredictionDeltaHooks
 {
-    public delegate void DeltaHook(ref T component);
+    private readonly Dictionary<Type, object> _byComponent = new();
 
-    /// <summary>
-    /// Before the server's delta is read onto the component.
-    /// </summary>
-    public static DeltaHook? BeforeDeltaRead;
+    public PredictionDeltaHooks<T> For<T>() where T : struct, INetworkedComponent
+    {
+        if (!_byComponent.TryGetValue(typeof(T), out var hooks))
+            _byComponent[typeof(T)] = hooks = new PredictionDeltaHooks<T>();
 
-    /// <summary>After the delta has been read.</summary>
-    public static DeltaHook? AfterDeltaRead;
+        return (PredictionDeltaHooks<T>)hooks;
+    }
+}
 
-    /// <summary>Before an owner's changed fields go out.</summary>
-    public static Action? BeforeDeltaSend;
+/// <summary>Hooks into reading and sending one component type's deltas.</summary>
+internal sealed class PredictionDeltaHooks<T> where T : struct, INetworkedComponent
+{
+    public delegate void DeltaHook(int entityId, ref T component);
+
+    public DeltaHook? BeforeDeltaRead;
+
+    public DeltaHook? AfterDeltaRead;
+
+    /// <summary>Before an owner's changed fields are sent.</summary>
+    public Action? BeforeDeltaSend;
 }

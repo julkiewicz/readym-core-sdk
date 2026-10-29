@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Events;
 using Xunit;
@@ -15,14 +16,14 @@ public class NetworkedEventPredictionTests
 
     private const RelayMessageCode Other = RelayMessageCode.MinServerRpcEvent;
 
-    private readonly NetworkedEventPredictions _predictions = new();
+    private readonly PredictedRaiseRegistry _predictions = new(new GuessedValueRegistry(new PredictionDeltaHooks()));
 
     private readonly List<string> _ran = [];
 
     [Fact]
     public void A_guess_runs_the_moment_it_is_made()
     {
-        _predictions.Open(Code, 0).Predicting(() => _ran.Add("guess"));
+        _predictions.StartRaise(Code, 0).Predicting(() => _ran.Add("guess"));
 
         Assert.Equal(["guess"], _ran);
     }
@@ -33,7 +34,7 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void The_undo_waits_for_something_to_undo()
     {
-        _predictions.Open(Code, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
+        _predictions.StartRaise(Code, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
         Assert.Equal(["guess"], _ran);
     }
@@ -41,9 +42,9 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void A_refusal_takes_the_guess_back()
     {
-        _predictions.Open(Code, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
+        _predictions.StartRaise(Code, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
-        _predictions.Refused(Code);
+        _predictions.RollBackRefused(Code);
 
         Assert.Equal(["guess", "undo"], _ran);
     }
@@ -52,9 +53,9 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void A_refusal_of_another_event_leaves_this_guess_alone()
     {
-        _predictions.Open(Code, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
+        _predictions.StartRaise(Code, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
-        _predictions.Refused(Other);
+        _predictions.RollBackRefused(Other);
 
         Assert.Equal(["guess"], _ran);
     }
@@ -66,9 +67,9 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void A_guess_that_was_never_answered_is_taken_back_when_it_runs_out()
     {
-        _predictions.Open(Code, 1000).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
+        _predictions.StartRaise(Code, 1000).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
-        _predictions.Expire(1000 + NetworkedEventPredictions.Ttl);
+        _predictions.RollBackExpired(1000 + PredictedRaiseRegistry.Timeout);
 
         Assert.Equal(["guess", "undo"], _ran);
     }
@@ -76,9 +77,9 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void A_guess_still_within_its_deadline_stands()
     {
-        _predictions.Open(Code, 1000).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
+        _predictions.StartRaise(Code, 1000).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
-        _predictions.Expire(1000 + NetworkedEventPredictions.Ttl - 0.001);
+        _predictions.RollBackExpired(1000 + PredictedRaiseRegistry.Timeout - 0.001);
 
         Assert.Equal(["guess"], _ran);
     }
@@ -87,11 +88,11 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void A_guess_is_taken_back_once_however_many_signals_arrive()
     {
-        _predictions.Open(Code, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
+        _predictions.StartRaise(Code, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
-        _predictions.Refused(Code);
-        _predictions.Refused(Code);
-        _predictions.Expire(NetworkedEventPredictions.Ttl * 10);
+        _predictions.RollBackRefused(Code);
+        _predictions.RollBackRefused(Code);
+        _predictions.RollBackExpired(PredictedRaiseRegistry.Timeout * 10);
 
         Assert.Equal(["guess", "undo"], _ran);
     }
@@ -103,9 +104,9 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void A_guess_with_no_undo_clears_without_running_anything()
     {
-        _predictions.Open(Code, 0).Predicting(() => _ran.Add("guess"));
+        _predictions.StartRaise(Code, 0).Predicting(() => _ran.Add("guess"));
 
-        _predictions.Refused(Code);
+        _predictions.RollBackRefused(Code);
 
         Assert.Equal(["guess"], _ran);
     }
@@ -113,10 +114,10 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void Several_guesses_for_one_event_all_come_back()
     {
-        _predictions.Open(Code, 0).Predicting(() => _ran.Add("one")).Rollback(() => _ran.Add("undo one"));
-        _predictions.Open(Code, 0).Predicting(() => _ran.Add("two")).Rollback(() => _ran.Add("undo two"));
+        _predictions.StartRaise(Code, 0).Predicting(() => _ran.Add("one")).Rollback(() => _ran.Add("undo one"));
+        _predictions.StartRaise(Code, 0).Predicting(() => _ran.Add("two")).Rollback(() => _ran.Add("undo two"));
 
-        _predictions.Refused(Code);
+        _predictions.RollBackRefused(Code);
 
         Assert.Equal(["one", "two", "undo one", "undo two"], _ran);
     }
@@ -125,11 +126,11 @@ public class NetworkedEventPredictionTests
     [Fact]
     public void A_raise_that_guesses_nothing_holds_nothing()
     {
-        _predictions.Open(Code, 0);
+        _predictions.StartRaise(Code, 0);
 
-        _predictions.Expire(NetworkedEventPredictions.Ttl * 10);
+        _predictions.RollBackExpired(PredictedRaiseRegistry.Timeout * 10);
 
         Assert.Empty(_ran);
-        Assert.Equal(0, _predictions.Outstanding);
+        Assert.Equal(0, _predictions.PendingCount);
     }
 }

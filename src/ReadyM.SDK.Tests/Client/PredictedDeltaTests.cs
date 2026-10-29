@@ -32,7 +32,6 @@ public class PredictedDeltaTests : IDisposable
 
     private readonly TestContainer _container;
     private readonly LocalPlayer _player = new();
-    private readonly NetworkedEventPredictions _predictions = new();
     private readonly Dictionary<string, ArchetypeId> _bound = [];
 
     public PredictedDeltaTests()
@@ -52,6 +51,9 @@ public class PredictedDeltaTests : IDisposable
 
         CreateHandlerRegistry.Use(_container);
 
+        _container.RegisterSingleton<PredictionDeltaHooks>();
+        _container.RegisterSingleton<GuessedValueRegistry>();
+        _container.RegisterSingleton<PredictedRaiseRegistry>();
         _container.RegisterSingleton<IEntityApi, ClientEntityApi>();
         _container.RegisterSingleton<IEntities, ClientEntities>();
 
@@ -62,11 +64,17 @@ public class PredictedDeltaTests : IDisposable
         ArchetypeBindings.Use(_bound);
 
         Entities = _container.Resolve<IEntities>();
+        Hooks = _container.Resolve<PredictionDeltaHooks>().For<LockdownComponent>();
+        PredictedRaises = _container.Resolve<PredictedRaiseRegistry>();
         Job = new ApplyDeltaJob<LockdownComponent>(
-            _container.Resolve<INetworkedEntityManager>(), _player, NullLogger.Instance);
+            _container.Resolve<INetworkedEntityManager>(), _player, Hooks, NullLogger.Instance);
     }
 
     private IEntities Entities { get; }
+
+    private PredictionDeltaHooks<LockdownComponent> Hooks { get; }
+
+    private PredictedRaiseRegistry PredictedRaises { get; }
 
     private void Bind<T>(Store world) where T : struct, IArchetype
     {
@@ -81,12 +89,7 @@ public class PredictedDeltaTests : IDisposable
 
     private ApplyDeltaJob<LockdownComponent> Job { get; }
 
-    public void Dispose()
-    {
-        // The registries are static, so a guess left standing would listen to the next test's deltas
-        _predictions.Expire(double.MaxValue);
-        _container.Dispose();
-    }
+    public void Dispose() => _container.Dispose();
 
     private Settlement Town()
     {
@@ -136,13 +139,13 @@ public class PredictedDeltaTests : IDisposable
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Arrives(town, active: true);
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.True(town.LockdownActive);
-        Assert.Null(PredictionDeltaHooks<LockdownComponent>.AfterDeltaRead);
+        Assert.Null(Hooks.AfterDeltaRead);
     }
 
     /// <summary>
@@ -154,7 +157,7 @@ public class PredictedDeltaTests : IDisposable
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
         Component(town).ClearApiFlag();
 
         Arrives(town, active: true);
@@ -168,7 +171,7 @@ public class PredictedDeltaTests : IDisposable
     {
         var town = Town();
 
-        _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
+        PredictedRaises.StartRaise(Code, 0).Predicting(() => town.PredictLockdownActive(true));
 
         Arrives(town, hour: 7);
 
@@ -176,7 +179,7 @@ public class PredictedDeltaTests : IDisposable
         Assert.Equal(7, town.LockdownHour);
         Assert.False(Component(town).IsDirty);
 
-        _predictions.Expire(NetworkedEventPredictions.Ttl);
+        PredictedRaises.RollBackExpired(PredictedRaiseRegistry.Timeout);
 
         Assert.False(town.LockdownActive);
         Assert.Equal(7, town.LockdownHour);
