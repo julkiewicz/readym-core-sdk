@@ -1,24 +1,26 @@
 namespace ReadyM.SDK.Attributes;
 
 /// <summary>
-/// Declares a struct as a network event: something that happened, which travels to whoever
-/// <paramref name="scope"/> names and which any mod may validate, change or stop on the way.
-/// Declare it in your mod's Common project, so both halves have it.
+/// Declares a struct as a network event: a message sent to the server or other players,
+/// which any mod may validate, change, cancel, or observe.
 /// </summary>
-/// <param name="scope">Who receives it.</param>
-/// <param name="policy">Who may raise it. The server may always raise.</param>
+/// <remarks>
+/// Declare it in your mod's Common project, so both sides can refer to it.
+/// </remarks>
+/// <param name="scope">Who receives the event.</param>
+/// <param name="policy">Which players can raise the event. The server always can.</param>
 [AttributeUsage(AttributeTargets.Struct)]
 public sealed class NetworkedEventAttribute(EventScope scope, Policy policy) : Attribute
 {
-    /// <summary>Who receives it.</summary>
+    /// <summary>Who receives the event.</summary>
     public EventScope Scope { get; } = scope;
 
-    /// <summary>Who may raise it.</summary>
+    /// <summary>Who may raise the event.</summary>
     public Policy Policy { get; } = policy;
 
     /// <summary>
-    /// The type a refusal carries back to the origin: any serializable type, not only an enum. Left unset, the
-    /// event cannot be cancelled with a reason and <c>Cancel()</c> takes no argument.
+    /// An optional, serializable type, that is sent back to the client when the event is cancelled.
+    /// Used to return a reason for the cancellation, or to return a value that the client can use to recover from the cancellation.
     /// </summary>
     public Type? Reject { get; set; }
 }

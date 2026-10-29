@@ -10,10 +10,10 @@ namespace ReadyM.SDK.Tests.Events;
 /// The order two mods' handlers for one event run in. A mod says what it must follow, and everything else runs
 /// in the order of the mods' own names, which is the same order on every machine.
 /// </summary>
-public class NetworkedEventOrderTests
+public class NetworkedEventOrderingTests
 {
     private static List<string> Sorted(params (string Mod, string[] After)[] mods)
-        => NetworkedEventOrder.Sort(mods.Select(m => (m.Mod, (IReadOnlyList<string>)m.After)).ToList());
+        => NetworkedEventOrdering.Sort(mods.Select(m => (m.Mod, (IReadOnlyList<string>)m.After)).ToList());
 
     /// <summary>
     /// Not the order they were handed over in. The server and a client load a different set of mods in a

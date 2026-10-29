@@ -108,10 +108,6 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
                     $"'{name}' handles Stage.Rejected for '{handler.Event.Name}', which declared Reject = typeof({handler.Reject.Name}), so its reason parameter must be a {handler.Reject.Name}.");
         }
 
-        if (handler.SkipOnRaiser && handler.Stage != Stage.Apply)
-            Report(context, location, "NEVT013", "Nothing to skip",
-                $"'{name}' sets SkipOnRaiser at Stage.{handler.Stage}. Only an Apply has an effect the raiser already had, so only an Apply can be skipped.");
-
         if (!onServer && handler.Stage is Stage.Validate or Stage.Filter)
             Report(context, location, "NEVT020", "Stage cannot run here",
                 $"'{name}' handles Stage.{handler.Stage}, which always runs on the server, in a client project where it would never fire.");
@@ -138,7 +134,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"    public void Run({Stages} stage, ref {type} e, {Events}.EventContext ctx)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        ctx.Cancellation.Entering(\"{mod}\");");
+        sb.AppendLine($"        ctx.Cancellation.SetCurrentMod(\"{mod}\");");
         sb.AppendLine();
         sb.AppendLine("        switch (stage)");
         sb.AppendLine("        {");
@@ -178,14 +174,6 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
             // A refusal may carry no reason, and a handler that asked for one has nothing to be handed
             var named = reason.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             sb.AppendLine($"{indent}if (ctx.Cancellation.Reason is {named} reason{index})");
-            sb.AppendLine($"{indent}    {call}");
-
-            return;
-        }
-
-        if (handler.SkipOnRaiser)
-        {
-            sb.AppendLine($"{indent}if (!ctx.RaisedHere)");
             sb.AppendLine($"{indent}    {call}");
 
             return;
@@ -305,8 +293,6 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
 
         public Stage Stage { get; private set; }
 
-        public bool SkipOnRaiser { get; private set; }
-
         public string? After { get; private set; }
 
         public INamedTypeSymbol Event { get; private set; } = null!;
@@ -343,7 +329,6 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
             return new Handler(owner, method)
             {
                 Stage = stage,
-                SkipOnRaiser = Named(attribute, "SkipOnRaiser") is true,
                 After = Named(attribute, "After") as string,
                 Event = declared,
                 Reject = declaration.NamedArguments

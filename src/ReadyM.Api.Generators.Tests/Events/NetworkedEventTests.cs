@@ -113,7 +113,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
         [Service]
         public partial class HitView
         {
-            [EventHandler(Stage.Apply, SkipOnRaiser = true)]
+            [EventHandler(Stage.Apply)]
             public void Play(in HitEvent e) { }
 
             [EventHandler(Stage.Observe, After = "Other.Scoreboard")]
@@ -620,21 +620,6 @@ public class NetworkedEventTests(ITestOutputHelper output)
         Assert.Contains("if (!ctx.RaisedHere)", client);
         Assert.Contains("Play(in ", client);
     }
-
-    [Fact]
-    public void Skipping_the_raiser_outside_apply_is_an_error()
-        => AssertServerError("NEVT013", """
-            using ReadyM.SDK.Attributes;
-            using ReadyM.SDK.Events;
-            using Other.Common;
-            namespace Other.Server;
-            [Service]
-            public partial class Rogue
-            {
-                [EventHandler(Stage.Observe, SkipOnRaiser = true)]
-                public void Count(in HitEvent e, EventContext ctx) { }
-            }
-            """);
 
     [Fact]
     public void An_after_constraint_orders_one_mod_behind_another()

@@ -84,8 +84,7 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
 
     protected void OnUpdate(SendContext context)
     {
-        // A field held apart from the server's value, a client's guess, keeps itself out of what goes out
-        DeltaHooks<T>.Sending?.Invoke();
+        PredictionDeltaHooks<T>.BeforeDeltaSend?.Invoke();
 
         var maxPacketSize = GetMaxPacketSize();
         var owners = SentOwners();

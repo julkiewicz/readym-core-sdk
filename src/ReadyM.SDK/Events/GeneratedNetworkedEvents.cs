@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Linq;
 using System.Reflection;
 
 namespace ReadyM.SDK.Events;
@@ -13,8 +11,7 @@ namespace ReadyM.SDK.Events;
 /// do, which is why both are safe to say twice. A netstandard2.0 target has no such attribute, so there it is
 /// this call that runs them.
 /// </remarks>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public static class GeneratedNetworkedEvents
+internal static class GeneratedNetworkedEvents
 {
     /// <summary>The types a compilation gets when it declares events, or handlers for one.</summary>
     private static readonly (string Type, string Method)[] EntryPoints =
@@ -23,8 +20,7 @@ public static class GeneratedNetworkedEvents
         ("ReadyM.SDK.Generated.NetworkedEventHandlerRegistrations", "RegisterAll"),
     ];
 
-    public static int ApplyAll(
-        IEnumerable<Assembly> assemblies, Action<Assembly>? onApplied = null, Action<Assembly, Exception>? onFailed = null)
+    public static int ApplyAll(IEnumerable<Assembly> assemblies, Action<Assembly>? onApplied = null, Action<Assembly, Exception>? onFailed = null)
     {
         var applied = 0;
 

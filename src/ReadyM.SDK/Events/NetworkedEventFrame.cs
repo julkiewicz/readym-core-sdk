@@ -1,19 +1,15 @@
-using System.ComponentModel;
 using LiteNetLib.Utils;
 using ReadyM.Api.Idents;
 
 namespace ReadyM.SDK.Events;
 
-/// <exclude />
 /// <summary>
 /// What the server puts in front of an event it sends on: whether this is the event or a refusal of it, and who
 /// raised it. Both arrive on the event's own code, so a receiver cannot tell them apart without this.
 /// </summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public static class NetworkedEventFrame
+internal static class NetworkedEventFrame
 {
     private const byte Accepted = 0;
-
     private const byte Refused = 1;
 
     /// <summary>Frame plus payload, ready for the code to go in front of it.</summary>
@@ -21,8 +17,8 @@ public static class NetworkedEventFrame
     {
         var message = new NetDataWriter();
         message.Put(refused ? Refused : Accepted);
-        origin.Serialize(message);
-        message.Put(payload.Data, 0, payload.Length);
+        message.Put(origin);
+        message.Put(payload.Data);
 
         return message;
     }
@@ -33,24 +29,20 @@ public static class NetworkedEventFrame
     {
         header = default;
 
-        // The kind byte plus at least one of the origin's, which is a VarUShort and so has no fixed size.
-        // A message truncated further in surfaces as a throw the relay logs, rather than a silent drop.
+        // The kind byte plus at least one of the origin's VarUShort.
         if (reader.AvailableBytes < 2)
             return false;
 
         var refused = reader.GetByte() == Refused;
-        var origin = new PlayerId();
-        origin.Deserialize(reader);
+        var origin = reader.Get<PlayerId>();
 
         header = new NetworkedEventHeader(refused, origin);
         return true;
     }
 }
 
-/// <exclude />
-/// <summary>What a frame said.</summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public readonly struct NetworkedEventHeader(bool refused, PlayerId origin)
+/// <summary>Placed before a networked event's payload on the wire.</summary>
+internal readonly struct NetworkedEventHeader(bool refused, PlayerId origin)
 {
     /// <summary>Whether this is a refusal of the event rather than the event.</summary>
     public bool Refused { get; } = refused;

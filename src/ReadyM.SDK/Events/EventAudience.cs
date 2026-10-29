@@ -1,17 +1,13 @@
-using System.ComponentModel;
 using ReadyM.Api.Idents;
 using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Events;
 
 /// <summary>
-/// The players an accepted network event is sent to. A client only ever sends an event to the server; the server
-/// decides the audience from the event's <see cref="Attributes.Scope"/> and sends it on from there, so no event
-/// is ever relayed between peers without the server reading it.
+/// The players an accepted network event is sent to.
 /// </summary>
-/// <exclude />
-[EditorBrowsable(EditorBrowsableState.Never)]
-public readonly struct EventAudience
+// TODO: Replace with a discriminated union when C# 15 is out
+internal readonly struct EventAudience
 {
     private EventAudience(EventScope scope, PlayerId player, AreaId area, FullCellId cell)
         => (Kind, Player, Area, Cell) = (scope, player, area, cell);

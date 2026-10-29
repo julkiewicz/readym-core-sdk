@@ -14,7 +14,7 @@ internal sealed class ServerNetworkedEvents(IDependencyContainer container) : IN
 {
     public INetworkedEventRaise Raise<T>(T networkEvent) where T : struct, INetworkedEvent
     {
-        NetworkedEventThread.Require<T>(OnWorldThread());
+        NetworkedEventThread.ThrowIfNotOnWorldThread<T>(OnWorldThread());
         Dispatch<T>().Raise(networkEvent, PlayerId.Server, true);
 
         return ServerRaise.Instance;
@@ -22,7 +22,7 @@ internal sealed class ServerNetworkedEvents(IDependencyContainer container) : IN
 
     public void RaiseAs<T>(PlayerId origin, T networkEvent) where T : struct, INetworkedEvent
     {
-        NetworkedEventThread.Require<T>(OnWorldThread());
+        NetworkedEventThread.ThrowIfNotOnWorldThread<T>(OnWorldThread());
         Dispatch<T>().Raise(networkEvent, origin, true);
     }
 
@@ -48,10 +48,10 @@ internal sealed class ServerNetworkedEvents(IDependencyContainer container) : IN
     {
         public static ServerRaise Instance { get; } = new();
 
-        public INetworkedEventRaise Predicting(Action guess)
+        public INetworkedEventRaise Predicting(Action prediction)
             => throw new InvalidOperationException(
                 "Only a client predicts. The server runs the event's stages itself, so there is nothing to guess.");
 
-        public INetworkedEventRaise Rollback(Action undo) => Predicting(undo);
+        public INetworkedEventRaise Rollback(Action rollback) => Predicting(rollback);
     }
 }

@@ -10,14 +10,12 @@ using Audience = ReadyM.SDK.Attributes.EventScope;
 
 namespace ReadyM.SDK.Server.Events;
 
-/// <exclude />
 /// <summary>
 /// How the server puts an accepted event on the wire: to the players its scope named, and a refusal to the origin
 /// alone. A client never sends to a peer, so there is no relayed path here to get wrong.
 /// </summary>
 /// <remarks>A message is the event's code, then the frame, then the payload.</remarks>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public static class ServerNetworkedEventTransport
+internal static class ServerNetworkedEventTransport
 {
     /// <summary>Sends an accepted event to the players its scope names.</summary>
     public static void FanOut(
@@ -94,17 +92,12 @@ public static class ServerNetworkedEventTransport
     /// </summary>
     private static List<PlayerId> Inside(ServerNetworkedEventDispatchBase dispatch, EventAudience audience)
     {
-        var players = new List<PlayerId>();
-
         if (dispatch.Players is not { } relay)
-            return players;
+            return [];
 
         if (audience.Kind == Audience.Cell)
-            relay.InCell(audience.Cell, players);
-        else
-            relay.InArea(audience.Area, players);
+            return relay.InCell(audience.Cell);
 
-        return players;
+        return relay.InArea(audience.Area);
     }
-
 }

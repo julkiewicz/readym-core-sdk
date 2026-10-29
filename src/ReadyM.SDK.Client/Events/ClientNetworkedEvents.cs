@@ -22,7 +22,7 @@ internal sealed class ClientNetworkedEvents(IRpcClient relay, NetworkedEventPred
 
     public INetworkedEventRaise Raise<T>(T networkEvent) where T : struct, INetworkedEvent
     {
-        NetworkedEventThread.Require<T>(world.IsOnOwnThread);
+        NetworkedEventThread.ThrowIfNotOnWorldThread<T>(world.IsOnOwnThread);
 
         var payload = new NetDataWriter();
         networkEvent.Serialize(payload);

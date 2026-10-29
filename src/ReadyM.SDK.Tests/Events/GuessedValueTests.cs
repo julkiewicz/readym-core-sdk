@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Events;
 using ReadyM.SDK.Tests.Client;
 using ReadyM.SDK.Tests.Client.Fixtures;
-using Xunit;
 
 namespace ReadyM.SDK.Tests.Events;
 

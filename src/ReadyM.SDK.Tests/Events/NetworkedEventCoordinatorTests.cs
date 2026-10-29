@@ -46,7 +46,7 @@ public class NetworkedEventCoordinatorTests
         public void Run(Stage stage, ref Blow e, EventContext ctx)
         {
             ran.Add($"{name}:{stage}:{e.Damage}");
-            ctx.Cancellation.Entering(name);
+            ctx.Cancellation.SetCurrentMod(name);
 
             if (stage == Stage.Filter)
                 e.Damage += Adds;

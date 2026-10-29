@@ -1,20 +1,10 @@
-using System.ComponentModel;
-
 namespace ReadyM.SDK.Events;
 
-/// <exclude />
 /// <summary>
 /// The order mods' handlers for one event run in. A mod names what it must follow; everything else runs in the
 /// order of the mods' own names.
 /// </summary>
-/// <remarks>
-/// By name, never by load order. The server and a client load a different set of mods in a different sequence,
-/// so load order is not one order: two mods that say nothing about each other would apply the same event in one
-/// order on the server and the other on a client, and the two would quietly hold different worlds. A name is
-/// the same string on every machine, which is what the manifest ids are for.
-/// </remarks>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public static class NetworkedEventOrder
+internal static class NetworkedEventOrdering
 {
     /// <exception cref="InvalidOperationException">The mods name a cycle, which has no order to run in.</exception>
     public static List<string> Sort(IReadOnlyList<(string Mod, IReadOnlyList<string> After)> mods)

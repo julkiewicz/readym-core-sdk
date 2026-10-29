@@ -26,7 +26,7 @@ public class ClientDispatchTests
     /// <summary>Stands in for the generated dispatch, which is what every real one is.</summary>
     private sealed class Dispatch : NetworkedEventDispatchBase
     {
-        public List<(bool Refused, PlayerId Origin, bool RaisedHere)> Arrivals { get; } = [];
+        public List<(bool Refused, PlayerId Origin)> Arrivals { get; } = [];
 
         protected override RelayMessageCode Code() => ClientDispatchTests.Code;
 
@@ -35,7 +35,7 @@ public class ClientDispatchTests
         private void Arrived(ServerEventHeader header, NetDataReader reader)
         {
             if (NetworkedEventFrame.TryRead(reader, out var frame))
-                Arrivals.Add((frame.Refused, frame.Origin, frame.Origin == Me));
+                Arrivals.Add((frame.Refused, frame.Origin));
         }
     }
 
@@ -94,18 +94,7 @@ public class ClientDispatchTests
 
         relay.Deliver(Code, NetworkedEventFrame.Write(false, Somebody, new NetDataWriter()));
 
-        Assert.Equal([(false, Somebody, false)], dispatch.Arrivals);
-    }
-
-    /// <summary>What SkipOnRaiser turns on, so an Apply the raiser already did does not happen twice.</summary>
-    [Fact]
-    public void An_event_this_machine_raised_comes_back_marked_as_its_own()
-    {
-        var (dispatch, relay) = Listening();
-
-        relay.Deliver(Code, NetworkedEventFrame.Write(false, Me, new NetDataWriter()));
-
-        Assert.Equal([(false, Me, true)], dispatch.Arrivals);
+        Assert.Equal([(false, Somebody)], dispatch.Arrivals);
     }
 
     [Fact]
@@ -115,7 +104,7 @@ public class ClientDispatchTests
 
         relay.Deliver(Code, NetworkedEventFrame.Write(true, Me, new NetDataWriter()));
 
-        Assert.Equal([(true, Me, true)], dispatch.Arrivals);
+        Assert.Equal([(true, Me)], dispatch.Arrivals);
     }
 
     /// <summary>A dispatch that goes while the session lives would otherwise keep answering for a dead mod.</summary>
@@ -144,7 +133,7 @@ public class ClientDispatchTests
 
         relay.Deliver(Code, NetworkedEventFrame.Write(false, Somebody, new NetDataWriter()));
 
-        Assert.Equal([(false, Somebody, false)], dispatch.Arrivals);
+        Assert.Equal([(false, Somebody)], dispatch.Arrivals);
     }
 
     /// <summary>Generated code calls this on a host that may not have wired it, so it must not fault.</summary>

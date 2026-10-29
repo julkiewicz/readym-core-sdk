@@ -1,11 +1,11 @@
 using System.ComponentModel;
+using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Events;
 
 /// <summary>
-/// Where a handler's refusal is recorded, so the dispatcher can skip every stage after it and tell the origin
-/// which mod refused and why. Generated code reads it; a mod reaches it through
-/// <see cref="EventContext.Cancel{TReason}"/>.
+/// Records a handler's refusal, so the dispatcher can skip every stage after it and tell the origin which mod refused and why.
+/// Generated code reads it; a mod reaches it through <see cref="EventContext.Cancel{TReason}"/>.
 /// </summary>
 /// <exclude />
 [EditorBrowsable(EditorBrowsableState.Never)]
@@ -14,7 +14,7 @@ public sealed class EventCancellation
     /// <summary>Whether a handler has refused the event.</summary>
     public bool IsCancelled { get; private set; }
 
-    /// <summary>The reason a handler gave, of the type the event declared, or null when it gave none.</summary>
+    /// <summary>The reason a handler gave, of the type the event declared, or none.</summary>
     public object? Reason { get; private set; }
 
     /// <summary>The manifest id of the mod whose handler refused it.</summary>
@@ -24,10 +24,10 @@ public sealed class EventCancellation
     private string _running = string.Empty;
 
     /// <summary>The stage running now, or null before the first, which is where the policy refuses.</summary>
-    private Attributes.Stage? _stage;
+    private Stage? _stage;
 
     /// <summary>Set by the ladder as each stage starts, so a refusal in one that may not refuse is caught.</summary>
-    internal void Running(Attributes.Stage? stage) => _stage = stage;
+    internal void MarkRunning(Stage? stage) => _stage = stage;
 
     /// <exclude />
     /// <summary>
@@ -35,7 +35,7 @@ public sealed class EventCancellation
     /// so. A mod reads the answer as <see cref="EventContext.StoppedBy"/>.
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public void Entering(string mod) => _running = mod;
+    public void SetCurrentMod(string mod) => _running = mod;
 
     /// <summary>
     /// Refuses the event. The first refusal is the one kept: it is the one the origin is owed, and the handlers
@@ -49,21 +49,21 @@ public sealed class EventCancellation
     {
         switch (_stage)
         {
-            case Attributes.Stage.Apply:
-            case Attributes.Stage.Observe:
+            case Stage.Apply:
+            case Stage.Observe:
                 throw new InvalidOperationException(
                     $"'{_running}' refused the event at Stage.{_stage}. Only Stage.Validate and Stage.Filter may "
                     + "refuse: by Apply the event has been accepted, and refusing then would tell the origin it never "
                     + "happened when it has.");
 
-            case Attributes.Stage.Rejected:
+            case Stage.Rejected:
                 throw new InvalidOperationException(
                     $"'{_running}' refused the event at Stage.Rejected, which runs because it was refused already. "
                     + "Only Stage.Validate and Stage.Filter may refuse.");
 
             case null:
-            case Attributes.Stage.Validate:
-            case Attributes.Stage.Filter:
+            case Stage.Validate:
+            case Stage.Filter:
                 break;
 
             default:

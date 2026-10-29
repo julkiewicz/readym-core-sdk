@@ -1,14 +1,10 @@
 namespace ReadyM.SDK.Events;
 
-/// <summary>
-/// Where an event may be raised from: the ECS thread, where the entities it names and the guesses made at them
-/// live. Raised from anywhere else it races them, and nothing says so, so it is refused here instead.
-/// </summary>
 internal static class NetworkedEventThread
 {
-    /// <param name="onWorldThread">Whether the caller is on the world's thread, as this side can tell.</param>
+    /// <param name="onWorldThread">Whether the caller is on the world's thread.</param>
     /// <exception cref="InvalidOperationException">The caller is not on the world's thread.</exception>
-    public static void Require<T>(bool onWorldThread) where T : struct, INetworkedEvent
+    public static void ThrowIfNotOnWorldThread<T>(bool onWorldThread) where T : struct, INetworkedEvent
     {
         if (onWorldThread)
             return;

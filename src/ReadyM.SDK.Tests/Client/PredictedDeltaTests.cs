@@ -6,6 +6,7 @@ using ReadyM.Api.DI;
 using ReadyM.Api.ECS.Registry;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Idents;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.ECS.Jobs;
 using ReadyM.Api.Multiplayer.ECS.Managers;
@@ -141,7 +142,7 @@ public class PredictedDeltaTests : IDisposable
         _predictions.Expire(NetworkedEventPredictions.Ttl);
 
         Assert.True(town.LockdownActive);
-        Assert.Null(DeltaHooks<LockdownComponent>.Landed);
+        Assert.Null(PredictionDeltaHooks<LockdownComponent>.AfterDeltaRead);
     }
 
     /// <summary>

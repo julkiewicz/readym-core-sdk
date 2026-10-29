@@ -1,8 +1,8 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using ReadyM.Api.Mapping.Data;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.Multiplayer.ECS.Components;
-using ReadyM.Api.Multiplayer.ECS.Jobs;
 using ReadyM.SDK.Entities;
 
 namespace ReadyM.SDK.Events;
@@ -38,9 +38,9 @@ public sealed class GuessedValueRegistry<TComponent, T>
 
     private readonly Field<TComponent, T> _field;
 
-    private readonly DeltaHooks<TComponent>.Arrival _landing;
+    private readonly PredictionDeltaHooks<TComponent>.DeltaHook _landing;
 
-    private readonly DeltaHooks<TComponent>.Arrival _landed;
+    private readonly PredictionDeltaHooks<TComponent>.DeltaHook _landed;
 
     private readonly Action _sending;
 
@@ -69,7 +69,7 @@ public sealed class GuessedValueRegistry<TComponent, T>
     /// </exception>
     public void Guess(in EntityHandle handle, T value)
     {
-        if (!NetworkedEventGuesses.Taking)
+        if (!NetworkedEventEcsValueGuesses.InsidePrediction)
             throw new InvalidOperationException(
                 $"'{_member}' can only be guessed at inside the callback handed to .Predicting() on the raise "
                 + "being guessed at. Nothing here is waiting on an answer that would take the guess back.");
@@ -85,7 +85,7 @@ public sealed class GuessedValueRegistry<TComponent, T>
 
         _guessed[entity] = new Held(kept, value, stack);
         Show(ref component, value, entity);
-        NetworkedEventGuesses.Took(() => TakeBack(entity, stack));
+        NetworkedEventEcsValueGuesses.PushRollback(() => TakeBack(entity, stack));
     }
 
     /// <summary>
@@ -178,16 +178,16 @@ public sealed class GuessedValueRegistry<TComponent, T>
 
     private void Listen()
     {
-        DeltaHooks<TComponent>.Landing += _landing;
-        DeltaHooks<TComponent>.Landed += _landed;
-        DeltaHooks<TComponent>.Sending += _sending;
+        PredictionDeltaHooks<TComponent>.BeforeDeltaRead += _landing;
+        PredictionDeltaHooks<TComponent>.AfterDeltaRead += _landed;
+        PredictionDeltaHooks<TComponent>.BeforeDeltaSend += _sending;
     }
 
     private void Quiet()
     {
-        DeltaHooks<TComponent>.Landing -= _landing;
-        DeltaHooks<TComponent>.Landed -= _landed;
-        DeltaHooks<TComponent>.Sending -= _sending;
+        PredictionDeltaHooks<TComponent>.BeforeDeltaRead -= _landing;
+        PredictionDeltaHooks<TComponent>.AfterDeltaRead -= _landed;
+        PredictionDeltaHooks<TComponent>.BeforeDeltaSend -= _sending;
     }
 
     private readonly struct Held(T kept, T guess, long stack)

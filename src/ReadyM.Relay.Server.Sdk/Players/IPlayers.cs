@@ -19,9 +19,9 @@ public interface IPlayers
     /// </summary>
     Guid? GetReadyMId(PlayerId player);
 
-    /// <summary>The players in an area, added to <paramref name="into"/>, which is cleared first.</summary>
-    void InArea(AreaId area, List<PlayerId> into);
+    /// <summary>The players in an area.</summary>
+    List<PlayerId> InArea(AreaId area);
 
-    /// <summary>The players in a cell, added to <paramref name="into"/>, which is cleared first.</summary>
-    void InCell(FullCellId cell, List<PlayerId> into);
+    /// <summary>The players who have a cell active.</summary>
+    List<PlayerId> InCell(FullCellId cell);
 }

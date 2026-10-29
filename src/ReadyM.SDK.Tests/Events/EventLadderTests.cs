@@ -69,8 +69,8 @@ public class EventLadderTests
     {
         var cancellation = new EventCancellation();
 
-        cancellation.Entering("Other.Rules");
-        cancellation.Entering("Other.Censor");
+        cancellation.SetCurrentMod("Other.Rules");
+        cancellation.SetCurrentMod("Other.Censor");
         cancellation.Cancel(Refusal.Untargetable);
 
         Assert.Equal("Other.Censor", cancellation.StoppedBy);
@@ -79,21 +79,17 @@ public class EventLadderTests
     // -- what a handler is told -----------------------------------------------------------------------
 
     [Fact]
-    public void The_context_carries_who_raised_it_and_whether_this_machine_did()
+    public void The_context_carries_who_raised_it()
     {
-        var here = new EventContext(Raiser, true, new EventCancellation());
-        var elsewhere = new EventContext(Raiser, false, new EventCancellation());
-
+        var here = new EventContext(Raiser, new EventCancellation());
         Assert.Equal(Raiser, here.Origin);
-        Assert.True(here.RaisedHere);
-        Assert.False(elsewhere.RaisedHere);
     }
 
     [Fact]
     public void Cancelling_through_the_context_refuses_the_event()
     {
         var cancellation = new EventCancellation();
-        var ctx = new EventContext(Raiser, false, cancellation);
+        var ctx = new EventContext(Raiser, cancellation);
 
         ctx.Cancel(Refusal.OutOfRange);
 
@@ -105,9 +101,9 @@ public class EventLadderTests
     public void A_rejected_handler_reads_who_refused_through_the_context()
     {
         var cancellation = new EventCancellation();
-        var ctx = new EventContext(Raiser, false, cancellation);
+        var ctx = new EventContext(Raiser, cancellation);
 
-        cancellation.Entering("Other.Censor");
+        cancellation.SetCurrentMod("Other.Censor");
         ctx.Cancel(Refusal.Untargetable);
 
         Assert.Equal("Other.Censor", ctx.StoppedBy);

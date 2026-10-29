@@ -7,16 +7,14 @@ using ReadyM.SDK.Entities;
 
 namespace ReadyM.SDK.Events;
 
-/// <exclude />
 /// <summary>
-/// What the Common project generates beside an event struct: everything about the event that its handlers do
-/// not decide. There is one per event rather than one per mod, which is what lets the policy be asked once and
-/// the event be fanned out once however many mods are handling it.
+/// What the Common project generates beside an event struct.
 /// </summary>
+/// <exclude />
 [EditorBrowsable(EditorBrowsableState.Never)]
 public interface INetworkedEventContract<T> where T : struct, INetworkedEvent
 {
-    /// <summary>This event's code on the wire, once the host has placed its mod's block.</summary>
+    /// <summary>This event's code on the wire.</summary>
     RelayMessageCode Code { get; }
 
     /// <summary>Who receives it once it is accepted.</summary>
@@ -29,18 +27,17 @@ public interface INetworkedEventContract<T> where T : struct, INetworkedEvent
     EntityHandle? Subject(in T networkEvent);
 
     /// <summary>
-    /// The area it names with <c>[Area]</c>, which an area-scoped audience is read from first and the area master
-    /// policy checks. False where it names none.
+    /// The area it names with <c>[Area]</c>, if any.
     /// </summary>
     bool TryArea(in T networkEvent, out AreaId area);
 
-    /// <summary>The cell it names with <c>[Cell]</c>, the same way for cells.</summary>
+    /// <summary>The cell it names with <c>[Cell]</c>, if any.</summary>
     bool TryCell(in T networkEvent, out FullCellId cell);
 
     /// <summary>The one player a <see cref="Attributes.EventScope.Single"/> event goes to.</summary>
     PlayerId Target(in T networkEvent);
 
-    /// <summary>Reads the event back, failing where it names an entity this end does not have.</summary>
+    /// <summary>Reads the event, failing if it names an entity this end does not have.</summary>
     bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out T networkEvent);
 
     /// <summary>Writes a refusal's reason, of the type the declaration named, or its absence.</summary>

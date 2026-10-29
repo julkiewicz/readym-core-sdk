@@ -5,15 +5,14 @@ namespace ReadyM.Api.Multiplayer.RPC;
 
 internal sealed class RpcOffsetProvider
 {
-    /// <summary>How many codes the space holds, which every contract set loaded together shares.</summary>
-    private const int Capacity =
-        RelayMessageCode.MaxServerRpcEvent - RelayMessageCode.MinServerRpcEvent + 1;
+    // TODO: Use VarUShort for this.
+    /// <summary>How many codes we can assign to mods. The rest are reserved for the engine.</summary>
+    private const int Capacity = RelayMessageCode.MaxServerRpcEvent - RelayMessageCode.MinServerRpcEvent + 1;
 
     public byte CurrentOffset { get; private set; }
 
     /// <exception cref="InvalidOperationException">
-    /// The sets loaded together need more codes than the space holds. It fails here, at startup, because
-    /// the alternative is a code that wraps past the end of the space and lands on another set's.
+    /// The sets loaded together need more codes than the space holds.
     /// </exception>
     public byte GetNextOffset(byte events)
     {

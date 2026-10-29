@@ -45,7 +45,7 @@ internal sealed class ServerNetworkedEventCoordinator<T>(
     internal void Dispatch(T networkEvent, PlayerId origin, bool raisedHere, bool vouched)
     {
         var cancellation = new EventCancellation();
-        var context = new EventContext(origin, raisedHere, cancellation);
+        var context = new EventContext(origin, cancellation);
 
         if (!vouched && !ServerNetworkedEventPolicy.Allows(
                 this,
@@ -55,7 +55,7 @@ internal sealed class ServerNetworkedEventCoordinator<T>(
                 contract.TryCell(in networkEvent, out var cell) ? cell : null,
                 origin))
         {
-            cancellation.Entering(ThePolicy);
+            cancellation.SetCurrentMod(ThePolicy);
             cancellation.Cancel(null);
             Refuse(ref networkEvent, context, cancellation);
 

@@ -1,8 +1,5 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 using ReadyM.Api.DI;
 using ReadyM.Api.Multiplayer.RPC;
 
@@ -10,9 +7,11 @@ namespace ReadyM.SDK.Events;
 
 /// <exclude />
 /// <summary>
-/// Holds what a loaded assembly generated for network events, so the SDK can put it in the container without
-/// naming any of it. Two kinds: the contract an event's own Common project declares, once per event, and the
-/// handler set a mod declares, once per event it handles.
+/// Holds what a loaded assembly generated for network events.
+/// Two kinds:<br/>
+/// - the contract an event's own Common project declares, once per event,<br/>
+/// - and the handler set a mod declares, once per event it handles.<br/>
+/// Used by generated code (NetworkedEventDeclarations).
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class NetworkedEventRegistry
@@ -23,33 +22,32 @@ public static class NetworkedEventRegistry
 
     /// <summary>Called by generated code in the project that declares the event.</summary>
     public static void Declare<T>(INetworkedEventContract<T> contract) where T : struct, INetworkedEvent
-        => Contracts[typeof(T)] = new Declaration(
-            typeof(T), (container, coordinators) => coordinators.Register(container, contract));
+        => Contracts[typeof(T)] = new Declaration(typeof(T),
+            (container, coordinators) => coordinators.Register(container, contract)
+        );
 
     /// <summary>Called by generated code in each mod that handles the event.</summary>
     public static void Handle<THandlers, T>(RpcSide side)
         where THandlers : class, INetworkedEventHandlers<T>
         where T : struct, INetworkedEvent
-        => Handlers[typeof(THandlers)] = new Handling(
-            side, typeof(T), container => container.RegisterSingleton<INetworkedEventHandlers<T>, THandlers>());
+        => Handlers[typeof(THandlers)] = new Handling(side, typeof(T),
+            container => container.RegisterSingleton<INetworkedEventHandlers<T>, THandlers>()
+        );
 
     /// <summary>
     /// Registers this side's handler sets and a coordinator per declared event. Every event gets one, handled
     /// here or not: an event this side has nothing to say about is still forwarded, and still refused.
     /// </summary>
-    public static void RegisterAll(
-        IDependencyContainer container, RpcSide side, INetworkedEventCoordinators coordinators)
+    internal static void RegisterAll(IDependencyContainer container, RpcSide side, INetworkedEventRegistration registration)
     {
         var handlers = Handlers.Values.Where(handling => handling.Side == side).ToList();
 
         foreach (var handling in handlers)
             handling.Register(container);
 
-        // One coordinator per event, not one per copy of the assembly that declared it. A Common assembly
-        // loaded into several contexts declares the same event once per copy, and a coordinator for each
-        // would subscribe to one code and read one arriving message between them.
+        // One coordinator per event, not one per copy of the assembly that declared it.
         foreach (var copies in Contracts.Values.GroupBy(contract => Identity(contract.Event)))
-            Chosen(copies, handlers).Register(container, coordinators);
+            Chosen(copies, handlers).Register(container, registration);
     }
 
     /// <summary>
@@ -69,16 +67,16 @@ public static class NetworkedEventRegistry
 
     /// <summary>
     /// What makes two copies of one event the same event: the name it was declared under, in the assembly
-    /// that declared it. Neither says which context the copy was loaded into, which is the point.
+    /// that declared it. Neither says which context the copy was loaded into.
     /// </summary>
     private static string Identity(Type declared)
         => declared.FullName + ", " + declared.Assembly.GetName().Name;
 
-    private readonly struct Declaration(Type declared, Action<IDependencyContainer, INetworkedEventCoordinators> register)
+    private readonly struct Declaration(Type declared, Action<IDependencyContainer, INetworkedEventRegistration> register)
     {
         public Type Event { get; } = declared;
 
-        public Action<IDependencyContainer, INetworkedEventCoordinators> Register { get; } = register;
+        public Action<IDependencyContainer, INetworkedEventRegistration> Register { get; } = register;
     }
 
     private readonly struct Handling(RpcSide side, Type declared, Action<IDependencyContainer> register)

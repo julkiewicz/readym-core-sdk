@@ -1,4 +1,5 @@
 using LiteNetLib.Utils;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.Multiplayer.ECS.Jobs;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Entities;
@@ -87,9 +88,9 @@ public class PredictableValueTests : ClientSdkTest
 
         ref var component = ref Component(town);
 
-        DeltaHooks<LockdownComponent>.Landing?.Invoke(ref component);
+        PredictionDeltaHooks<LockdownComponent>.BeforeDeltaRead?.Invoke(ref component);
         component.ReadDeltaTracking(new NetDataReader(writer.CopyData()), EntityHandle.Of(town).Id);
-        DeltaHooks<LockdownComponent>.Landed?.Invoke(ref component);
+        PredictionDeltaHooks<LockdownComponent>.AfterDeltaRead?.Invoke(ref component);
     }
 
     [Fact]
@@ -155,7 +156,7 @@ public class PredictableValueTests : ClientSdkTest
 
         Component(town).Active = false;
         Component(town).Hour = 22;
-        DeltaHooks<LockdownComponent>.Sending?.Invoke();
+        PredictionDeltaHooks<LockdownComponent>.BeforeDeltaSend?.Invoke();
 
         Assert.Equal(HourBit, Outgoing(town));
     }
@@ -343,13 +344,13 @@ public class PredictableValueTests : ClientSdkTest
         var town = Town();
 
         _predictions.Open(Code, 0).Predicting(() => town.PredictLockdownActive(true));
-        Assert.NotNull(DeltaHooks<LockdownComponent>.Landing);
+        Assert.NotNull(PredictionDeltaHooks<LockdownComponent>.BeforeDeltaRead);
 
         _predictions.Refused(Code);
 
-        Assert.Null(DeltaHooks<LockdownComponent>.Landing);
-        Assert.Null(DeltaHooks<LockdownComponent>.Landed);
-        Assert.Null(DeltaHooks<LockdownComponent>.Sending);
+        Assert.Null(PredictionDeltaHooks<LockdownComponent>.BeforeDeltaRead);
+        Assert.Null(PredictionDeltaHooks<LockdownComponent>.AfterDeltaRead);
+        Assert.Null(PredictionDeltaHooks<LockdownComponent>.BeforeDeltaSend);
     }
 
     /// <summary>

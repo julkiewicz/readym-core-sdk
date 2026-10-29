@@ -74,7 +74,7 @@ internal class ApplyDeltaJob<T>(
             {
                 if (entity.Value.HasComponent<T>())
                 {
-                    DeltaHooks<T>.Landing?.Invoke(ref entity.Value.GetComponent<T>());
+                    PredictionDeltaHooks<T>.BeforeDeltaRead?.Invoke(ref entity.Value.GetComponent<T>());
 
                     var comp = entity.Value.GetComponent<T>();
                     comp.ReadDeltaTracking(reader, entity.Value.Id);
@@ -92,7 +92,7 @@ internal class ApplyDeltaJob<T>(
                     }
 
                     entity.Value.Set(comp);
-                    DeltaHooks<T>.Landed?.Invoke(ref entity.Value.GetComponent<T>());
+                    PredictionDeltaHooks<T>.AfterDeltaRead?.Invoke(ref entity.Value.GetComponent<T>());
                 }
                 else
                 {
@@ -106,7 +106,7 @@ internal class ApplyDeltaJob<T>(
                         comp.ClearDirty();
                     }
 
-                    // Nothing can be held in a component the entity did not have
+                    // Nothing can be predicted in a component the entity did not have
                     entity.Value.Add(comp);
                 }
             }
@@ -121,7 +121,7 @@ internal class ApplyDeltaJob<T>(
                 }
 
                 ref var component = ref entity.Value.GetComponent<T>();
-                DeltaHooks<T>.Landing?.Invoke(ref component);
+                PredictionDeltaHooks<T>.BeforeDeltaRead?.Invoke(ref component);
                 component.ReadDeltaTracking(reader, entity.Value.Id);
 
                 if (playerId == owner)
@@ -131,7 +131,7 @@ internal class ApplyDeltaJob<T>(
                     component.ClearDirty();
                 }
 
-                DeltaHooks<T>.Landed?.Invoke(ref component);
+                PredictionDeltaHooks<T>.AfterDeltaRead?.Invoke(ref component);
             }
         }
     }

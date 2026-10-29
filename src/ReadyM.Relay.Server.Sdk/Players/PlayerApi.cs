@@ -62,21 +62,23 @@ public class PlayerApi : IPlayers
     public void RotateCellMasters(PlayerId requester) => _rotateCellMasters(requester);
 
     /// <inheritdoc />
-    public unsafe void InArea(AreaId area, List<PlayerId> into) => Collect(into, (b, c) => _getAreaPlayers(area, b, c));
+    public unsafe List<PlayerId> InArea(AreaId area) 
+        => Collect((b, c) => _getAreaPlayers(area, b, c));
 
     /// <inheritdoc />
-    public unsafe void InCell(FullCellId cell, List<PlayerId> into) => Collect(into, (b, c) => _getCellPlayers(cell, b, c));
+    public unsafe List<PlayerId> InCell(FullCellId cell) 
+        => Collect((b, c) => _getCellPlayers(cell, b, c));
 
     /// <summary>A pointer cannot be a generic argument, so the ask has a type of its own.</summary>
     private unsafe delegate int Ask(PlayerId* buffer, int capacity);
 
     /// <summary>
     /// Asks for the players, growing the buffer once if the first ask did not fit. The host answers with the
-    /// count whether or not it wrote anything, so a second ask with that much room always does.
+    /// count whether or not it wrote anything, so a second ask with that much room always works.
     /// </summary>
-    private static unsafe void Collect(List<PlayerId> into, Ask ask)
+    private static unsafe List<PlayerId> Collect(Ask ask)
     {
-        into.Clear();
+        List<PlayerId> into = [];
 
         const int room = 64;
         var small = stackalloc PlayerId[room];
@@ -87,7 +89,7 @@ public class PlayerApi : IPlayers
             for (var i = 0; i < found; i++)
                 into.Add(small[i]);
 
-            return;
+            return into;
         }
 
         var large = new PlayerId[found];
@@ -98,6 +100,8 @@ public class PlayerApi : IPlayers
 
         for (var i = 0; i < found && i < large.Length; i++)
             into.Add(large[i]);
+        
+        return into;
     }
 
     /// <summary>

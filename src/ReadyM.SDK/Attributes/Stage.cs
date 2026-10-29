@@ -1,23 +1,23 @@
 namespace ReadyM.SDK.Attributes;
 
 /// <summary>
-/// When a handler runs. Stages run in this order and stopping one skips every later stage;
-/// <see cref="Observe"/> and <see cref="Rejected"/> are the two endings and exactly one of them runs.
+/// When a networked event handler runs. Stages run in this order and stopping one skips every later stage;
+/// Only one of <see cref="Observe"/> and <see cref="Rejected"/> runs, based on whether the event was cancelled or not.
 /// </summary>
 public enum Stage
 {
-    /// <summary>Is this allowed. May stop the event, may not change it.</summary>
+    /// <summary>Runs before any other stage. May cancel the event, but cannot rewrite its fields.</summary>
     Validate,
 
-    /// <summary>Change it. May rewrite members, may stop the event.</summary>
+    /// <summary>Runs after <see cref="Validate"/>. May rewrite event members, may cancel the event.</summary>
     Filter,
 
-    /// <summary>The effect. The event's owner writes this one.</summary>
+    /// <summary>Runs if the event was not cancelled. Write main event handling logic here. Multiple handlers are allowed, but no guarantee of order is provided.</summary>
     Apply,
 
-    /// <summary>It happened. Sees the final values, cannot stop it.</summary>
+    /// <summary>If the event was not cancelled, runs after <see cref="Apply"/>.</summary>
     Observe,
 
-    /// <summary>It did not happen. Sees the reason, typed as the event's declared reject type.</summary>
+    /// <summary>Runs if the event was cancelled.</summary>
     Rejected,
 }

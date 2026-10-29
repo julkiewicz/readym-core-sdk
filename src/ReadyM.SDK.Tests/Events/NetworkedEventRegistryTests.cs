@@ -106,7 +106,7 @@ public class NetworkedEventRegistryTests
 
     private sealed class Container : DependencyContainerBase;
 
-    private Container Registered(RpcSide side, INetworkedEventCoordinators coordinators)
+    private Container Registered(RpcSide side, INetworkedEventRegistration registration)
     {
         var container = new Container();
 
@@ -118,12 +118,12 @@ public class NetworkedEventRegistryTests
         NetworkedEventRegistry.Declare<Knock>(new Contract());
         NetworkedEventRegistry.Handle<Owner, Knock>(RpcSide.Server);
         NetworkedEventRegistry.Handle<Rules, Knock>(RpcSide.Server);
-        NetworkedEventRegistry.RegisterAll(container, side, coordinators);
+        NetworkedEventRegistry.RegisterAll(container, side, registration);
 
         return container;
     }
 
-    private Container OnServer() => Registered(RpcSide.Server, new ServerNetworkedEventCoordinators());
+    private Container OnServer() => Registered(RpcSide.Server, new ServerNetworkedEventRegistration());
 
     [Fact]
     public void A_declared_event_gets_one_coordinator_the_container_can_build()
@@ -168,7 +168,7 @@ public class NetworkedEventRegistryTests
     {
         using var container = OnServer();
 
-        NetworkedEventRegistry.RegisterAll(container, RpcSide.Server, new ServerNetworkedEventCoordinators());
+        NetworkedEventRegistry.RegisterAll(container, RpcSide.Server, new ServerNetworkedEventRegistration());
         container.Resolve<INetworkedEventDispatch<Knock>>().Raise(default, PlayerId.Server, true);
 
         Assert.Equal(["Owner", "Rules"], _ran);
@@ -182,7 +182,7 @@ public class NetworkedEventRegistryTests
     [Fact]
     public void A_client_gets_a_coordinator_without_the_servers_handlers()
     {
-        using var container = Registered(RpcSide.Client, new ClientNetworkedEventCoordinators());
+        using var container = Registered(RpcSide.Client, new ClientNetworkedEventRegistration());
 
         container.StartHostedServices();
 

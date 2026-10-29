@@ -9,21 +9,14 @@ public readonly struct EventContext
     /// <summary>Built by generated code, once per event it dispatches.</summary>
     /// <exclude />
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public EventContext(PlayerId origin, bool raisedHere, EventCancellation cancellation)
+    public EventContext(PlayerId origin, EventCancellation cancellation)
     {
         Origin = origin;
-        RaisedHere = raisedHere;
         Cancellation = cancellation;
     }
 
     /// <summary>Who raised it: a player, or <see cref="PlayerId.Server"/>.</summary>
     public PlayerId Origin { get; }
-
-    /// <summary>
-    /// Whether this machine is the one that called <c>Raise</c>. An <c>Apply</c> marked
-    /// <c>SkipOnRaiser</c> is skipped where this is true, because that machine already did the thing.
-    /// </summary>
-    public bool RaisedHere { get; }
 
     /// <summary>Where a refusal is recorded.</summary>
     /// <exclude />
@@ -39,6 +32,6 @@ public readonly struct EventContext
     /// </summary>
     public void Cancel<TReason>(TReason reason) => Cancellation.Cancel(reason);
 
-    /// <summary>Refuses the event without a reason, for one whose declaration named no reject type.</summary>
+    /// <summary>Refuses the event without a reason. Every later stage is skipped.</summary>
     public void Cancel() => Cancellation.Cancel(null);
 }

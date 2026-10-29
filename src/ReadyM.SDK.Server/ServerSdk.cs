@@ -48,7 +48,7 @@ internal static class ServerSdk
 
         services.RegisterSingleton<SDK.Events.INetworkedEvents, Events.ServerNetworkedEvents>();
         SDK.Events.NetworkedEventRegistry.RegisterAll(
-            services, RpcSide.Server, new Events.ServerNetworkedEventCoordinators());
+            services, RpcSide.Server, new Events.ServerNetworkedEventRegistration());
         
         if (api is Entities.ServerEntityApi server)
             server.ApplyDeclaredTags();
