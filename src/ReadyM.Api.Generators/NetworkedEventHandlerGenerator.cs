@@ -20,10 +20,10 @@ namespace ReadyM.Api.Generators;
 [Generator]
 internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
 {
-    private const string EventAttribute = "ReadyM.SDK.Attributes.NetworkedEventAttribute";
-    private const string HandlerAttribute = "EventHandlerAttribute";
-    private const string Events = "global::ReadyM.SDK.Events";
-    private const string Stages = "global::ReadyM.SDK.Attributes.Stage";
+    private const string NetworkedEventAttribute = "ReadyM.SDK.Attributes.NetworkedEventAttribute";
+    private const string EventHandlerAttribute = "EventHandlerAttribute";
+    private const string EventsNamespace = "global::ReadyM.SDK.Events";
+    private const string StageEnum = "global::ReadyM.SDK.Attributes.Stage";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -43,11 +43,11 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         if (context.SemanticModel.GetDeclaredSymbol(context.Node) is not INamedTypeSymbol symbol)
             return null;
 
-        return symbol.GetMembers().OfType<IMethodSymbol>().Any(Marked) ? symbol : null;
+        return symbol.GetMembers().OfType<IMethodSymbol>().Any(HasHandlerAttribute) ? symbol : null;
     }
 
-    private static bool Marked(IMethodSymbol method)
-        => method.GetAttributes().Any(a => a.AttributeClass?.Name == HandlerAttribute);
+    private static bool HasHandlerAttribute(IMethodSymbol method)
+        => method.GetAttributes().Any(a => a.AttributeClass?.Name == EventHandlerAttribute);
 
     private static void Generate(
         SourceProductionContext context, (Compilation Compilation, ImmutableArray<INamedTypeSymbol?> Owners) input)
@@ -60,8 +60,8 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         var mod = input.Compilation.AssemblyName ?? "this mod";
 
         var handlers = owners
-            .SelectMany(owner => owner.GetMembers().OfType<IMethodSymbol>().Where(Marked)
-                .Select(method => Handler.Read(owner, method)))
+            .SelectMany(owner => owner.GetMembers().OfType<IMethodSymbol>().Where(HasHandlerAttribute)
+                .Select(method => Handler.FromMethod(owner, method)))
             .Where(h => h is not null)
             .Select(h => h!)
             .ToList();
@@ -94,18 +94,18 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         var location = handler.Method.Locations.FirstOrDefault();
         var name = $"{handler.Owner.Name}.{handler.Method.Name}";
 
-        if (handler.ByRef && handler.Stage != Stage.Filter)
+        if (handler.TakesEventByRef && handler.Stage != Stage.Filter)
             Report(context, location, "NEVT010", "Only a filter may change an event",
                 $"'{name}' takes the event by ref at Stage.{handler.Stage}. Only Stage.Filter may change it; the rest take it by in.");
 
         if (handler.Stage == Stage.Rejected)
         {
-            if (handler.Reject is null)
+            if (handler.RejectType is null)
                 Report(context, location, "NEVT012", "Nothing to reject with",
                     $"'{name}' handles Stage.Rejected for '{handler.Event.Name}', whose declaration named no Reject type, so there is no reason to hand it.");
-            else if (handler.Reason is null || !SymbolEqualityComparer.Default.Equals(handler.Reason, handler.Reject))
+            else if (handler.ReasonType is null || !SymbolEqualityComparer.Default.Equals(handler.ReasonType, handler.RejectType))
                 Report(context, location, "NEVT011", "Wrong reject type",
-                    $"'{name}' handles Stage.Rejected for '{handler.Event.Name}', which declared Reject = typeof({handler.Reject.Name}), so its reason parameter must be a {handler.Reject.Name}.");
+                    $"'{name}' handles Stage.Rejected for '{handler.Event.Name}', which declared Reject = typeof({handler.RejectType.Name}), so its reason parameter must be a {handler.RejectType.Name}.");
         }
 
         if (!onServer && handler.Stage is Stage.Validate or Stage.Filter)
@@ -121,10 +121,10 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         var after = handlers.Where(h => h.After is not null).Select(h => $"\"{h.After}\"").Distinct().ToList();
 
         sb.AppendLine($"/// <summary>This mod's handlers for {declared.Name}, grouped by stage.</summary>");
-        sb.AppendLine($"{Visibility(owners)} sealed class {declared.Name}Handlers(");
+        sb.AppendLine($"{AccessibilityOf(owners)} sealed class {declared.Name}Handlers(");
         sb.AppendLine(string.Join(",\n", owners.Select(o =>
-            $"    {o!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {Field(o)}")));
-        sb.AppendLine($") : {Events}.INetworkedEventHandlers<{type}>");
+            $"    {o!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {FieldName(o)}")));
+        sb.AppendLine($") : {EventsNamespace}.INetworkedEventHandlers<{type}>");
         sb.AppendLine("{");
         sb.AppendLine($"    public string Mod => \"{mod}\";");
         sb.AppendLine();
@@ -132,7 +132,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("    public global::System.Collections.Generic.IReadOnlyList<string> After { get; }");
         sb.AppendLine($"        = [{string.Join(", ", after)}];");
         sb.AppendLine();
-        sb.AppendLine($"    public void Run({Stages} stage, ref {type} e, {Events}.EventContext ctx)");
+        sb.AppendLine($"    public void Run({StageEnum} stage, ref {type} networkEvent, {EventsNamespace}.EventContext context)");
         sb.AppendLine("    {");
         sb.AppendLine("        switch (stage)");
         sb.AppendLine("        {");
@@ -147,7 +147,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
             if (staged.Count == 0)
                 continue;
 
-            sb.AppendLine($"            case {Stages}.{stage}:");
+            sb.AppendLine($"            case {StageEnum}.{stage}:");
 
             for (var i = 0; i < staged.Count; i++)
                 EmitCall(sb, staged[i], stage, i, last: i == staged.Count - 1);
@@ -165,13 +165,13 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
     private static void EmitCall(StringBuilder sb, Handler handler, Stage stage, int index, bool last)
     {
         var indent = "                ";
-        var call = $"{Field(handler.Owner)}.{handler.Method.Name}({Arguments(handler, index)});";
+        var call = $"{FieldName(handler.Owner)}.{handler.Method.Name}({Arguments(handler, index)});";
 
-        if (handler.Stage == Stage.Rejected && handler.Reason is { } reason)
+        if (handler.Stage == Stage.Rejected && handler.ReasonType is { } reason)
         {
             // A refusal may carry no reason, and a handler that asked for one has nothing to be handed
             var named = reason.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            sb.AppendLine($"{indent}if (ctx.CancellationReason is {named} reason{index})");
+            sb.AppendLine($"{indent}if (context.CancellationReason is {named} reason{index})");
             sb.AppendLine($"{indent}    {call}");
 
             return;
@@ -183,7 +183,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         // once at the end of it. The last one needs none: the coordinator asks before the next stage.
         if (stage is Stage.Validate or Stage.Filter && !last)
         {
-            sb.AppendLine($"{indent}if (ctx.IsCancelled)");
+            sb.AppendLine($"{indent}if (context.IsCancelled)");
             sb.AppendLine($"{indent}    return;");
             sb.AppendLine();
         }
@@ -205,7 +205,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
         sb.AppendLine("public static class NetworkedEventHandlerDeclarations");
         sb.AppendLine("{");
-        sb.AppendLine($"    public static void DeclareAll({Events}.INetworkedEventRegistry registry)");
+        sb.AppendLine($"    public static void DeclareAll({EventsNamespace}.INetworkedEventRegistry registry)");
         sb.AppendLine("    {");
 
         foreach (var group in byEvent)
@@ -226,15 +226,15 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
 
     private static string Arguments(Handler handler, int index)
     {
-        var self = handler.ByRef ? "ref e" : "in e";
+        var self = handler.TakesEventByRef ? "ref networkEvent" : "in networkEvent";
 
-        if (handler.Stage == Stage.Rejected && handler.Reason is not null)
+        if (handler.Stage == Stage.Rejected && handler.ReasonType is not null)
             self += $", reason{index}";
 
-        return handler.TakesContext ? $"{self}, ctx" : self;
+        return handler.TakesContext ? $"{self}, context" : self;
     }
 
-    private static string Field(ISymbol owner) => char.ToLowerInvariant(owner.Name[0]) + owner.Name.Substring(1);
+    private static string FieldName(ISymbol owner) => char.ToLowerInvariant(owner.Name[0]) + owner.Name.Substring(1);
 
     private static void Report(
         SourceProductionContext context, Location? location, string id, string title, string message)
@@ -248,7 +248,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
     /// since nothing outside the mod calls it, gets an internal set. Its own generated registration is in the
     /// same assembly, so that is all it needs.
     /// </summary>
-    private static string Visibility(List<ISymbol?> owners)
+    private static string AccessibilityOf(List<ISymbol?> owners)
         => owners.All(PubliclyVisible) ? "public" : "internal";
 
     /// <summary>Whether a type and everything it is nested in are public.</summary>
@@ -276,23 +276,23 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
 
         public INamedTypeSymbol Event { get; private set; } = null!;
 
-        public INamedTypeSymbol? Reject { get; private set; }
+        public INamedTypeSymbol? RejectType { get; private set; }
 
-        public INamedTypeSymbol? Reason { get; private set; }
+        public INamedTypeSymbol? ReasonType { get; private set; }
 
-        public bool ByRef { get; private set; }
+        public bool TakesEventByRef { get; private set; }
 
         public bool TakesContext { get; private set; }
 
-        public static Handler? Read(INamedTypeSymbol owner, IMethodSymbol method)
+        public static Handler? FromMethod(INamedTypeSymbol owner, IMethodSymbol method)
         {
-            var attribute = method.GetAttributes().First(a => a.AttributeClass?.Name == HandlerAttribute);
+            var attribute = method.GetAttributes().First(a => a.AttributeClass?.Name == EventHandlerAttribute);
 
             if (method.Parameters.Length == 0 || method.Parameters[0].Type is not INamedTypeSymbol declared)
                 return null;
 
             var declaration = declared.GetAttributes()
-                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == EventAttribute);
+                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == NetworkedEventAttribute);
 
             if (declaration is null)
                 return null;
@@ -308,17 +308,17 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
             return new Handler(owner, method)
             {
                 Stage = stage,
-                After = Named(attribute, "After") as string,
+                After = NamedArgument(attribute, "After") as string,
                 Event = declared,
-                Reject = declaration.NamedArguments
+                RejectType = declaration.NamedArguments
                     .FirstOrDefault(n => n.Key == "Reject").Value.Value as INamedTypeSymbol,
-                Reason = stage == Stage.Rejected ? reason : null,
-                ByRef = method.Parameters[0].RefKind == RefKind.Ref,
+                ReasonType = stage == Stage.Rejected ? reason : null,
+                TakesEventByRef = method.Parameters[0].RefKind == RefKind.Ref,
                 TakesContext = method.Parameters.Any(p => p.Type.Name == "EventContext"),
             };
         }
 
-        private static object? Named(AttributeData attribute, string name)
+        private static object? NamedArgument(AttributeData attribute, string name)
             => attribute.NamedArguments.FirstOrDefault(n => n.Key == name).Value.Value;
     }
 

@@ -5,11 +5,8 @@ using Xunit;
 
 namespace ReadyM.SDK.Tests.Events;
 
-/// <summary>
-/// The state generated dispatch carries through a network event's stages: who raised it, whether this machine
-/// did, and where a refusal is recorded so every later stage is skipped and the origin learns who refused.
-/// </summary>
-public class EventLadderTests
+/// <summary>What an event's context and cancellation record, and the audiences the server sends to.</summary>
+public class EventCancellationTests
 {
     private static readonly PlayerId Raiser = new(7);
 

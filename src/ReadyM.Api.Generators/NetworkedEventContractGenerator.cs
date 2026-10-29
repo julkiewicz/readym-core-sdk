@@ -18,20 +18,20 @@ namespace ReadyM.Api.Generators;
 internal class NetworkedEventContractGenerator : IIncrementalGenerator
 {
     private const string ManifestClassName = "NetworkedEventManifest";
-    private const string Marker = "global::ReadyM.SDK.Events.INetworkedEvent";
-    private const string Attribute = "ReadyM.SDK.Attributes.NetworkedEventAttribute";
-    private const string Attributes = "global::ReadyM.SDK.Attributes";
-    private const string Contract = "global::ReadyM.SDK.Events.INetworkedEventContract";
+    private const string NetworkedEventInterface = "global::ReadyM.SDK.Events.INetworkedEvent";
+    private const string NetworkedEventAttribute = "ReadyM.SDK.Attributes.NetworkedEventAttribute";
+    private const string AttributesNamespace = "global::ReadyM.SDK.Attributes";
+    private const string ContractInterface = "global::ReadyM.SDK.Events.INetworkedEventContract";
     private const string EntityReader = "global::ReadyM.SDK.Events.INetworkedEventEntityReader";
     private const string Registry = "global::ReadyM.SDK.Events.INetworkedEventRegistry";
-    private const string Handle = "global::ReadyM.SDK.Entities.EntityHandle";
+    private const string EntityHandle = "global::ReadyM.SDK.Entities.EntityHandle";
     private const string AreaId = "global::ReadyM.Api.Idents.AreaId";
     private const string FullCellId = "global::ReadyM.Api.Idents.FullCellId";
     private const string AreaShape = "global::ReadyM.SDK.Archetypes.Core.Area";
     private const string CellShape = "global::ReadyM.SDK.Archetypes.Core.Cell";
 
     /// <summary>Where a component's vector fields are written from and read into, which an event's share.</summary>
-    private const string Vectors = "global::ReadyM.Api.Multiplayer.Extensions.VectorSerializationExtensions";
+    private const string VectorSerialization = "global::ReadyM.Api.Multiplayer.Extensions.VectorSerializationExtensions";
 
     private const string EditorBrowsable =
         "global::System.ComponentModel.EditorBrowsable("
@@ -50,7 +50,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     private static bool Predicate(SyntaxNode node, CancellationToken _)
         => node is StructDeclarationSyntax { AttributeLists.Count: > 0 };
 
-    private static EventInfo? Transform(GeneratorSyntaxContext context, CancellationToken _)
+    private static DeclaredEvent? Transform(GeneratorSyntaxContext context, CancellationToken _)
     {
         if (context.Node is not StructDeclarationSyntax syntax)
             return null;
@@ -59,13 +59,13 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
             return null;
 
         var declaration = symbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == Attribute);
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == NetworkedEventAttribute);
 
-        return declaration is null ? null : new EventInfo(symbol, declaration);
+        return declaration is null ? null : new DeclaredEvent(symbol, declaration);
     }
 
     private static void GenerateSources(
-        SourceProductionContext context, ImmutableArray<EventInfo?> declarations)
+        SourceProductionContext context, ImmutableArray<DeclaredEvent?> declarations)
     {
         var events = declarations.Where(e => e is not null).Select(e => e!)
             .OrderBy(e => e.Symbol.Name, System.StringComparer.Ordinal)
@@ -95,7 +95,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
 
     /// <summary>What a declaration may not say. Each of these is a hard error rather than a silent oddity.</summary>
     /// <returns>Whether the event can be generated at all, which a member with no way onto the wire rules out.</returns>
-    private static bool Validate(SourceProductionContext context, EventInfo declared)
+    private static bool Validate(SourceProductionContext context, DeclaredEvent declared)
     {
         var sendable = true;
 
@@ -126,15 +126,15 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
             Report(context, location, "NEVT008", "No cell to check",
                 $"'{declared.Symbol.Name}' says Policy.CellMaster, which checks who is master of the cell the event is in, so one member must be marked [Cell] to name it. The sender is not named: the server already knows who sent it.");
 
-        if (declared.AreaMember is { } area && Named(area.Type, AreaId, AreaShape) is null)
+        if (declared.AreaMember is { } area && PlaceMemberKindOf(area.Type, AreaId, AreaShape) is null)
             Report(context, area.Locations.FirstOrDefault() ?? location, "NEVT009", "Not a place",
                 $"'{declared.Symbol.Name}.{area.Name}' is marked [Area] but is '{area.Type.ToDisplayString()}'. An area is named by an AreaId, or by an Area, which may be absent.");
 
-        if (declared.CellMember is { } cell && Named(cell.Type, FullCellId, CellShape) is null)
+        if (declared.CellMember is { } cell && PlaceMemberKindOf(cell.Type, FullCellId, CellShape) is null)
             Report(context, cell.Locations.FirstOrDefault() ?? location, "NEVT009", "Not a place",
                 $"'{declared.Symbol.Name}.{cell.Name}' is marked [Cell] but is '{cell.Type.ToDisplayString()}'. A cell is named by a FullCellId, or by a Cell, which may be absent.");
 
-        if (NeedsSubject(declared.Policy) && declared.Subjects.Count == 0)
+        if (PolicyChecksSubject(declared.Policy) && declared.Subjects.Count == 0)
             Report(context, location, "NEVT004", "No subject to check",
                 $"'{declared.Symbol.Name}' says Policy.{declared.Policy}, which checks the subject, so one member must be marked [Subject].");
 
@@ -146,7 +146,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
                     Report(context, member.Locations.FirstOrDefault() ?? location, "NEVT006", "Shape cannot travel",
                         $"'{declared.Symbol.Name}.{member.Name}' is '{shape.Name}', whose entities never have a network id, so it cannot be sent.");
             }
-            else if (!CanTravel(member.Type))
+            else if (!IsSerializable(member.Type))
             {
                 Report(context, member.Locations.FirstOrDefault() ?? location, "NEVT014", "Member cannot travel",
                     $"'{declared.Symbol.Name}.{member.Name}' is '{member.Type.ToDisplayString()}', which an event has no way to send. A member is a primitive, an enum, a System.Numerics vector, an INetSerializable, or a shape.");
@@ -159,7 +159,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     }
 
     /// <summary>Whether a member that is not a shape has a way onto the wire, which is what the reader is asked for.</summary>
-    private static bool CanTravel(ITypeSymbol type)
+    private static bool IsSerializable(ITypeSymbol type)
         => type.TypeKind == TypeKind.Enum
            || SerializationHelper.IsVectorLike(type)
            || SerializationHelper.IsINetSerializable(type)
@@ -169,13 +169,13 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     /// Only the owner check reads the subject. The two master policies read the place the event names, and the
     /// sender they compare it with is the origin, which the server knows without the event saying so.
     /// </summary>
-    private static bool NeedsSubject(Policy policy) => policy == Policy.SubjectOwner;
+    private static bool PolicyChecksSubject(Policy policy) => policy == Policy.SubjectOwner;
 
     /// <summary>
     /// How a member names a place: by its id, or by its shape, which may be absent. A nullable id is not one of
     /// them: a shape travels as its entity's id and may be missing, but a nullable id has no way onto the wire.
     /// </summary>
-    private enum NamedBy
+    private enum PlaceMemberKind
     {
         Id,
         Shape,
@@ -183,22 +183,22 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     }
 
     /// <summary>How <paramref name="type"/> names the place, or null when it is not a form that can.</summary>
-    private static NamedBy? Named(ITypeSymbol type, string id, string shape)
+    private static PlaceMemberKind? PlaceMemberKindOf(ITypeSymbol type, string id, string shape)
     {
         var optional = type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T };
         var underlying = optional ? ((INamedTypeSymbol)type).TypeArguments[0] : type;
         var name = underlying.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         if (name == id && !optional)
-            return NamedBy.Id;
+            return PlaceMemberKind.Id;
 
         if (name == shape)
-            return optional ? NamedBy.OptionalShape : NamedBy.Shape;
+            return optional ? PlaceMemberKind.OptionalShape : PlaceMemberKind.Shape;
 
         return null;
     }
 
-    private static void EmitEvent(SourceProductionContext context, EventInfo declared)
+    private static void EmitEvent(SourceProductionContext context, DeclaredEvent declared)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -207,7 +207,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"namespace {declared.Symbol.ContainingNamespace.ToDisplayString()};");
         sb.AppendLine();
-        sb.AppendLine($"public partial struct {declared.Symbol.Name} : {Marker}");
+        sb.AppendLine($"public partial struct {declared.Symbol.Name} : {NetworkedEventInterface}");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>This event's code on the wire, once the host has placed its mod's block.</summary>");
         sb.AppendLine("    public global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code");
@@ -226,7 +226,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
             }
             else if (SerializationHelper.IsVectorLike(member.Type))
             {
-                sb.AppendLine($"        {Vectors}.Serialize({member.Name}, writer);");
+                sb.AppendLine($"        {VectorSerialization}.Serialize({member.Name}, writer);");
             }
             else
             {
@@ -248,7 +248,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     /// reads back off the wire. One per event rather than one per mod, which is what lets the coordinator that
     /// runs every mod's handlers check the policy once and fan the event out once.
     /// </summary>
-    private static void EmitContract(StringBuilder sb, EventInfo declared)
+    private static void EmitContract(StringBuilder sb, DeclaredEvent declared)
     {
         var name = declared.Symbol.Name;
         var type = declared.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -257,27 +257,27 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
         sb.AppendLine("/// <exclude/>");
         sb.AppendLine($"/// <summary>What {name} is, for the coordinator that runs its handlers.</summary>");
         sb.AppendLine($"[{EditorBrowsable}]");
-        sb.AppendLine($"public sealed class {name}Contract : {Contract}<{type}>");
+        sb.AppendLine($"public sealed class {name}Contract : {ContractInterface}<{type}>");
         sb.AppendLine("{");
         sb.AppendLine("    public global::ReadyM.Api.Multiplayer.Protocol.Enums.RelayMessageCode Code");
         sb.AppendLine($"        => {ManifestClassName}.{name}Code + {ManifestClassName}.Offset;");
         sb.AppendLine();
-        sb.AppendLine($"    public {Attributes}.EventScope Scope => {Attributes}.EventScope.{declared.Scope};");
+        sb.AppendLine($"    public {AttributesNamespace}.EventScope Scope => {AttributesNamespace}.EventScope.{declared.Scope};");
         sb.AppendLine();
-        sb.AppendLine($"    public {Attributes}.Policy Policy => {Attributes}.Policy.{declared.Policy};");
+        sb.AppendLine($"    public {AttributesNamespace}.Policy Policy => {AttributesNamespace}.Policy.{declared.Policy};");
         sb.AppendLine();
-        sb.AppendLine($"    public {Handle}? Subject(in {type} e)");
-        sb.AppendLine($"        => {Subject(subject)};");
+        sb.AppendLine($"    public {EntityHandle}? Subject(in {type} networkEvent)");
+        sb.AppendLine($"        => {SubjectExpression(subject)};");
         sb.AppendLine();
-        sb.AppendLine($"    public global::ReadyM.Api.Idents.PlayerId Target(in {type} e)");
-        sb.AppendLine($"        => {(declared.Target is { } target ? $"e.{target.Name}.PlayerId" : "global::ReadyM.Api.Idents.PlayerId.Invalid")};");
+        sb.AppendLine($"    public global::ReadyM.Api.Idents.PlayerId Target(in {type} networkEvent)");
+        sb.AppendLine($"        => {(declared.Target is { } target ? $"networkEvent.{target.Name}.PlayerId" : "global::ReadyM.Api.Idents.PlayerId.Invalid")};");
         sb.AppendLine();
 
-        EmitNamed(sb, type, "TryArea", "area", AreaId, AreaShape, "AreaId", declared.AreaMember);
-        EmitNamed(sb, type, "TryCell", "cell", FullCellId, CellShape, "FullCellId", declared.CellMember);
+        EmitTryPlace(sb, type, "TryArea", "area", AreaId, AreaShape, "AreaId", declared.AreaMember);
+        EmitTryPlace(sb, type, "TryCell", "cell", FullCellId, CellShape, "FullCellId", declared.CellMember);
 
-        EmitRead(sb, declared, type);
-        EmitReason(sb, declared);
+        EmitTryRead(sb, declared, type);
+        EmitReasonSerialization(sb, declared);
 
         sb.AppendLine("}");
     }
@@ -286,27 +286,27 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     /// The place the event names with <c>[Area]</c> or <c>[Cell]</c>, as its id. The audience is taken from it
     /// before the subject, and the master policies check it. An event that names none answers false.
     /// </summary>
-    private static void EmitNamed(
+    private static void EmitTryPlace(
         StringBuilder sb, string type, string method, string output, string id, string shape, string idProperty,
         IPropertySymbol? member)
     {
-        sb.AppendLine($"    public bool {method}(in {type} e, out {id} {output})");
+        sb.AppendLine($"    public bool {method}(in {type} networkEvent, out {id} {output})");
         sb.AppendLine("    {");
 
-        switch (member is null ? null : Named(member.Type, id, shape))
+        switch (member is null ? null : PlaceMemberKindOf(member.Type, id, shape))
         {
-            case NamedBy.Id:
-                sb.AppendLine($"        {output} = e.{member!.Name};");
+            case PlaceMemberKind.Id:
+                sb.AppendLine($"        {output} = networkEvent.{member!.Name};");
                 sb.AppendLine("        return true;");
                 break;
 
-            case NamedBy.Shape:
-                sb.AppendLine($"        {output} = e.{member!.Name}.{idProperty};");
+            case PlaceMemberKind.Shape:
+                sb.AppendLine($"        {output} = networkEvent.{member!.Name}.{idProperty};");
                 sb.AppendLine("        return true;");
                 break;
 
-            case NamedBy.OptionalShape:
-                sb.AppendLine($"        if (e.{member!.Name} is {{ }} named)");
+            case PlaceMemberKind.OptionalShape:
+                sb.AppendLine($"        if (networkEvent.{member!.Name} is {{ }} named)");
                 sb.AppendLine("        {");
                 sb.AppendLine($"            {output} = named.{idProperty};");
                 sb.AppendLine("            return true;");
@@ -330,14 +330,14 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     }
 
     /// <summary>The entity the event is about, as a handle the server checks ownership and scope against.</summary>
-    private static string Subject(IPropertySymbol? subject)
+    private static string SubjectExpression(IPropertySymbol? subject)
     {
         if (subject is null)
             return "null";
 
         return RpcEntityParams.IsShape(subject.Type, out _, out var optional) && optional
-            ? $"e.{subject.Name} is {{ }} subject ? {Handle}.Of(subject) : null"
-            : $"{Handle}.Of(e.{subject.Name})";
+            ? $"networkEvent.{subject.Name} is {{ }} subject ? {EntityHandle}.Of(subject) : null"
+            : $"{EntityHandle}.Of(networkEvent.{subject.Name})";
     }
 
     /// <summary>
@@ -345,11 +345,11 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     /// so a miss drops the whole event: half an event is worse than none, and the sender's own end has already
     /// been told whether it was accepted.
     /// </summary>
-    private static void EmitRead(StringBuilder sb, EventInfo declared, string type)
+    private static void EmitTryRead(StringBuilder sb, DeclaredEvent declared, string type)
     {
-        sb.AppendLine($"    public bool TryRead({EntityReader} entities, NetDataReader reader, out {type} e)");
+        sb.AppendLine($"    public bool TryRead({EntityReader} entities, NetDataReader reader, out {type} networkEvent)");
         sb.AppendLine("    {");
-        sb.AppendLine("        e = default;");
+        sb.AppendLine("        networkEvent = default;");
         sb.AppendLine();
 
         for (var i = 0; i < declared.Members.Count; i++)
@@ -363,26 +363,26 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
 
                 sb.AppendLine(
                     $"        if (!entities.{read}<{named}>("
-                    + $"reader, out var m{i}, \"{declared.Symbol.Name}\", \"{member.Name}\"))");
+                    + $"reader, out var {Local(member)}, \"{declared.Symbol.Name}\", \"{member.Name}\"))");
                 sb.AppendLine("            return false;");
             }
             else if (SerializationHelper.IsVectorLike(member.Type))
             {
-                sb.AppendLine($"        var m{i} = default({member.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)});");
-                sb.AppendLine($"        {Vectors}.Deserialize(ref m{i}, reader);");
+                sb.AppendLine($"        var {Local(member)} = default({member.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)});");
+                sb.AppendLine($"        {VectorSerialization}.Deserialize(ref {Local(member)}, reader);");
             }
             else
             {
-                sb.AppendLine($"        var m{i} = {Reader(member.Type)};");
+                sb.AppendLine($"        var {Local(member)} = {ReadExpression(member.Type)};");
             }
         }
 
         sb.AppendLine();
-        sb.AppendLine($"        e = new {type}");
+        sb.AppendLine($"        networkEvent = new {type}");
         sb.AppendLine("        {");
 
         for (var i = 0; i < declared.Members.Count; i++)
-            sb.AppendLine($"            {declared.Members[i].Name} = m{i},");
+            sb.AppendLine($"            {declared.Members[i].Name} = {Local(declared.Members[i])},");
 
         sb.AppendLine("        };");
         sb.AppendLine();
@@ -391,15 +391,18 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
         sb.AppendLine();
     }
 
+    /// <summary>The local a member is read into.</summary>
+    private static string Local(IPropertySymbol member) => "read" + member.Name;
+
     /// <summary>
     /// A refusal's reason, of the type the declaration named. It gets a presence byte because an event may
     /// name a reject type and still be refused without one, by the policy or by a bare Cancel().
     /// </summary>
-    private static void EmitReason(StringBuilder sb, EventInfo declared)
+    private static void EmitReasonSerialization(StringBuilder sb, DeclaredEvent declared)
     {
         sb.AppendLine("    public void WriteReason(NetDataWriter writer, object? reason)");
 
-        if (declared.Reject is { } reject)
+        if (declared.RejectType is { } reject)
         {
             var named = reject.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var value = reject.TypeKind == TypeKind.Enum ? "(int)given" : "given";
@@ -437,7 +440,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     }
 
     /// <summary>Declares every event this assembly holds. The SDK calls it, with its registry.</summary>
-    private static void EmitDeclarations(SourceProductionContext context, List<EventInfo> events)
+    private static void EmitDeclarations(SourceProductionContext context, List<DeclaredEvent> events)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -467,7 +470,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     }
 
     /// <summary>How one plain member reads itself back, cast where the wire carries the underlying type.</summary>
-    private static string Reader(ITypeSymbol type)
+    private static string ReadExpression(ITypeSymbol type)
     {
         if (type.TypeKind == TypeKind.Enum)
         {
@@ -488,7 +491,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     /// process agrees on them whatever order it read the declarations in.
     /// </summary>
     private static void EmitManifest(
-        SourceProductionContext context, string ns, string manifestId, List<EventInfo> events)
+        SourceProductionContext context, string ns, string manifestId, List<DeclaredEvent> events)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -530,9 +533,9 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
             location));
 
     /// <summary>One declared event, with what its attribute and its members said.</summary>
-    private sealed class EventInfo
+    private sealed class DeclaredEvent
     {
-        public EventInfo(INamedTypeSymbol symbol, AttributeData declaration)
+        public DeclaredEvent(INamedTypeSymbol symbol, AttributeData declaration)
         {
             Symbol = symbol;
 
@@ -544,14 +547,14 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
                 ? AttributeUtils.EnumArgument(declaration.ConstructorArguments[1], Policy.ServerAuthoritative)
                 : Policy.ServerAuthoritative;
 
-            Reject = declaration.NamedArguments
+            RejectType = declaration.NamedArguments
                 .FirstOrDefault(n => n.Key == "Reject").Value.Value as INamedTypeSymbol;
 
             Members = [.. symbol.GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsStatic && p.SetMethod is not null)];
-            Subjects = [.. Members.Where(m => Marked(m, "SubjectAttribute"))];
-            Target = Members.FirstOrDefault(m => Marked(m, "TargetAttribute"));
-            AreaMember = Members.FirstOrDefault(m => Marked(m, "AreaAttribute"));
-            CellMember = Members.FirstOrDefault(m => Marked(m, "CellAttribute"));
+            Subjects = [.. Members.Where(m => HasAttribute(m, "SubjectAttribute"))];
+            Target = Members.FirstOrDefault(m => HasAttribute(m, "TargetAttribute"));
+            AreaMember = Members.FirstOrDefault(m => HasAttribute(m, "AreaAttribute"));
+            CellMember = Members.FirstOrDefault(m => HasAttribute(m, "CellAttribute"));
         }
 
         public INamedTypeSymbol Symbol { get; }
@@ -561,7 +564,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
         public Policy Policy { get; }
 
         /// <summary>The type a refusal carries back, where the declaration named one.</summary>
-        public INamedTypeSymbol? Reject { get; }
+        public INamedTypeSymbol? RejectType { get; }
 
         public List<IPropertySymbol> Members { get; }
 
@@ -575,7 +578,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
         /// <summary>The member marked [Cell], naming the cell the event is in.</summary>
         public IPropertySymbol? CellMember { get; }
 
-        private static bool Marked(ISymbol member, string attribute)
+        private static bool HasAttribute(ISymbol member, string attribute)
             => member.GetAttributes().Any(a => a.AttributeClass?.Name == attribute);
     }
 

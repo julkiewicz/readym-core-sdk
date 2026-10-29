@@ -347,7 +347,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
             """));
 
         Assert.Contains("global::ReadyM.Api.Multiplayer.Extensions.VectorSerializationExtensions.Serialize(Where, writer);", generated);
-        Assert.Contains("global::ReadyM.Api.Multiplayer.Extensions.VectorSerializationExtensions.Deserialize(ref m1, reader);", generated);
+        Assert.Contains("global::ReadyM.Api.Multiplayer.Extensions.VectorSerializationExtensions.Deserialize(ref readWhere, reader);", generated);
         Assert.DoesNotContain("writer.Put(Where)", generated);
     }
 
@@ -419,9 +419,9 @@ public class NetworkedEventTests(ITestOutputHelper output)
             public partial struct ByCell { [Cell] public FullCellId Where { get; set; } }
             """));
 
-        Assert.Contains("area = e.Where;", generated);
-        Assert.Contains("area = e.Where.AreaId;", generated);
-        Assert.Contains("cell = e.Where;", generated);
+        Assert.Contains("area = networkEvent.Where;", generated);
+        Assert.Contains("area = networkEvent.Where.AreaId;", generated);
+        Assert.Contains("cell = networkEvent.Where;", generated);
     }
 
     [Fact]
@@ -510,7 +510,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
 
         var first = server.IndexOf("CheckRange(", StringComparison.Ordinal);
         var second = server.IndexOf("CheckArmour(", StringComparison.Ordinal);
-        var guard = server.IndexOf("ctx.IsCancelled", first, StringComparison.Ordinal);
+        var guard = server.IndexOf("context.IsCancelled", first, StringComparison.Ordinal);
 
         Assert.True(first >= 0 && second > first, "both validators are dispatched");
         Assert.True(guard > first && guard < second, "the refusal is checked before the second validator runs");
@@ -577,7 +577,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
     {
         var server = Generated(RunServer());
 
-        Assert.Contains("Refused(in e, ", server);
+        Assert.Contains("Refused(in networkEvent, ", server);
         Assert.Contains("global::Other.Common.HitReject", server);
     }
 
@@ -743,11 +743,11 @@ public class NetworkedEventTests(ITestOutputHelper output)
     /// </summary>
     [Fact]
     public void The_contract_carries_the_subject_as_a_handle()
-        => Assert.Contains($"=> {Handle}.Of(e.Attacker);", Generated(RunCommon()));
+        => Assert.Contains($"=> {Handle}.Of(networkEvent.Attacker);", Generated(RunCommon()));
 
     [Fact]
     public void A_single_scoped_event_names_the_player_it_goes_to()
-        => Assert.Contains("=> e.To.PlayerId;", Generated(RunCommon()));
+        => Assert.Contains("=> networkEvent.To.PlayerId;", Generated(RunCommon()));
 
     /// <summary>An event that goes to an audience has no one player, and says so rather than guessing one.</summary>
     [Fact]
@@ -809,7 +809,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
 
         Assert.Contains("public bool TryRead(global::ReadyM.SDK.Events.INetworkedEventEntityReader entities,", common);
         Assert.Contains("entities.TryRead<", common);
-        Assert.Contains("(reader, out var m0, \"HitEvent\", \"Attacker\")", common);
+        Assert.Contains("(reader, out var readAttacker, \"HitEvent\", \"Attacker\")", common);
     }
 
     // -- what a mod generates -------------------------------------------------------------------------
@@ -839,7 +839,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
     {
         var server = Generated(RunServer());
 
-        Assert.Contains($"public void Run({Attributes}.Stage stage, ref global::Other.Common.HitEvent e,", server);
+        Assert.Contains($"public void Run({Attributes}.Stage stage, ref global::Other.Common.HitEvent networkEvent,", server);
         Assert.Contains($"case {Attributes}.Stage.Validate:", server);
         Assert.Contains($"case {Attributes}.Stage.Rejected:", server);
     }
@@ -868,7 +868,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
     [Fact]
     public void A_rejected_handler_runs_only_where_there_is_a_reason_to_hand_it()
         => Assert.Contains(
-            "if (ctx.CancellationReason is global::Other.Common.HitReject reason0)", Generated(RunServer()));
+            "if (context.CancellationReason is global::Other.Common.HitReject reason0)", Generated(RunServer()));
 
     /// <summary>Both declare into the registry the SDK hands them, and run only when it calls them.</summary>
     [Fact]
