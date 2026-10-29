@@ -38,7 +38,7 @@ public static class NetworkedEventRegistry
     /// Registers this side's handler sets and a coordinator per declared event. Every event gets one, handled
     /// here or not: an event this side has nothing to say about is still forwarded, and still refused.
     /// </summary>
-    internal static void RegisterAll(IDependencyContainer container, RpcSide side, INetworkedEventRegistration registration)
+    internal static void RegisterAll(IDependencyContainer container, RpcSide side, INetworkedEventCoordinatorRegistration registration)
     {
         var handlers = Handlers.Values.Where(handling => handling.Side == side).ToList();
 
@@ -72,11 +72,11 @@ public static class NetworkedEventRegistry
     private static string Identity(Type declared)
         => declared.FullName + ", " + declared.Assembly.GetName().Name;
 
-    private readonly struct Declaration(Type declared, Action<IDependencyContainer, INetworkedEventRegistration> register)
+    private readonly struct Declaration(Type declared, Action<IDependencyContainer, INetworkedEventCoordinatorRegistration> register)
     {
         public Type Event { get; } = declared;
 
-        public Action<IDependencyContainer, INetworkedEventRegistration> Register { get; } = register;
+        public Action<IDependencyContainer, INetworkedEventCoordinatorRegistration> Register { get; } = register;
     }
 
     private readonly struct Handling(RpcSide side, Type declared, Action<IDependencyContainer> register)

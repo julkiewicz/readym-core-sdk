@@ -8,7 +8,7 @@ namespace ReadyM.SDK.Events;
 /// the entity instead of writing it into the replicated component.
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class NetworkedEventEcsValueGuesses
+internal static class NetworkedEventEcsValueGuesses
 {
     [ThreadStatic]
     private static List<Action>? _drops;

@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using ReadyM.Api.Idents;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Archetypes.Core;
@@ -6,84 +5,40 @@ using ReadyM.SDK.Entities;
 
 namespace ReadyM.SDK.Server.Events;
 
-/// <exclude />
-/// <summary>
-/// Where the coordinator reads the audience of a scoped event from its subject, so a mod never names a cell or
-/// an area itself. Server-side, because the scope an entity is in is the server's to know.
-/// </summary>
-/// <remarks>
-/// Try-shaped on purpose: a subject that is in no cell leaves the event with no audience, and one bad event
-/// must not take the server down. The coordinator drops it, the way a failed shape lookup skips an RPC handler.
-/// </remarks>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public static class ServerNetworkedEventScopes
+/// <summary>Finds the areas and cells a networked event names, or that its subject is in.</summary>
+internal sealed class ServerNetworkedEventScopes(IEntityApi api)
 {
-    /// <summary>The cell the subject is in.</summary>
-    public static bool TryCellOf(ServerNetworkedEventDispatchBase dispatch, EntityHandle subject, out FullCellId cell)
+    public bool TryFindArea(AreaId id, out Area area) => TryFind(id, out area);
+
+    public bool TryFindCell(FullCellId id, out Cell cell) => TryFind(id, out cell);
+
+    /// <summary>The area the entity is in, directly or through its cell.</summary>
+    public bool TryFindAreaOf(EntityHandle entity, out AreaId area)
     {
-        if (TryScope<Cell>(dispatch, subject, out var found))
-        {
-            cell = found.FullCellId;
+        var found = ScopeLookup.TryFind<Area>(api, entity, out var scope);
+        area = found ? scope.AreaId : default;
 
-            return true;
-        }
-
-        cell = default;
-
-        return false;
+        return found;
     }
 
-    /// <summary>The area the subject is in.</summary>
-    public static bool TryAreaOf(ServerNetworkedEventDispatchBase dispatch, EntityHandle subject, out AreaId area)
+    public bool TryFindCellOf(EntityHandle entity, out FullCellId cell)
     {
-        if (TryScope<Area>(dispatch, subject, out var found))
-        {
-            area = found.AreaId;
+        var found = ScopeLookup.TryFind<Cell>(api, entity, out var scope);
+        cell = found ? scope.FullCellId : default;
 
-            return true;
-        }
-
-        area = default;
-
-        return false;
+        return found;
     }
 
-    /// <summary>The area with this id, where the server has one.</summary>
-    public static bool TryArea(ServerNetworkedEventDispatchBase dispatch, AreaId id, out Area area)
-        => TryNamed(dispatch, id, out area);
-
-    /// <summary>The cell with this id, where the server has one.</summary>
-    public static bool TryCell(ServerNetworkedEventDispatchBase dispatch, FullCellId id, out Cell cell)
-        => TryNamed(dispatch, id, out cell);
-
-    private static bool TryNamed<TScope, TId>(ServerNetworkedEventDispatchBase dispatch, TId id, out TScope scope)
+    private bool TryFind<TScope, TId>(TId id, out TScope scope)
         where TScope : struct, IArchetypeQueryable, IIndexed<TId>
     {
-        if (dispatch.Entities is { } entities && IndexRegistry.TryFind<TScope, TId>(entities.Api, id, out var raw))
+        if (IndexRegistry.TryFind<TScope, TId>(api, id, out var raw))
         {
-            scope = new TScope { Handle = new EntityHandle(raw, entities.Api) };
-
+            scope = new TScope { Handle = new EntityHandle(raw, api) };
             return true;
         }
 
         scope = default;
-
-        return false;
-    }
-
-    /// <summary>
-    /// The nearest scope of a shape holding the subject. Upwards, not just the immediate holder, so an entity
-    /// in a cell is in that cell's area too.
-    /// </summary>
-    internal static bool TryScope<TScope>(
-        ServerNetworkedEventDispatchBase dispatch, EntityHandle subject, out TScope scope)
-        where TScope : struct, IArchetypeQueryable, IScope
-    {
-        if (dispatch.Entities is { } entities)
-            return ScopeLookup.TryFind(entities.Api, subject, out scope);
-
-        scope = default;
-
         return false;
     }
 }

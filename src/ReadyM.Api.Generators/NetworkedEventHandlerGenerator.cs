@@ -134,8 +134,6 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"    public void Run({Stages} stage, ref {type} e, {Events}.EventContext ctx)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        ctx.Cancellation.SetCurrentMod(\"{mod}\");");
-        sb.AppendLine();
         sb.AppendLine("        switch (stage)");
         sb.AppendLine("        {");
 
@@ -173,7 +171,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         {
             // A refusal may carry no reason, and a handler that asked for one has nothing to be handed
             var named = reason.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            sb.AppendLine($"{indent}if (ctx.Cancellation.Reason is {named} reason{index})");
+            sb.AppendLine($"{indent}if (ctx.CancellationReason is {named} reason{index})");
             sb.AppendLine($"{indent}    {call}");
 
             return;
@@ -185,7 +183,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         // once at the end of it. The last one needs none: the coordinator asks before the next stage.
         if (stage is Stage.Validate or Stage.Filter && !last)
         {
-            sb.AppendLine($"{indent}if (ctx.Cancellation.IsCancelled)");
+            sb.AppendLine($"{indent}if (ctx.IsCancelled)");
             sb.AppendLine($"{indent}    return;");
             sb.AppendLine();
         }

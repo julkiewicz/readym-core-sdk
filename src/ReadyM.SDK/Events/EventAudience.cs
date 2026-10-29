@@ -3,9 +3,7 @@ using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Events;
 
-/// <summary>
-/// The players an accepted network event is sent to.
-/// </summary>
+/// <summary>The players an accepted networked event is sent to.</summary>
 // TODO: Replace with a discriminated union when C# 15 is out
 internal readonly struct EventAudience
 {
@@ -23,9 +21,6 @@ internal readonly struct EventAudience
 
     /// <summary>The cell, for <see cref="EventScope.Cell"/>.</summary>
     public FullCellId Cell { get; }
-
-    /// <summary>Nobody. The event stops at the server.</summary>
-    public static EventAudience Server { get; } = new(EventScope.Server, default, default, default);
 
     /// <summary>Every connected player.</summary>
     public static EventAudience Global { get; } = new(EventScope.Global, default, default, default);

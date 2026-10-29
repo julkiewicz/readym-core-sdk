@@ -1,65 +1,42 @@
-using System.ComponentModel;
 using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Events;
 
-/// <summary>
-/// Records a handler's refusal, so the dispatcher can skip every stage after it and tell the origin which mod refused and why.
-/// Generated code reads it; a mod reaches it through <see cref="EventContext.Cancel{TReason}"/>.
-/// </summary>
-/// <exclude />
-[EditorBrowsable(EditorBrowsableState.Never)]
-public sealed class EventCancellation
+/// <summary>Records the first cancellation of an event: which mod cancelled it, and why.</summary>
+internal sealed class EventCancellation
 {
-    /// <summary>Whether a handler has refused the event.</summary>
+    private string _currentMod = string.Empty;
+
+    private Stage? _currentStage;
+
     public bool IsCancelled { get; private set; }
 
-    /// <summary>The reason a handler gave, of the type the event declared, or none.</summary>
+    /// <summary>The reason the cancelling handler gave, of the type the event declared, or null.</summary>
     public object? Reason { get; private set; }
 
-    /// <summary>The manifest id of the mod whose handler refused it.</summary>
-    public string StoppedBy { get; private set; } = string.Empty;
+    /// <summary>The unique ID of the mod that cancelled the event.</summary>
+    public string CancelledBy { get; private set; } = string.Empty;
 
-    /// <summary>Whose handler is running now, which becomes <see cref="StoppedBy"/> if it refuses.</summary>
-    private string _running = string.Empty;
+    /// <summary>An event that is already cancelled: by the policy, or by the server before it reached a client.</summary>
+    public static EventCancellation Cancelled(string cancelledBy, object? reason)
+        => new() { IsCancelled = true, CancelledBy = cancelledBy, Reason = reason };
 
-    /// <summary>The stage running now, or null before the first, which is where the policy refuses.</summary>
-    private Stage? _stage;
+    public void SetCurrentStage(Stage? stage) => _currentStage = stage;
 
-    /// <summary>Set by the ladder as each stage starts, so a refusal in one that may not refuse is caught.</summary>
-    internal void MarkRunning(Stage? stage) => _stage = stage;
+    public void SetCurrentMod(string mod) => _currentMod = mod;
 
-    /// <exclude />
-    /// <summary>
-    /// Called by generated dispatch before each handler, so a refusal names the mod without the handler saying
-    /// so. A mod reads the answer as <see cref="EventContext.StoppedBy"/>.
-    /// </summary>
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public void SetCurrentMod(string mod) => _running = mod;
-
-    /// <summary>
-    /// Refuses the event. The first refusal is the one kept: it is the one the origin is owed, and the handlers
-    /// that would have refused after it never run.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// The stage running is Apply, Observe or Rejected. By Apply the event has been accepted, and refusing it
-    /// then would tell the origin it never happened when it has; by Rejected it was refused already.
-    /// </exception>
+    /// <summary>Cancels the event, unless it is cancelled already, in which case the first reason stands.</summary>
+    /// <exception cref="InvalidOperationException">The current stage is Apply, Observe or Rejected.</exception>
     public void Cancel(object? reason)
     {
-        switch (_stage)
+        switch (_currentStage)
         {
             case Stage.Apply:
             case Stage.Observe:
-                throw new InvalidOperationException(
-                    $"'{_running}' refused the event at Stage.{_stage}. Only Stage.Validate and Stage.Filter may "
-                    + "refuse: by Apply the event has been accepted, and refusing then would tell the origin it never "
-                    + "happened when it has.");
-
             case Stage.Rejected:
                 throw new InvalidOperationException(
-                    $"'{_running}' refused the event at Stage.Rejected, which runs because it was refused already. "
-                    + "Only Stage.Validate and Stage.Filter may refuse.");
+                    $"'{_currentMod}' cancelled the event at Stage.{_currentStage}. Only Stage.Validate and "
+                    + "Stage.Filter may cancel an event.");
 
             case null:
             case Stage.Validate:
@@ -67,7 +44,8 @@ public sealed class EventCancellation
                 break;
 
             default:
-                throw new ArgumentOutOfRangeException(nameof(_stage), _stage, "Unhandled network event stage.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(_currentStage), _currentStage, "Unhandled networked event stage.");
         }
 
         if (IsCancelled)
@@ -75,6 +53,6 @@ public sealed class EventCancellation
 
         IsCancelled = true;
         Reason = reason;
-        StoppedBy = _running;
+        CancelledBy = _currentMod;
     }
 }

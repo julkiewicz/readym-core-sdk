@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using LiteNetLib.Utils;
+using ReadyM.Api.Multiplayer.Protocol.Enums;
+using ReadyM.SDK.Attributes;
 using ReadyM.SDK.Events;
 using Xunit;
 
@@ -13,7 +16,29 @@ namespace ReadyM.SDK.Tests.Events;
 public class NetworkedEventOrderingTests
 {
     private static List<string> Sorted(params (string Mod, string[] After)[] mods)
-        => NetworkedEventOrdering.Sort(mods.Select(m => (m.Mod, (IReadOnlyList<string>)m.After)).ToList());
+        => NetworkedEventCoordinatorBase<Tick>.SortByAfter([.. mods.Select(m => new Handlers(m.Mod, m.After))])
+            .Select(handlers => handlers.Mod)
+            .ToList();
+
+    private struct Tick : INetworkedEvent
+    {
+        public RelayMessageCode Code => RelayMessageCode.MaxServerRpcEvent;
+
+        public void Serialize(NetDataWriter writer)
+        {
+        }
+    }
+
+    private sealed class Handlers(string mod, string[] after) : INetworkedEventHandlers<Tick>
+    {
+        public string Mod => mod;
+
+        public IReadOnlyList<string> After => after;
+
+        public void Run(Stage stage, ref Tick networkEvent, EventContext context)
+        {
+        }
+    }
 
     /// <summary>
     /// Not the order they were handed over in. The server and a client load a different set of mods in a

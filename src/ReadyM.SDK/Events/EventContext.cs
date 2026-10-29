@@ -3,13 +3,10 @@ using ReadyM.Api.Idents;
 
 namespace ReadyM.SDK.Events;
 
-/// <summary>What a network event handler is told about the event besides its members.</summary>
+/// <summary>What a networked event handler is told about the event besides its members.</summary>
 public readonly struct EventContext
 {
-    /// <summary>Built by generated code, once per event it dispatches.</summary>
-    /// <exclude />
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public EventContext(PlayerId origin, EventCancellation cancellation)
+    internal EventContext(PlayerId origin, EventCancellation cancellation)
     {
         Origin = origin;
         Cancellation = cancellation;
@@ -18,20 +15,25 @@ public readonly struct EventContext
     /// <summary>Who raised it: a player, or <see cref="PlayerId.Server"/>.</summary>
     public PlayerId Origin { get; }
 
-    /// <summary>Where a refusal is recorded.</summary>
+    /// <summary>On <c>Stage.Rejected</c>, the unique ID of the mod that cancelled the event.</summary>
+    public string CancelledBy => Cancellation.CancelledBy;
+
     /// <exclude />
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public EventCancellation Cancellation { get; }
+    public bool IsCancelled => Cancellation.IsCancelled;
 
-    /// <summary>On <c>Stage.Rejected</c>, the manifest id of the mod that refused it.</summary>
-    public string StoppedBy => Cancellation.StoppedBy;
+    /// <exclude />
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public object? CancellationReason => Cancellation.Reason;
+
+    internal EventCancellation Cancellation { get; }
 
     /// <summary>
-    /// Refuses the event, with a reason of the type its declaration named. Every later stage is skipped and the
+    /// Cancels the event, with a reason of the type its declaration named. Every later stage is skipped and the
     /// reason reaches the origin.
     /// </summary>
     public void Cancel<TReason>(TReason reason) => Cancellation.Cancel(reason);
 
-    /// <summary>Refuses the event without a reason. Every later stage is skipped.</summary>
+    /// <summary>Cancels the event without a reason. Every later stage is skipped.</summary>
     public void Cancel() => Cancellation.Cancel(null);
 }

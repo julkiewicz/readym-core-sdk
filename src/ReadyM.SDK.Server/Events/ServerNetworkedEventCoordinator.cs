@@ -1,163 +1,144 @@
-using System;
-using System.Collections.Generic;
 using LiteNetLib.Utils;
+using ReadyM.Api.DI;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.Protocol;
-using ReadyM.Api.Multiplayer.Protocol.Enums;
+using ReadyM.Relay.Server.Sdk.Rpc;
 using ReadyM.SDK.Attributes;
 using ReadyM.SDK.Events;
 
 namespace ReadyM.SDK.Server.Events;
 
 /// <summary>
-/// The server's half of one event: the policy, then every mod's handlers a stage at a time, then one fan-out
-/// to the audience the scope names, or one refusal back to the origin.
+/// Receives one event, from a client or from server code, checks its policy, runs every mod's handlers, and sends
+/// it to its audience or the refusal back to its origin.
 /// </summary>
-/// <remarks>
-/// There is one per event, not one per mod. That is what makes a second mod's Validate able to refuse what the
-/// event's own mod would have applied, and what keeps the event going out once however many mods handle it.
-/// </remarks>
 internal sealed class ServerNetworkedEventCoordinator<T>(
-    INetworkedEventContract<T> contract, IEnumerable<INetworkedEventHandlers<T>> mods)
-    : ServerNetworkedEventDispatchBase, INetworkedEventDispatch<T>
+    INetworkedEventContract<T> contract,
+    IEnumerable<INetworkedEventHandlers<T>> handlers,
+    RpcApi relay,
+    INetworkedEventEntityReader entities,
+    ServerNetworkedEventPolicy policy,
+    ServerNetworkedEventScopes scopes,
+    ServerNetworkedEventSender sender)
+    : NetworkedEventCoordinatorBase<T>(handlers), IHostedService
     where T : struct, INetworkedEvent
 {
-    /// <summary>What a policy refusal names as the thing that stopped it, since no mod's handler did.</summary>
-    private const string ThePolicy = "policy";
+    /// <summary>What <see cref="EventContext.CancelledBy"/> says when the policy refused the event.</summary>
+    private const string PolicyCancellerName = "policy";
 
-    private readonly IReadOnlyList<INetworkedEventHandlers<T>> _mods = NetworkedEventStages.InOrder(mods);
+    // Kept, because the relay removes a handler by delegate identity
+    private Action<ServerEventHeader, NetDataReader>? _onMessageReceived;
 
-    protected override RelayMessageCode Code() => contract.Code;
-
-    protected override void Listen() => Hear(Code(), Arrived);
-
-    /// <summary>The server raising it for itself, or for a player it is acting on behalf of.</summary>
-    public void Raise(T networkEvent, PlayerId origin, bool vouched)
-        => Dispatch(networkEvent, origin, raisedHere: true, vouched);
-
-    /// <summary>Takes this event off the wire. The sender is the origin; the relay vouches for that much.</summary>
-    private void Arrived(ServerEventHeader header, NetDataReader reader)
+    public void OnScopeStart()
     {
-        if (contract.TryRead(this, reader, out var e))
-            Dispatch(e, header.Sender, raisedHere: false, vouched: false);
+        _onMessageReceived = OnMessageReceived;
+        relay.AddServerRpcMessageHandler(contract.Code, _onMessageReceived);
     }
 
-    internal void Dispatch(T networkEvent, PlayerId origin, bool raisedHere, bool vouched)
+    public void Dispose()
     {
-        var cancellation = new EventCancellation();
-        var context = new EventContext(origin, cancellation);
+        if (_onMessageReceived is { } handler)
+            relay.RemoveServerRpcMessageHandler(contract.Code, handler);
 
-        if (!vouched && !ServerNetworkedEventPolicy.Allows(
-                this,
+        _onMessageReceived = null;
+    }
+
+    /// <summary>Raises the event from server code as <paramref name="origin"/>. The policy is not checked.</summary>
+    public void Raise(T networkEvent, PlayerId origin) => Dispatch(networkEvent, origin, checkPolicy: false);
+
+    private void OnMessageReceived(ServerEventHeader header, NetDataReader reader)
+    {
+        if (contract.TryRead(entities, reader, out var networkEvent))
+            Dispatch(networkEvent, header.Sender, checkPolicy: true);
+    }
+
+    internal void Dispatch(T networkEvent, PlayerId origin, bool checkPolicy)
+    {
+        if (checkPolicy && !policy.Allows(
                 contract.Policy,
                 contract.Subject(in networkEvent),
                 contract.TryArea(in networkEvent, out var area) ? area : null,
                 contract.TryCell(in networkEvent, out var cell) ? cell : null,
                 origin))
         {
-            cancellation.SetCurrentMod(ThePolicy);
-            cancellation.Cancel(null);
-            Refuse(ref networkEvent, context, cancellation);
-
+            Refuse(ref networkEvent, new EventContext(origin, EventCancellation.Cancelled(PolicyCancellerName, null)));
             return;
         }
 
-        NetworkedEventStages.Run(_mods, Stage.Validate, ref networkEvent, context);
-        NetworkedEventStages.Run(_mods, Stage.Filter, ref networkEvent, context);
+        var context = new EventContext(origin, new EventCancellation());
+        RunStage(Stage.Validate, ref networkEvent, context);
+        RunStage(Stage.Filter, ref networkEvent, context);
 
-        if (cancellation.IsCancelled)
+        if (context.IsCancelled)
         {
-            Refuse(ref networkEvent, context, cancellation);
-
+            Refuse(ref networkEvent, context);
             return;
         }
 
-        NetworkedEventStages.Run(_mods, Stage.Apply, ref networkEvent, context);
-        NetworkedEventStages.Run(_mods, Stage.Observe, ref networkEvent, context);
+        RunStage(Stage.Apply, ref networkEvent, context);
+        RunStage(Stage.Observe, ref networkEvent, context);
 
-        // A server-scoped event was for the server, so there is nobody downstream to tell
-        if (contract.Scope != EventScope.Server && TryAudience(in networkEvent, out var audience))
-            ServerNetworkedEventTransport.FanOut(this, Code(), audience, origin, Written(in networkEvent));
+        if (TryResolveAudience(in networkEvent, out var audience))
+            sender.SendAccepted(contract.Code, audience, origin, Serialize(in networkEvent));
     }
 
-    private void Refuse(ref T networkEvent, EventContext context, EventCancellation cancellation)
+    private void Refuse(ref T networkEvent, EventContext context)
     {
-        ServerNetworkedEventTransport.Reject(this, Code(), context.Origin, Refused(in networkEvent, cancellation));
+        var payload = Serialize(in networkEvent);
+        payload.Put(context.CancelledBy);
+        contract.WriteReason(payload, context.CancellationReason);
 
-        NetworkedEventStages.Run(_mods, Stage.Rejected, ref networkEvent, context);
+        sender.SendRefusal(contract.Code, context.Origin, payload);
+        RunStage(Stage.Rejected, ref networkEvent, context);
     }
 
     /// <summary>
-    /// Who hears it. A subject in no cell or area leaves the event with no audience, which drops it rather
-    /// than throwing: one bad event must not take the server down, and the origin has already been answered.
+    /// Who hears an accepted event. False for a server-scoped event, and for an event in an area or cell that
+    /// neither names one nor has a subject in one.
     /// </summary>
-    private bool TryAudience(in T networkEvent, out EventAudience audience)
+    private bool TryResolveAudience(in T networkEvent, out EventAudience audience)
     {
+        audience = default;
+
         switch (contract.Scope)
         {
+            case EventScope.Server:
+                return false;
+
             case EventScope.Global:
                 audience = EventAudience.Global;
-
                 return true;
 
             case EventScope.Single:
                 audience = EventAudience.Single(contract.Target(in networkEvent));
-
                 return true;
-
-            case EventScope.Area when contract.TryArea(in networkEvent, out var namedArea):
-                audience = EventAudience.InArea(namedArea);
-
-                return true;
-
-            case EventScope.Cell when contract.TryCell(in networkEvent, out var namedCell):
-                audience = EventAudience.InCell(namedCell);
-
-                return true;
-
-            case EventScope.Area when contract.Subject(in networkEvent) is { } inArea:
-                var foundArea = ServerNetworkedEventScopes.TryAreaOf(this, inArea, out var area);
-                audience = EventAudience.InArea(area);
-
-                return foundArea;
-
-            case EventScope.Cell when contract.Subject(in networkEvent) is { } inCell:
-                var foundCell = ServerNetworkedEventScopes.TryCellOf(this, inCell, out var cell);
-                audience = EventAudience.InCell(cell);
-
-                return foundCell;
 
             case EventScope.Area:
+                if (!contract.TryArea(in networkEvent, out var area)
+                    && !(contract.Subject(in networkEvent) is { } inArea && scopes.TryFindAreaOf(inArea, out area)))
+                    return false;
+
+                audience = EventAudience.InArea(area);
+                return true;
+
             case EventScope.Cell:
-                audience = default;
+                if (!contract.TryCell(in networkEvent, out var cell)
+                    && !(contract.Subject(in networkEvent) is { } inCell && scopes.TryFindCellOf(inCell, out cell)))
+                    return false;
 
-                return false;
-
-            case EventScope.Server:
-                audience = EventAudience.Server;
-
+                audience = EventAudience.InCell(cell);
                 return true;
 
             default:
                 throw new ArgumentOutOfRangeException(
-                    nameof(networkEvent), contract.Scope, "Unhandled network event scope.");
+                    nameof(networkEvent), contract.Scope, "Unhandled networked event scope.");
         }
     }
 
-    private static NetDataWriter Written(in T networkEvent)
+    private static NetDataWriter Serialize(in T networkEvent)
     {
         var writer = new NetDataWriter();
         networkEvent.Serialize(writer);
-
-        return writer;
-    }
-
-    /// <summary>What a refusal carries back: the event as it stood, who stopped it, and the reason if any.</summary>
-    private NetDataWriter Refused(in T networkEvent, EventCancellation cancellation)
-    {
-        var writer = Written(in networkEvent);
-        writer.Put(cancellation.StoppedBy);
-        contract.WriteReason(writer, cancellation.Reason);
 
         return writer;
     }

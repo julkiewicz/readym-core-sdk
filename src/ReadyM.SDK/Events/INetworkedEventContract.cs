@@ -7,9 +7,7 @@ using ReadyM.SDK.Entities;
 
 namespace ReadyM.SDK.Events;
 
-/// <summary>
-/// What the Common project generates beside an event struct.
-/// </summary>
+/// <summary>What the Common project generates beside an event struct.</summary>
 /// <exclude />
 [EditorBrowsable(EditorBrowsableState.Never)]
 public interface INetworkedEventContract<T> where T : struct, INetworkedEvent
@@ -26,9 +24,7 @@ public interface INetworkedEventContract<T> where T : struct, INetworkedEvent
     /// <summary>The entity it is about, which the owner policy checks and a scoped audience falls back on.</summary>
     EntityHandle? Subject(in T networkEvent);
 
-    /// <summary>
-    /// The area it names with <c>[Area]</c>, if any.
-    /// </summary>
+    /// <summary>The area it names with <c>[Area]</c>, if any.</summary>
     bool TryArea(in T networkEvent, out AreaId area);
 
     /// <summary>The cell it names with <c>[Cell]</c>, if any.</summary>
@@ -38,7 +34,7 @@ public interface INetworkedEventContract<T> where T : struct, INetworkedEvent
     PlayerId Target(in T networkEvent);
 
     /// <summary>Reads the event, failing if it names an entity this end does not have.</summary>
-    bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out T networkEvent);
+    bool TryRead(INetworkedEventEntityReader entities, NetDataReader reader, out T networkEvent);
 
     /// <summary>Writes a refusal's reason, of the type the declaration named, or its absence.</summary>
     void WriteReason(NetDataWriter writer, object? reason);

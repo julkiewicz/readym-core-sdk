@@ -22,8 +22,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     private const string Attribute = "ReadyM.SDK.Attributes.NetworkedEventAttribute";
     private const string Attributes = "global::ReadyM.SDK.Attributes";
     private const string Contract = "global::ReadyM.SDK.Events.INetworkedEventContract";
-    private const string Core = "global::ReadyM.SDK.Events.NetworkedEventDispatchCore";
-    private const string Codec = "global::ReadyM.SDK.Events.NetworkedEventCodec";
+    private const string EntityReader = "global::ReadyM.SDK.Events.INetworkedEventEntityReader";
     private const string Handle = "global::ReadyM.SDK.Entities.EntityHandle";
     private const string AreaId = "global::ReadyM.Api.Idents.AreaId";
     private const string FullCellId = "global::ReadyM.Api.Idents.FullCellId";
@@ -347,7 +346,7 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
     /// </summary>
     private static void EmitRead(StringBuilder sb, EventInfo declared, string type)
     {
-        sb.AppendLine($"    public bool TryRead({Core} world, NetDataReader reader, out {type} e)");
+        sb.AppendLine($"    public bool TryRead({EntityReader} entities, NetDataReader reader, out {type} e)");
         sb.AppendLine("    {");
         sb.AppendLine("        e = default;");
         sb.AppendLine();
@@ -362,8 +361,8 @@ internal class NetworkedEventContractGenerator : IIncrementalGenerator
                 var named = shape.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
                 sb.AppendLine(
-                    $"        if (!{Codec}.{read}<{named}>("
-                    + $"world, reader, out var m{i}, \"{declared.Symbol.Name}\", \"{member.Name}\"))");
+                    $"        if (!entities.{read}<{named}>("
+                    + $"reader, out var m{i}, \"{declared.Symbol.Name}\", \"{member.Name}\"))");
                 sb.AppendLine("            return false;");
             }
             else if (SerializationHelper.IsVectorLike(member.Type))

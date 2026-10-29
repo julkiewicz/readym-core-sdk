@@ -4,13 +4,16 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReadyM.Api.DI;
 using ReadyM.Api.Idents;
+using ReadyM.Api.Multiplayer.Client;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.Api.Multiplayer.RPC;
 using ReadyM.SDK.Attributes;
 using ReadyM.SDK.Client.Events;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Events;
+using ReadyM.SDK.Server.Entities;
 using ReadyM.SDK.Server.Events;
+using ReadyM.SDK.TestHarness;
 using Xunit;
 
 namespace ReadyM.SDK.Tests.Events;
@@ -57,7 +60,7 @@ public class NetworkedEventRegistryTests
 
         public PlayerId Target(in Knock networkEvent) => PlayerId.Invalid;
 
-        public bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out Knock networkEvent)
+        public bool TryRead(INetworkedEventEntityReader entities, NetDataReader reader, out Knock networkEvent)
         {
             networkEvent = default;
 
@@ -106,7 +109,7 @@ public class NetworkedEventRegistryTests
 
     private sealed class Container : DependencyContainerBase;
 
-    private Container Registered(RpcSide side, INetworkedEventRegistration registration)
+    private Container Registered(RpcSide side, INetworkedEventCoordinatorRegistration registration)
     {
         var container = new Container();
 
@@ -114,6 +117,18 @@ public class NetworkedEventRegistryTests
         container.RegisterSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         container.RegisterSingleton<ILogger>(NullLogger.Instance);
         container.RegisterSingleton(new Ran(_ran));
+
+        var api = new FakeRelay().CreateEntityApi();
+        var rpc = new FakeRpcRelay().CreateRpcApi();
+        container.RegisterSingleton<IEntityApi>(api);
+        container.RegisterSingleton(rpc);
+        container.RegisterSingleton<IRpcClient>(new FakeRpcClient());
+        container.RegisterSingleton<INetworkedEventEntityReader>(
+            new NetworkedEventEntityReader(new RpcEntities(api, NullLogger.Instance)));
+        container.RegisterSingleton(new NetworkedEventPredictions());
+        container.RegisterSingleton<ServerNetworkedEventScopes>();
+        container.RegisterSingleton<ServerNetworkedEventPolicy>();
+        container.RegisterSingleton(new ServerNetworkedEventSender(rpc, new ServerEntities(api), new FakePlayers()));
 
         NetworkedEventRegistry.Declare<Knock>(new Contract());
         NetworkedEventRegistry.Handle<Owner, Knock>(RpcSide.Server);
@@ -123,7 +138,7 @@ public class NetworkedEventRegistryTests
         return container;
     }
 
-    private Container OnServer() => Registered(RpcSide.Server, new ServerNetworkedEventRegistration());
+    private Container OnServer() => Registered(RpcSide.Server, new ServerNetworkedEventCoordinatorRegistration());
 
     [Fact]
     public void A_declared_event_gets_one_coordinator_the_container_can_build()
@@ -131,7 +146,7 @@ public class NetworkedEventRegistryTests
         using var container = OnServer();
 
         Assert.Same(
-            container.Resolve<INetworkedEventDispatch<Knock>>(), container.Resolve<INetworkedEventDispatch<Knock>>());
+            container.Resolve<ServerNetworkedEventCoordinator<Knock>>(), container.Resolve<ServerNetworkedEventCoordinator<Knock>>());
     }
 
     /// <summary>
@@ -143,7 +158,7 @@ public class NetworkedEventRegistryTests
     {
         using var container = OnServer();
 
-        container.Resolve<INetworkedEventDispatch<Knock>>().Raise(default, PlayerId.Server, true);
+        container.Resolve<ServerNetworkedEventCoordinator<Knock>>().Raise(default, PlayerId.Server);
 
         Assert.Equal(["Owner", "Rules"], _ran);
     }
@@ -156,7 +171,7 @@ public class NetworkedEventRegistryTests
 
         container.StartHostedServices();
 
-        Assert.NotNull(container.Resolve<INetworkedEventDispatch<Knock>>());
+        Assert.NotNull(container.Resolve<ServerNetworkedEventCoordinator<Knock>>());
     }
 
     /// <summary>
@@ -168,8 +183,8 @@ public class NetworkedEventRegistryTests
     {
         using var container = OnServer();
 
-        NetworkedEventRegistry.RegisterAll(container, RpcSide.Server, new ServerNetworkedEventRegistration());
-        container.Resolve<INetworkedEventDispatch<Knock>>().Raise(default, PlayerId.Server, true);
+        NetworkedEventRegistry.RegisterAll(container, RpcSide.Server, new ServerNetworkedEventCoordinatorRegistration());
+        container.Resolve<ServerNetworkedEventCoordinator<Knock>>().Raise(default, PlayerId.Server);
 
         Assert.Equal(["Owner", "Rules"], _ran);
     }
@@ -182,7 +197,7 @@ public class NetworkedEventRegistryTests
     [Fact]
     public void A_client_gets_a_coordinator_without_the_servers_handlers()
     {
-        using var container = Registered(RpcSide.Client, new ClientNetworkedEventRegistration());
+        using var container = Registered(RpcSide.Client, new ClientNetworkedEventCoordinatorRegistration());
 
         container.StartHostedServices();
 

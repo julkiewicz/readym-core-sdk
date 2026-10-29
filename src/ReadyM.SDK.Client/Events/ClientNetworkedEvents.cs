@@ -1,33 +1,27 @@
-using LiteNetLib.Utils;
+using LiteNetLib;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.Client;
+using ReadyM.Api.Multiplayer.Protocol;
 using ReadyM.SDK.Events;
 
 namespace ReadyM.SDK.Client.Events;
 
-/// <summary>
-/// Raising an event from client code. Nothing runs here: the event goes to the server, which decides whether it
-/// happened and tells this client back. That is the whole point of the server sitting in the middle.
-/// </summary>
-/// <remarks>
-/// It needs nothing generated per event, because the event carries its own code and writes its own members. A
-/// mod that raises an event it declares no handler for has no dispatch, and this is why it does not need one.
-/// </remarks>
+/// <summary>Sends raised events to the server, which runs their stages and answers.</summary>
 internal sealed class ClientNetworkedEvents(IRpcClient relay, NetworkedEventPredictions predictions, Store world)
     : INetworkedEvents
 {
-    /// <summary>Set from the client's update, so a guess can run out while nothing answers it.</summary>
+    /// <summary>Set from the client's update, so a prediction can time out while nothing answers it.</summary>
     public double Now { get; set; }
 
     public INetworkedEventRaise Raise<T>(T networkEvent) where T : struct, INetworkedEvent
     {
-        NetworkedEventThread.ThrowIfNotOnWorldThread<T>(world.IsOnOwnThread);
+        if (!world.IsOnOwnThread)
+            throw new EventRaisedOffEcsThreadException(typeof(T));
 
-        var payload = new NetDataWriter();
-        networkEvent.Serialize(payload);
-
-        NetworkedEventTransport.SendToServer(relay, networkEvent.Code, payload);
+        var message = RelayMessage.ToServer(networkEvent.Code, DeliveryMethod.ReliableOrdered);
+        networkEvent.Serialize(message.Writer);
+        relay.SendMessage(message);
 
         return predictions.Open(networkEvent.Code, Now);
     }

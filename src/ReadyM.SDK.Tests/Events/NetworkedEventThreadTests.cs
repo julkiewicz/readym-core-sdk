@@ -8,9 +8,11 @@ using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.Client;
 using ReadyM.Api.Multiplayer.Protocol;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
+using ReadyM.SDK.Attributes;
 using ReadyM.SDK.Client.Events;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Events;
+using ReadyM.SDK.Server.Entities;
 using ReadyM.SDK.Server.Events;
 using ReadyM.SDK.TestHarness;
 using Xunit;
@@ -26,11 +28,11 @@ public class NetworkedEventThreadTests : IDisposable
 {
     private readonly Store _world = new(new EntityStore(), NullLogger.Instance, Array.Empty<IArchetypeRegistration>());
 
-    private readonly Relay _relay = new();
+    private readonly FakeRpcClient _relay = new();
 
     private readonly TestContainer _server = new();
 
-    private readonly Dispatch _dispatch = new();
+    private readonly List<string> _ran = [];
 
     public NetworkedEventThreadTests()
     {
@@ -38,16 +40,28 @@ public class NetworkedEventThreadTests : IDisposable
         _world.SetThread(Thread.CurrentThread);
 
         // A server mod asks the host through its entity api, which the fake relay answers for the thread that built it
+        var world = new FakeRelay();
+        var api = world.CreateEntityApi();
+        var rpc = new FakeRpcRelay().CreateRpcApi();
+        var scopes = new ServerNetworkedEventScopes(api);
+
         _server.Init();
-        _server.RegisterSingleton<IEntityApi>(new FakeRelay().CreateEntityApi());
-        _server.RegisterSingleton<INetworkedEventDispatch<Ping>>(_dispatch);
+        _server.RegisterSingleton<IEntityApi>(api);
+        _server.RegisterSingleton(new ServerNetworkedEventCoordinator<Ping>(
+            new PingContract(),
+            [new Handlers(_ran)],
+            rpc,
+            new NetworkedEventEntityReader(new RpcEntities(api, NullLogger.Instance)),
+            new ServerNetworkedEventPolicy(scopes),
+            scopes,
+            new ServerNetworkedEventSender(rpc, new ServerEntities(api), new FakePlayers())));
     }
 
     public void Dispose() => _server.Dispose();
 
     private INetworkedEvents Client() => new ClientNetworkedEvents(_relay, new NetworkedEventPredictions(), _world);
 
-    private INetworkedEvents Server() => new ServerNetworkedEvents(_server);
+    private INetworkedEvents Server() => new ServerNetworkedEvents(_server, _server.Resolve<IEntityApi>());
 
     /// <summary>Runs the call on a thread of its own and hands back what it threw, as a callback from the game would.</summary>
     private static Exception? Elsewhere(Action raise)
@@ -93,7 +107,7 @@ public class NetworkedEventThreadTests : IDisposable
     {
         Server().Raise(new Ping());
 
-        Assert.Equal(1, _dispatch.Raised);
+        Assert.Equal(["Apply"], _ran);
     }
 
     [Fact]
@@ -102,7 +116,7 @@ public class NetworkedEventThreadTests : IDisposable
         var thrown = Elsewhere(() => Server().Raise(new Ping()));
 
         AssertRefused(thrown);
-        Assert.Equal(0, _dispatch.Raised);
+        Assert.Empty(_ran);
     }
 
     [Fact]
@@ -111,13 +125,13 @@ public class NetworkedEventThreadTests : IDisposable
         var thrown = Elsewhere(() => Server().RaiseAs(new PlayerId(3), new Ping()));
 
         AssertRefused(thrown);
-        Assert.Equal(0, _dispatch.Raised);
+        Assert.Empty(_ran);
     }
 
     /// <summary>It names the event and the thread it came from, and says what to do about it.</summary>
     private static void AssertRefused(Exception? thrown)
     {
-        var refused = Assert.IsType<InvalidOperationException>(thrown);
+        var refused = Assert.IsType<EventRaisedOffEcsThreadException>(thrown);
 
         Assert.Contains("Ping", refused.Message);
         Assert.Contains("Game callback", refused.Message);
@@ -134,38 +148,54 @@ public class NetworkedEventThreadTests : IDisposable
         }
     }
 
-    private sealed class Dispatch : INetworkedEventDispatch<Ping>
+    private sealed class PingContract : INetworkedEventContract<Ping>
     {
-        public int Raised { get; private set; }
+        public RelayMessageCode Code => RelayMessageCode.MaxServerRpcEvent;
 
-        public void Raise(Ping networkEvent, PlayerId origin, bool vouched) => Raised++;
+        public EventScope Scope => EventScope.Server;
+
+        public Policy Policy => Policy.Anyone;
+
+        public EntityHandle? Subject(in Ping networkEvent) => null;
+
+        public bool TryArea(in Ping networkEvent, out AreaId area)
+        {
+            area = default;
+            return false;
+        }
+
+        public bool TryCell(in Ping networkEvent, out FullCellId cell)
+        {
+            cell = default;
+            return false;
+        }
+
+        public PlayerId Target(in Ping networkEvent) => PlayerId.Invalid;
+
+        public bool TryRead(INetworkedEventEntityReader entities, NetDataReader reader, out Ping networkEvent)
+        {
+            networkEvent = default;
+            return true;
+        }
+
+        public void WriteReason(NetDataWriter writer, object? reason)
+        {
+        }
+
+        public object? ReadReason(NetDataReader reader) => null;
     }
 
-    private sealed class Relay : IRpcClient
+    private sealed class Handlers(List<string> ran) : INetworkedEventHandlers<Ping>
     {
-        public int Sent { get; private set; }
+        public string Mod => "Pinger";
 
-        public PlayerId? PlayerId => new(1);
+        public IReadOnlyList<string> After => [];
 
-        public void SendMessage(RelayMessage message) => Sent++;
-
-        public void AddClientRpcMessageHandler(RelayMessageCode eventCode, Action<CustomRelayEventHeader, NetDataReader> handler)
-            => throw new NotSupportedException();
-
-        public void AddClientRpcMessageHandler(RelayMessageCode minEventCode, RelayMessageCode maxEventCode, Action<CustomRelayEventHeader, NetDataReader> handler)
-            => throw new NotSupportedException();
-
-        public void RemoveClientRpcMessageHandler(RelayMessageCode eventCode, Action<CustomRelayEventHeader, NetDataReader> handler)
-            => throw new NotSupportedException();
-
-        public void RemoveClientRpcMessageHandler(RelayMessageCode minEventCode, RelayMessageCode maxEventCode, Action<CustomRelayEventHeader, NetDataReader> handler)
-            => throw new NotSupportedException();
-
-        public void AddServerRpcMessageHandler(RelayMessageCode eventCode, Action<ServerEventHeader, NetDataReader> handler)
-            => throw new NotSupportedException();
-
-        public void RemoveServerRpcMessageHandler(RelayMessageCode eventCode, Action<ServerEventHeader, NetDataReader> handler)
-            => throw new NotSupportedException();
+        public void Run(Stage stage, ref Ping networkEvent, EventContext context)
+        {
+            if (stage == Stage.Apply)
+                ran.Add("Apply");
+        }
     }
 
     private sealed class TestContainer : DependencyContainerBase;

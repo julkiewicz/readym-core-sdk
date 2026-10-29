@@ -510,7 +510,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
 
         var first = server.IndexOf("CheckRange(", StringComparison.Ordinal);
         var second = server.IndexOf("CheckArmour(", StringComparison.Ordinal);
-        var guard = server.IndexOf("ctx.Cancellation.IsCancelled", first, StringComparison.Ordinal);
+        var guard = server.IndexOf("ctx.IsCancelled", first, StringComparison.Ordinal);
 
         Assert.True(first >= 0 && second > first, "both validators are dispatched");
         Assert.True(guard > first && guard < second, "the refusal is checked before the second validator runs");
@@ -610,16 +610,6 @@ public class NetworkedEventTests(ITestOutputHelper output)
                 public void Refused(in AuditEvent e, int reason, EventContext ctx) { }
             }
             """);
-
-    /// <summary>The raiser is the machine that called Raise, which the context knows, not a comparison of ids.</summary>
-    [Fact]
-    public void An_apply_may_be_skipped_on_the_machine_that_raised_it()
-    {
-        var client = Generated(RunClient());
-
-        Assert.Contains("if (!ctx.RaisedHere)", client);
-        Assert.Contains("Play(in ", client);
-    }
 
     [Fact]
     public void An_after_constraint_orders_one_mod_behind_another()
@@ -817,8 +807,9 @@ public class NetworkedEventTests(ITestOutputHelper output)
     {
         var common = Generated(RunCommon());
 
-        Assert.Contains("public bool TryRead(global::ReadyM.SDK.Events.NetworkedEventDispatchCore world,", common);
-        Assert.Contains("world, reader, out var m0, \"HitEvent\", \"Attacker\"", common);
+        Assert.Contains("public bool TryRead(global::ReadyM.SDK.Events.INetworkedEventEntityReader entities,", common);
+        Assert.Contains("entities.TryRead<", common);
+        Assert.Contains("(reader, out var m0, \"HitEvent\", \"Attacker\")", common);
     }
 
     // -- what a mod generates -------------------------------------------------------------------------
@@ -877,7 +868,7 @@ public class NetworkedEventTests(ITestOutputHelper output)
     [Fact]
     public void A_rejected_handler_runs_only_where_there_is_a_reason_to_hand_it()
         => Assert.Contains(
-            "if (ctx.Cancellation.Reason is global::Other.Common.HitReject reason0)", Generated(RunServer()));
+            "if (ctx.CancellationReason is global::Other.Common.HitReject reason0)", Generated(RunServer()));
 
     /// <summary>
     /// Both run themselves where the target has a module initializer, and both are listed per assembly so a

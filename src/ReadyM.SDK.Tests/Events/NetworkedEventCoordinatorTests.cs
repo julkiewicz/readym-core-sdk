@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using LiteNetLib.Utils;
+using Microsoft.Extensions.Logging.Abstractions;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.Client;
 using ReadyM.Api.Multiplayer.Protocol;
@@ -9,7 +10,9 @@ using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Attributes;
 using ReadyM.SDK.Entities;
 using ReadyM.SDK.Events;
+using ReadyM.SDK.Server.Entities;
 using ReadyM.SDK.Server.Events;
+using ReadyM.SDK.TestHarness;
 using Xunit;
 
 namespace ReadyM.SDK.Tests.Events;
@@ -46,7 +49,6 @@ public class NetworkedEventCoordinatorTests
         public void Run(Stage stage, ref Blow e, EventContext ctx)
         {
             ran.Add($"{name}:{stage}:{e.Damage}");
-            ctx.Cancellation.SetCurrentMod(name);
 
             if (stage == Stage.Filter)
                 e.Damage += Adds;
@@ -90,7 +92,7 @@ public class NetworkedEventCoordinatorTests
 
         public PlayerId Target(in Blow e) => PlayerId.Invalid;
 
-        public bool TryRead(NetworkedEventDispatchCore world, NetDataReader reader, out Blow e)
+        public bool TryRead(INetworkedEventEntityReader entities, NetDataReader reader, out Blow e)
         {
             e = new Blow { Damage = reader.GetInt() };
 
@@ -102,77 +104,63 @@ public class NetworkedEventCoordinatorTests
         public object? ReadReason(NetDataReader reader) => reader.GetInt();
     }
 
-    private sealed class Relay : IRpcClient
-    {
-        private readonly Dictionary<RelayMessageCode, Action<ServerEventHeader, NetDataReader>> _server = new();
+    private readonly FakeRelay _world = new();
 
-        public PlayerId? PlayerId { get; set; } = Me;
+    private readonly FakeRpcRelay _rpc = new();
 
-        public void Deliver(NetDataWriter body)
-        {
-            if (_server.TryGetValue(Wire, out var handler))
-                handler(new ServerEventHeader(Wire, default), new NetDataReader(body.Data, 0, body.Length));
-        }
+    private INetworkedEventEntityReader Reader()
+        => new NetworkedEventEntityReader(new RpcEntities(_world.CreateEntityApi(), NullLogger.Instance));
 
-        public void AddServerRpcMessageHandler(RelayMessageCode code, Action<ServerEventHeader, NetDataReader> h)
-            => _server[code] = h;
-
-        public void RemoveServerRpcMessageHandler(RelayMessageCode code, Action<ServerEventHeader, NetDataReader> h)
-            => _server.Remove(code);
-
-        public void AddClientRpcMessageHandler(RelayMessageCode code, Action<CustomRelayEventHeader, NetDataReader> h)
-            => throw new NotSupportedException();
-
-        public void AddClientRpcMessageHandler(
-            RelayMessageCode min, RelayMessageCode max, Action<CustomRelayEventHeader, NetDataReader> h)
-            => throw new NotSupportedException();
-
-        public void RemoveClientRpcMessageHandler(
-            RelayMessageCode code, Action<CustomRelayEventHeader, NetDataReader> h)
-            => throw new NotSupportedException();
-
-        public void RemoveClientRpcMessageHandler(
-            RelayMessageCode min, RelayMessageCode max, Action<CustomRelayEventHeader, NetDataReader> h)
-            => throw new NotSupportedException();
-
-        public void SendMessage(RelayMessage message)
-        {
-        }
-    }
-
+    /// <summary>A server-scoped event, so nothing is sent but refusals.</summary>
     private ServerNetworkedEventCoordinator<Blow> OnServer(Policy policy, params Handlers[] mods)
-        => new(new Contract(EventScope.Global, policy), mods);
+    {
+        var api = _world.CreateEntityApi();
+        var rpc = _rpc.CreateRpcApi();
+        var scopes = new ServerNetworkedEventScopes(api);
+
+        return new ServerNetworkedEventCoordinator<Blow>(
+            new Contract(EventScope.Server, policy),
+            mods,
+            rpc,
+            Reader(),
+            new ServerNetworkedEventPolicy(scopes),
+            scopes,
+            new ServerNetworkedEventSender(rpc, new ServerEntities(api), new FakePlayers()));
+    }
 
     private ServerNetworkedEventCoordinator<Blow> OnServer(params Handlers[] mods) => OnServer(Policy.Anyone, mods);
 
-    private static (ClientNetworkedEventCoordinator<Blow> Coordinator, Relay Relay) OnClient(params Handlers[] mods)
+    private (ClientNetworkedEventCoordinator<Blow> Coordinator, FakeRpcClient Relay) OnClient(
+        NetworkedEventPredictions predictions, params Handlers[] mods)
     {
-        var relay = new Relay();
-        var coordinator = new ClientNetworkedEventCoordinator<Blow>(new Contract(EventScope.Global, Policy.Anyone), mods)
-        {
-            Relay = relay,
-        };
+        var relay = new FakeRpcClient();
+        var coordinator = new ClientNetworkedEventCoordinator<Blow>(
+            new Contract(EventScope.Global, Policy.Anyone), mods, relay, Reader(), predictions);
 
         coordinator.OnScopeStart();
 
         return (coordinator, relay);
     }
 
-    /// <summary>What the server fans out: the frame, then the event.</summary>
+    private (ClientNetworkedEventCoordinator<Blow> Coordinator, FakeRpcClient Relay) OnClient(params Handlers[] mods)
+        => OnClient(new NetworkedEventPredictions(), mods);
+
+    /// <summary>What the server sends: the header, then the event.</summary>
     private static NetDataWriter Arriving(bool refused, PlayerId origin, int damage, params object[] refusal)
     {
-        var payload = new NetDataWriter();
-        payload.Put(damage);
+        var message = new NetDataWriter();
+        new NetworkedEventHeader(refused, origin).Write(message);
+        message.Put(damage);
 
         foreach (var part in refusal)
         {
             if (part is string mod)
-                payload.Put(mod);
+                message.Put(mod);
             else
-                payload.Put((int)part);
+                message.Put((int)part);
         }
 
-        return NetworkedEventFrame.Write(refused, origin, payload);
+        return message;
     }
 
     // -- only the two stages before the effect may refuse ----------------------------------------------
@@ -188,7 +176,7 @@ public class NetworkedEventCoordinatorTests
     {
         var late = new Handlers("Late", _ran) { Refuses = (stage, null) };
 
-        var thrown = Assert.Throws<InvalidOperationException>(() => OnServer(late).Raise(default, PlayerId.Server, true));
+        var thrown = Assert.Throws<InvalidOperationException>(() => OnServer(late).Raise(default, PlayerId.Server));
 
         Assert.Contains($"Stage.{stage}", thrown.Message);
         Assert.Contains("Validate", thrown.Message);
@@ -202,7 +190,7 @@ public class NetworkedEventCoordinatorTests
         var late = new Handlers("Late", _ran) { Refuses = (Stage.Rejected, null) };
 
         var thrown = Assert.Throws<InvalidOperationException>(
-            () => OnServer(refuser, late).Raise(default, PlayerId.Server, true));
+            () => OnServer(refuser, late).Raise(default, PlayerId.Server));
 
         Assert.Contains("Stage.Rejected", thrown.Message);
     }
@@ -213,7 +201,7 @@ public class NetworkedEventCoordinatorTests
     {
         var refuser = new Handlers("Refuser", _ran) { Refuses = (Stage.Filter, null) };
 
-        OnServer(refuser).Raise(default, PlayerId.Server, true);
+        OnServer(refuser).Raise(default, PlayerId.Server);
 
         Assert.DoesNotContain("Refuser:Apply:0", _ran);
     }
@@ -227,7 +215,7 @@ public class NetworkedEventCoordinatorTests
     [Fact]
     public void A_stage_runs_across_every_mod_before_the_next_stage_starts()
     {
-        OnServer(new Handlers("A", _ran), new Handlers("B", _ran)).Raise(default, PlayerId.Server, true);
+        OnServer(new Handlers("A", _ran), new Handlers("B", _ran)).Raise(default, PlayerId.Server);
 
         Assert.Equal(
             [
@@ -245,7 +233,7 @@ public class NetworkedEventCoordinatorTests
     {
         var (_, relay) = OnClient(new Handlers("A", _ran), new Handlers("B", _ran));
 
-        relay.Deliver(Arriving(false, Somebody, 3));
+        relay.Deliver(Wire, Arriving(false, Somebody, 3));
 
         Assert.Equal(["A:Apply:3", "B:Apply:3", "A:Observe:3", "B:Observe:3"], _ran);
     }
@@ -255,7 +243,7 @@ public class NetworkedEventCoordinatorTests
     public void What_one_mods_filter_rewrote_is_what_the_next_mod_applies()
     {
         OnServer(new Handlers("A", _ran) { Adds = 5 }, new Handlers("B", _ran) { Adds = 2 })
-            .Raise(default, PlayerId.Server, true);
+            .Raise(default, PlayerId.Server);
 
         Assert.Equal(["A:Apply:7", "B:Apply:7"], _ran.Where(step => step.Contains(":Apply:")));
     }
@@ -272,7 +260,7 @@ public class NetworkedEventCoordinatorTests
         OnServer(
                 new Handlers("Owner", _ran),
                 new Handlers("Rules", _ran) { Refuses = (Stage.Validate, 9) })
-            .Raise(default, PlayerId.Server, true);
+            .Raise(default, PlayerId.Server);
 
         Assert.Equal(["Owner:Validate:0", "Rules:Validate:0", "Owner:Rejected:0", "Rules:Rejected:0"], _ran);
     }
@@ -282,7 +270,7 @@ public class NetworkedEventCoordinatorTests
     public void A_refusal_reaches_every_mods_rejected_handlers()
     {
         OnServer(new Handlers("A", _ran) { Refuses = (Stage.Validate, 1) }, new Handlers("B", _ran))
-            .Raise(default, PlayerId.Server, true);
+            .Raise(default, PlayerId.Server);
 
         Assert.Equal(["A:Validate:0", "A:Rejected:0", "B:Rejected:0"], _ran);
     }
@@ -291,7 +279,7 @@ public class NetworkedEventCoordinatorTests
     public void A_refusal_in_filter_still_stops_apply()
     {
         OnServer(new Handlers("A", _ran) { Refuses = (Stage.Filter, 1) }, new Handlers("B", _ran))
-            .Raise(default, PlayerId.Server, true);
+            .Raise(default, PlayerId.Server);
 
         Assert.DoesNotContain(_ran, step => step.Contains(":Apply:"));
         Assert.Contains("B:Validate:0", _ran);
@@ -304,7 +292,7 @@ public class NetworkedEventCoordinatorTests
         var mods = new[] { new Handlers("A", _ran), new Handlers("B", _ran) };
         var (_, relay) = OnClient(mods);
 
-        relay.Deliver(Arriving(true, Me, 4, "AntiCheat", 7));
+        relay.Deliver(Wire, Arriving(true, Me, 4, "AntiCheat", 7));
 
         Assert.Equal(["A:Rejected:4", "B:Rejected:4"], _ran);
     }
@@ -319,7 +307,7 @@ public class NetworkedEventCoordinatorTests
     public void A_client_that_may_not_raise_it_gets_no_stage_but_rejected()
     {
         OnServer(Policy.ServerAuthoritative, new Handlers("A", _ran), new Handlers("B", _ran))
-            .Dispatch(default, Somebody, raisedHere: false, vouched: false);
+            .Dispatch(default, Somebody, checkPolicy: true);
 
         Assert.Equal(["A:Rejected:0", "B:Rejected:0"], _ran);
     }
@@ -328,7 +316,7 @@ public class NetworkedEventCoordinatorTests
     [Fact]
     public void The_server_raising_as_a_player_is_not_asked_the_policy()
     {
-        OnServer(Policy.ServerAuthoritative, new Handlers("A", _ran)).Raise(default, Somebody, true);
+        OnServer(Policy.ServerAuthoritative, new Handlers("A", _ran)).Raise(default, Somebody);
 
         Assert.Contains("A:Apply:0", _ran);
     }
@@ -338,7 +326,7 @@ public class NetworkedEventCoordinatorTests
     [Fact]
     public void A_mod_that_names_another_runs_behind_it_whatever_its_name_sorts_as()
     {
-        OnServer(new Handlers("Second", _ran, "First"), new Handlers("First", _ran)).Raise(default, PlayerId.Server, true);
+        OnServer(new Handlers("Second", _ran, "First"), new Handlers("First", _ran)).Raise(default, PlayerId.Server);
 
         Assert.Equal(["First:Apply:0", "Second:Apply:0"], _ran.Where(step => step.Contains(":Apply:")));
     }
@@ -351,7 +339,7 @@ public class NetworkedEventCoordinatorTests
     [Fact]
     public void Mods_that_name_nobody_run_in_name_order()
     {
-        OnServer(new Handlers("Z", _ran), new Handlers("A", _ran)).Raise(default, PlayerId.Server, true);
+        OnServer(new Handlers("Z", _ran), new Handlers("A", _ran)).Raise(default, PlayerId.Server);
 
         Assert.Equal(["A:Apply:0", "Z:Apply:0"], _ran.Where(step => step.Contains(":Apply:")));
     }
@@ -362,7 +350,7 @@ public class NetworkedEventCoordinatorTests
     {
         var (_, relay) = OnClient(new Handlers("Second", _ran, "First"), new Handlers("First", _ran));
 
-        relay.Deliver(Arriving(false, Somebody, 1));
+        relay.Deliver(Wire, Arriving(false, Somebody, 1));
 
         Assert.Equal(["First:Apply:1", "Second:Apply:1"], _ran.Where(step => step.Contains(":Apply:")));
     }
@@ -378,19 +366,34 @@ public class NetworkedEventCoordinatorTests
     public void A_client_with_no_handlers_still_takes_its_guess_back_on_a_refusal()
     {
         var predictions = new NetworkedEventPredictions();
-        var relay = new Relay();
-        var coordinator = new ClientNetworkedEventCoordinator<Blow>(new Contract(EventScope.Global, Policy.Anyone), [])
-        {
-            Relay = relay,
-            Predictions = predictions,
-        };
+        var (_, relay) = OnClient(predictions);
 
-        coordinator.OnScopeStart();
         predictions.Open(Wire, 0).Predicting(() => _ran.Add("guess")).Rollback(() => _ran.Add("undo"));
 
-        relay.Deliver(Arriving(true, Me, 1, "Someone", 0));
+        relay.Deliver(Wire, Arriving(true, Me, 1, "Someone", 0));
 
         Assert.Equal(["guess", "undo"], _ran);
+    }
+
+    /// <summary>The server's refusal goes back to the player whose event it was, and to nobody else.</summary>
+    [Fact]
+    public void A_refusal_is_sent_to_the_origin()
+    {
+        OnServer(Policy.ServerAuthoritative, new Handlers("A", _ran)).Dispatch(default, Somebody, checkPolicy: true);
+
+        Assert.Equal([Somebody], _rpc.Sent.Select(sent => sent.Player));
+    }
+
+    [Fact]
+    public void A_disposed_client_coordinator_stops_listening()
+    {
+        var (coordinator, relay) = OnClient(new Handlers("A", _ran));
+
+        Assert.Equal(1, relay.Subscriptions);
+
+        coordinator.Dispose();
+
+        Assert.Equal(0, relay.Subscriptions);
     }
 
     [Fact]
@@ -398,7 +401,7 @@ public class NetworkedEventCoordinatorTests
     {
         var coordinator = OnServer();
 
-        coordinator.Raise(default, PlayerId.Server, true);
+        coordinator.Raise(default, PlayerId.Server);
 
         Assert.Empty(_ran);
     }

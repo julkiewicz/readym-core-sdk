@@ -1,54 +1,61 @@
 using LiteNetLib.Utils;
+using ReadyM.Api.DI;
+using ReadyM.Api.Idents;
+using ReadyM.Api.Multiplayer.Client;
 using ReadyM.Api.Multiplayer.Protocol;
-using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.SDK.Attributes;
 
 namespace ReadyM.SDK.Events;
 
-/// <summary>
-/// A client's half of a networked event.
-/// Listens for the code, and runs every mod's Apply, and then Observe or Rejected.
-/// </summary>
+/// <summary>Receives one event from the server and runs every mod's Apply and Observe, or their Rejected.</summary>
 internal sealed class ClientNetworkedEventCoordinator<T>(
     INetworkedEventContract<T> contract,
-    IEnumerable<INetworkedEventHandlers<T>> eventHandlers
-) : NetworkedEventDispatchBase
+    IEnumerable<INetworkedEventHandlers<T>> handlers,
+    IRpcClient relay,
+    INetworkedEventEntityReader entities,
+    NetworkedEventPredictions predictions)
+    : NetworkedEventCoordinatorBase<T>(handlers), IHostedService
     where T : struct, INetworkedEvent
 {
-    private readonly IReadOnlyList<INetworkedEventHandlers<T>> _eventHandlers 
-        = NetworkedEventStages.InOrder(eventHandlers);
+    // Kept, because the relay removes a handler by delegate identity
+    private Action<ServerEventHeader, NetDataReader>? _onMessageReceived;
 
-    protected override RelayMessageCode Code() => contract.Code;
-
-    protected override void Listen() => Hear(Code(), Arrived);
-
-    private void Arrived(ServerEventHeader header, NetDataReader reader)
+    public void OnScopeStart()
     {
-        if (!NetworkedEventFrame.TryRead(reader, out var frame) || !contract.TryRead(this, reader, out var e))
+        _onMessageReceived = OnMessageReceived;
+        relay.AddServerRpcMessageHandler(contract.Code, _onMessageReceived);
+    }
+
+    public void Dispose()
+    {
+        if (_onMessageReceived is { } handler)
+            relay.RemoveServerRpcMessageHandler(contract.Code, handler);
+
+        _onMessageReceived = null;
+    }
+
+    private void OnMessageReceived(ServerEventHeader header, NetDataReader reader)
+    {
+        if (!NetworkedEventHeader.TryRead(reader, out var eventHeader)
+            || !contract.TryRead(entities, reader, out var networkEvent))
             return;
 
-        if (frame.Refused)
+        if (eventHeader.Refused)
         {
-            Refused(ref e, reader, frame);
+            OnRefusalReceived(ref networkEvent, reader, eventHeader.Origin);
             return;
         }
 
-        var context = new EventContext(frame.Origin, new EventCancellation());
-
-        NetworkedEventStages.Run(_eventHandlers, Stage.Apply, ref e, context);
-        NetworkedEventStages.Run(_eventHandlers, Stage.Observe, ref e, context);
+        var context = new EventContext(eventHeader.Origin, new EventCancellation());
+        RunStage(Stage.Apply, ref networkEvent, context);
+        RunStage(Stage.Observe, ref networkEvent, context);
     }
 
-    private void Refused(ref T networkEvent, NetDataReader reader, NetworkedEventHeader frame)
+    private void OnRefusalReceived(ref T networkEvent, NetDataReader reader, PlayerId origin)
     {
-        PredictionFailed();
+        predictions.Refused(contract.Code);
 
-        var cancellation = new EventCancellation();
-        cancellation.SetCurrentMod(reader.GetString());
-        cancellation.Cancel(contract.ReadReason(reader));
-
-        var context = new EventContext(frame.Origin, cancellation);
-
-        NetworkedEventStages.Run(_eventHandlers, Stage.Rejected, ref networkEvent, context);
+        var cancellation = EventCancellation.Cancelled(reader.GetString(), contract.ReadReason(reader));
+        RunStage(Stage.Rejected, ref networkEvent, new EventContext(origin, cancellation));
     }
 }

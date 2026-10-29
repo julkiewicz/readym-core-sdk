@@ -22,7 +22,7 @@ public class EventLadderTests
 
         Assert.False(cancellation.IsCancelled);
         Assert.Null(cancellation.Reason);
-        Assert.Equal(string.Empty, cancellation.StoppedBy);
+        Assert.Equal(string.Empty, cancellation.CancelledBy);
     }
 
     [Fact]
@@ -73,7 +73,18 @@ public class EventLadderTests
         cancellation.SetCurrentMod("Other.Censor");
         cancellation.Cancel(Refusal.Untargetable);
 
-        Assert.Equal("Other.Censor", cancellation.StoppedBy);
+        Assert.Equal("Other.Censor", cancellation.CancelledBy);
+    }
+
+    /// <summary>A refusal that arrives from the server, or comes from the policy, is cancelled before any stage.</summary>
+    [Fact]
+    public void A_cancellation_made_cancelled_names_who_cancelled_it()
+    {
+        var cancellation = EventCancellation.Cancelled("policy", Refusal.OutOfRange);
+
+        Assert.True(cancellation.IsCancelled);
+        Assert.Equal("policy", cancellation.CancelledBy);
+        Assert.Equal(Refusal.OutOfRange, cancellation.Reason);
     }
 
     // -- what a handler is told -----------------------------------------------------------------------
@@ -106,14 +117,10 @@ public class EventLadderTests
         cancellation.SetCurrentMod("Other.Censor");
         ctx.Cancel(Refusal.Untargetable);
 
-        Assert.Equal("Other.Censor", ctx.StoppedBy);
+        Assert.Equal("Other.Censor", ctx.CancelledBy);
     }
 
     // -- the audience the server picks ------------------------------------------------------------------
-
-    [Fact]
-    public void A_server_audience_names_nobody_else()
-        => Assert.Equal(EventScope.Server, EventAudience.Server.Kind);
 
     [Fact]
     public void A_global_audience_names_every_player()
