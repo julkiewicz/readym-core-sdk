@@ -177,7 +177,7 @@ internal class ServerRpcHandlerGenerator : IIncrementalGenerator
             {
                 var requestParams = BuildPayloadParams(request);
                 EmitReceiveHandlerStub(sb, eventName, requestParams);
-                EmitDispatchCase(dispatchCases, eventName, codeRef, requestParams);
+                EmitDispatchCase(dispatchCases, className, eventName, codeRef, requestParams);
 
                 if (initCalls.Length > 0) initCalls.AppendLine();
                 initCalls.Append($"        Rpc.AddServerRpcMessageHandler({codeRef} + {manifestFqn}.Offset, OnServerRpcEventHandler);");
@@ -255,13 +255,13 @@ internal class ServerRpcHandlerGenerator : IIncrementalGenerator
     }
 
     private static void EmitDispatchCase(
-        StringBuilder dispatchCases, string eventName, string codeRef, List<PayloadParam> payloadParams)
+        StringBuilder dispatchCases, string className, string eventName, string codeRef, List<PayloadParam> payloadParams)
     {
         dispatchCases.AppendLine($"            case {codeRef}:");
         dispatchCases.AppendLine("            {");
 
         foreach (var p in payloadParams)
-            dispatchCases.AppendLine(DeserializeStatement(p));
+            dispatchCases.AppendLine(DeserializeStatement(p, $"{className}.On{eventName}"));
 
         var contextArg = $"new {RpcContextFqn}(header.Sender)";
         var dispatchArgs = payloadParams.Count > 0
@@ -274,13 +274,25 @@ internal class ServerRpcHandlerGenerator : IIncrementalGenerator
     }
 
     private static string SerializeStatement(PayloadParam p) =>
-        p.IsSerializablePrimitive ? $"        writer.Put({p.Name});"
+        p.IsEntity ? $"        {RpcEntityParams.Codec}.{(p.IsOptional ? "WriteOptional" : "Write")}(writer, {p.Name}, \"{p.Name}\");"
+        : p.IsSerializablePrimitive ? $"        writer.Put({p.Name});"
         : p.IsNetSerializable ? $"        {p.Name}.Serialize(writer);"
         : $"        Serializer.SerializeObject(writer, {p.Name});";
 
-    private static string DeserializeStatement(PayloadParam p)
+    /// <summary>
+    /// Reads one parameter. The server handles a message on the thread the world is updated on, so an entity is looked
+    /// up as it is read, and the handler is skipped when it is not found.
+    /// </summary>
+    private static string DeserializeStatement(PayloadParam p, string handler)
     {
         var typeFqn = p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        if (p.IsEntity)
+        {
+            return $"                if (!{RpcEntityParams.ServerCodec}.{(p.IsOptional ? "TryReadOptional" : "TryRead")}(this, reader, "
+                   + $"out {typeFqn} {p.Name}, \"{handler}\", \"{p.Name}\"))\n"
+                   + "                    break;";
+        }
+
         if (p.IsSerializablePrimitive)
         {
             var getter = SerializationHelper.GetDeserializationMethod(p.Type.SpecialType);
@@ -306,14 +318,23 @@ internal class ServerRpcHandlerGenerator : IIncrementalGenerator
                 p.Type,
                 p.Name,
                 SerializationHelper.IsSerializablePrimitive(p.Type.SpecialType),
-                SerializationHelper.IsINetSerializable(p.Type)))
+                SerializationHelper.IsINetSerializable(p.Type),
+                RpcEntityParams.IsShape(p.Type, out _, out var optional),
+                optional))
             .ToList();
 
-    private sealed class PayloadParam(ITypeSymbol type, string name, bool isSerializablePrimitive, bool isNetSerializable)
+    private sealed class PayloadParam(
+        ITypeSymbol type, string name, bool isSerializablePrimitive, bool isNetSerializable, bool isEntity, bool isOptional)
     {
         public ITypeSymbol Type { get; } = type;
         public string Name { get; } = name;
         public bool IsSerializablePrimitive { get; } = isSerializablePrimitive;
         public bool IsNetSerializable { get; } = isNetSerializable;
+
+        /// <summary>A shape, which travels as its entity's network id.</summary>
+        public bool IsEntity { get; } = isEntity;
+
+        /// <summary>A nullable shape, which may be sent as null.</summary>
+        public bool IsOptional { get; } = isOptional;
     }
 }

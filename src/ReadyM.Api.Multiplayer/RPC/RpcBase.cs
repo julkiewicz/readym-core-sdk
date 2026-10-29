@@ -16,12 +16,20 @@ public abstract class RpcBase : IHostedService
     /// <summary>
     /// RPC client to use for sending RPCs. This is injected by the DI container.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IRpcClient RelayClient { protected get; set; } = null!;
 
     /// <summary>
     /// Serializer to use for serializing RPC parameters. This is injected by the DI container.
     /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public IRelaySerializer Serializer { protected get; set; } = null!;
+
+    /// <summary>
+    /// Where entity parameters are looked up when a message arrives, set by the host. A ReadyM.SDK type this assembly
+    /// cannot name, so it is held as an object.
+    /// </summary>
+    internal object? RpcEntities { get; set; }
 
     internal PendingActionScheduler<CommandBufferSynced> Scheduler { private get; set; } = null!;
 

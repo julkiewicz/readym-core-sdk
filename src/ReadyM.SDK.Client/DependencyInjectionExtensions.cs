@@ -70,6 +70,7 @@ internal static class DependencyInjectionExtensions
 
         container.RegisterSingleton<IEntities, ClientEntities>();
         container.RegisterSingleton<IEntityApi, ClientEntityApi>();
+        container.RegisterSingleton<RpcEntities>();
 #if NET
         container.RegisterSingleton<IChunkSource, ClientChunkSource>();
 #endif
