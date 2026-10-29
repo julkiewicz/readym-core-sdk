@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ReadyM.Api.DI;
 using ReadyM.SDK.Client;
 using ReadyM.SDK.Client.Systems;
+using ReadyM.SDK.Events;
 using ReadyM.SDK.Services;
 
 namespace ReadyM.SDK.Tests.Client;
@@ -71,6 +72,9 @@ public class ModDeclarationOrderTests
         container.Init();
         container.RegisterSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         container.RegisterSingleton<ILogger>(NullLogger.Instance);
+
+        // What RegisterReadyMSdk gives a host's container, and the declarations need
+        container.RegisterSingleton<NetworkedEventRegistry>();
 
         return container;
     }

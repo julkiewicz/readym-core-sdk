@@ -85,7 +85,7 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
 
         context.AddSource("NetworkedEventHandlers.g.cs", sb.ToString());
 
-        EmitRegistrations(context, input.Compilation, mod, byEvent, onServer);
+        EmitDeclarations(context, mod, byEvent, onServer);
     }
 
     /// <summary>What a handler may not say. Each is a hard error rather than a handler that never fires.</summary>
@@ -189,17 +189,9 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>
-    /// Puts this mod's handler sets where the events' coordinators pick them up. A mod names its events and
-    /// its handlers and nothing else, so this runs itself: a module initializer runs it where the target has
-    /// one, and the mod loader runs it for every assembly it loads, so it has to be safe to say twice.
-    /// </summary>
-    private static void EmitRegistrations(
-        SourceProductionContext context,
-        Compilation compilation,
-        string mod,
-        List<IGrouping<ISymbol?, Handler>> byEvent,
-        bool onServer)
+    /// <summary>Declares this mod's handler sets. The SDK calls it, with its registry.</summary>
+    private static void EmitDeclarations(
+        SourceProductionContext context, string mod, List<IGrouping<ISymbol?, Handler>> byEvent, bool onServer)
     {
         var side = onServer ? "Server" : "Client";
 
@@ -209,23 +201,12 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
         sb.AppendLine("namespace ReadyM.SDK.Generated;");
         sb.AppendLine();
         sb.AppendLine("/// <exclude/>");
-        sb.AppendLine("/// <summary>Where this mod's network event handlers are registered with the SDK.</summary>");
+        sb.AppendLine("/// <summary>Declares this mod's networked event handlers.</summary>");
         sb.AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
-        sb.AppendLine("public static class NetworkedEventHandlerRegistrations");
+        sb.AppendLine("public static class NetworkedEventHandlerDeclarations");
         sb.AppendLine("{");
-        sb.AppendLine("    private static bool _registered;");
-        sb.AppendLine();
-
-        if (Archetypes.ExtendsEmitter.HasModuleInitializer(compilation))
-            sb.AppendLine("    [global::System.Runtime.CompilerServices.ModuleInitializer]");
-
-        sb.AppendLine("    public static void RegisterAll()");
+        sb.AppendLine($"    public static void DeclareAll({Events}.INetworkedEventRegistry registry)");
         sb.AppendLine("    {");
-        sb.AppendLine("        if (_registered)");
-        sb.AppendLine("            return;");
-        sb.AppendLine();
-        sb.AppendLine("        _registered = true;");
-        sb.AppendLine();
 
         foreach (var group in byEvent)
         {
@@ -233,14 +214,14 @@ internal class NetworkedEventHandlerGenerator : IIncrementalGenerator
             var type = declared.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var handlers = $"global::{mod}.Generated.{declared.Name}Handlers";
 
-            sb.AppendLine($"        {Events}.NetworkedEventRegistry.Handle<{handlers}, {type}>(");
+            sb.AppendLine($"        registry.AddHandlers<{handlers}, {type}>(");
             sb.AppendLine($"            global::ReadyM.Api.Multiplayer.RPC.RpcSide.{side});");
         }
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
-        context.AddSource("NetworkedEventHandlerRegistrations.g.cs", sb.ToString());
+        context.AddSource("NetworkedEventHandlerDeclarations.g.cs", sb.ToString());
     }
 
     private static string Arguments(Handler handler, int index)

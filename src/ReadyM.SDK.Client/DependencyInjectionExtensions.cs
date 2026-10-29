@@ -63,7 +63,10 @@ internal static class DependencyInjectionExtensions
     {
         ServiceRegistry.RegisterAll(container);
         RpcHandlerRegistry.RegisterAll(container, RpcSide.Client);
-        NetworkedEventRegistry.RegisterAll(container, RpcSide.Client, new Events.ClientNetworkedEventCoordinatorRegistration());
+
+        var networkedEvents = container.Resolve<NetworkedEventRegistry>();
+        networkedEvents.DeclareGenerated(AppDomain.CurrentDomain.GetAssemblies());
+        networkedEvents.RegisterAll(container, RpcSide.Client, new Events.ClientNetworkedEventCoordinatorRegistration());
     }
 
     public static void RegisterReadyMSdk(this IDependencyContainer container)
@@ -73,6 +76,7 @@ internal static class DependencyInjectionExtensions
         container.RegisterSingleton<IEntities, ClientEntities>();
         container.RegisterSingleton<IEntityApi, ClientEntityApi>();
         container.RegisterSingleton<RpcEntities>();
+        container.RegisterSingleton<NetworkedEventRegistry>();
         container.RegisterSingleton<INetworkedEventEntityReader, NetworkedEventEntityReader>();
         container.RegisterSingleton<NetworkedEventPredictions>();
         container.RegisterSingleton<INetworkedEvents, Events.ClientNetworkedEvents>();

@@ -870,20 +870,21 @@ public class NetworkedEventTests(ITestOutputHelper output)
         => Assert.Contains(
             "if (ctx.CancellationReason is global::Other.Common.HitReject reason0)", Generated(RunServer()));
 
-    /// <summary>
-    /// Both run themselves where the target has a module initializer, and both are listed per assembly so a
-    /// netstandard2.0 target, which has none, can be run by the mod loader instead.
-    /// </summary>
+    /// <summary>Both declare into the registry the SDK hands them, and run only when it calls them.</summary>
     [Fact]
-    public void An_assembly_lists_what_it_declared_so_a_host_can_run_it()
+    public void An_assembly_declares_its_events_and_handlers_into_the_registry_it_is_given()
     {
-        Assert.Contains(
-            "global::ReadyM.SDK.Events.NetworkedEventRegistry.Declare<global::Other.Common.HitEvent>("
-            + "new global::Other.Common.HitEventContract());",
-            Generated(RunCommon()));
+        var common = Generated(RunCommon());
+        var server = Generated(RunServer());
 
-        Assert.Contains("public static void RegisterAll()", Generated(RunServer()));
-        Assert.Contains("global::ReadyM.SDK.Events.NetworkedEventRegistry.Handle<", Generated(RunServer()));
+        Assert.Contains(
+            "public static void DeclareAll(global::ReadyM.SDK.Events.INetworkedEventRegistry registry)", common);
+        Assert.Contains(
+            "registry.Declare<global::Other.Common.HitEvent>(new global::Other.Common.HitEventContract());", common);
+        Assert.Contains(
+            "public static void DeclareAll(global::ReadyM.SDK.Events.INetworkedEventRegistry registry)", server);
+        Assert.Contains("registry.AddHandlers<", server);
+        Assert.DoesNotContain("ModuleInitializer", common.Substring(common.IndexOf("NetworkedEventDeclarations")));
     }
 
     [Fact]

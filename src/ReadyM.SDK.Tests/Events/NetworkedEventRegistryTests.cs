@@ -27,6 +27,8 @@ public class NetworkedEventRegistryTests
 {
     private readonly List<string> _ran = [];
 
+    private readonly NetworkedEventRegistry _registry = new(NullLogger.Instance);
+
     private struct Knock : INetworkedEvent
     {
         public RelayMessageCode Code => RelayMessageCode.MinServerRpcEvent;
@@ -109,7 +111,8 @@ public class NetworkedEventRegistryTests
 
     private sealed class Container : DependencyContainerBase;
 
-    private Container Registered(RpcSide side, INetworkedEventCoordinatorRegistration registration)
+    private Container Registered(
+        RpcSide side, INetworkedEventCoordinatorRegistration registration, int declarations = 1)
     {
         var container = new Container();
 
@@ -130,10 +133,14 @@ public class NetworkedEventRegistryTests
         container.RegisterSingleton<ServerNetworkedEventPolicy>();
         container.RegisterSingleton(new ServerNetworkedEventSender(rpc, new ServerEntities(api), new FakePlayers()));
 
-        NetworkedEventRegistry.Declare<Knock>(new Contract());
-        NetworkedEventRegistry.Handle<Owner, Knock>(RpcSide.Server);
-        NetworkedEventRegistry.Handle<Rules, Knock>(RpcSide.Server);
-        NetworkedEventRegistry.RegisterAll(container, side, registration);
+        for (var i = 0; i < declarations; i++)
+        {
+            _registry.Declare<Knock>(new Contract());
+            _registry.AddHandlers<Owner, Knock>(RpcSide.Server);
+            _registry.AddHandlers<Rules, Knock>(RpcSide.Server);
+        }
+
+        _registry.RegisterAll(container, side, registration);
 
         return container;
     }
@@ -174,16 +181,13 @@ public class NetworkedEventRegistryTests
         Assert.NotNull(container.Resolve<ServerNetworkedEventCoordinator<Knock>>());
     }
 
-    /// <summary>
-    /// A module initializer runs the declarations where the target has one, the mod loader runs them for every
-    /// assembly it loads, and a host may say it again once the last mod is in.
-    /// </summary>
+    /// <summary>An assembly loaded into two contexts declares its events twice.</summary>
     [Fact]
-    public void Registering_everything_twice_still_raises_each_handler_once()
+    public void Declaring_everything_twice_still_raises_each_handler_once()
     {
-        using var container = OnServer();
+        using var container = Registered(
+            RpcSide.Server, new ServerNetworkedEventCoordinatorRegistration(), declarations: 2);
 
-        NetworkedEventRegistry.RegisterAll(container, RpcSide.Server, new ServerNetworkedEventCoordinatorRegistration());
         container.Resolve<ServerNetworkedEventCoordinator<Knock>>().Raise(default, PlayerId.Server);
 
         Assert.Equal(["Owner", "Rules"], _ran);
