@@ -166,7 +166,7 @@ public class ServerDeferredDeleteTests : ServerSdkTest
     {
         var npc = Spawn<Npc>();
 
-        Assert.True(EntityHandle.Of(npc).TryAs<Position>(out var position));
+        Assert.True(npc.TryAs<Position>(out var position));
         Assert.True(Entities.Delete(position));
         Assert.Equal(0, CountIdentities(Entities.Query<Npc>()));
     }

@@ -107,6 +107,16 @@ internal static class SourceGeneratorTestHelper
             out var compilationDiagnostics);
 
         var runResult = driver.GetRunResult();
+
+        // A generator that throws contributes nothing, and the compiler reports that as a warning (CS8785) a test
+        // looking for errors never sees. Every event in the assembly then silently loses its generated code.
+        foreach (var generated in runResult.Results)
+        {
+            if (generated.Exception is { } thrown)
+                throw new InvalidOperationException(
+                    $"{generated.Generator.GetGeneratorType().Name} threw instead of reporting a diagnostic.", thrown);
+        }
+
         var result = new GeneratorRunResult(compilationDiagnostics, inputCompilation, outputCompilation, runResult);
 
         WriteGeneratedFiles(output, result);

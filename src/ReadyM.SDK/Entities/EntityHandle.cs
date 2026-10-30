@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using Friflo.Engine.ECS;
 using ReadyM.Api.Mapping.Data;
+using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Exceptions;
 using IComponent = Friflo.Engine.ECS.IComponent;
@@ -84,6 +85,12 @@ public readonly struct EntityHandle : IEquatable<EntityHandle>
         component = located.As<T>();
         return true;
     }
+
+    /// <summary>Writes a guess at a predictable value, inside a <c>.Predicting()</c> callback.</summary>
+    /// <param name="member">The predictable member, as an exception names it.</param>
+    public void Predict<TComponent, TValue>(Field<TComponent, TValue> field, TValue value, string member)
+        where TComponent : struct, INetworkedComponent
+        => _api!.Predict(_rawEntity, field, value, member);
 
     /// <summary>Writes a value of a field, as the game reporting it or as an override of it.</summary>
     /// <returns><c>false</c> when the write does not belong on this side.</returns>

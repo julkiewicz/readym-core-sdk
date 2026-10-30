@@ -48,6 +48,22 @@ internal static class HandleEmitter
         writer.Line("/// changes when an include does.");
         writer.Line("/// </remarks>");
         writer.Line($"public {model.Name} Keep() => this;");
+        writer.Line();
+        Casts(writer);
+    }
+
+    /// <summary>
+    /// What else this entity is. On a mixin as well as an archetype, so a mod holding either never reaches
+    /// for the handle underneath to ask.
+    /// </summary>
+    private static void Casts(SourceWriter writer)
+    {
+        writer.Line($"public bool Is<T>() where T : struct, {ArchetypeNames.Queryable} => _handle.Is<T>();");
+        writer.Line();
+        writer.Line($"public T As<T>() where T : struct, {ArchetypeNames.Queryable} => _handle.As<T>();");
+        writer.Line();
+        writer.Line($"public bool TryAs<T>(out T archetype) where T : struct, {ArchetypeNames.Queryable}");
+        writer.Line("    => _handle.TryAs(out archetype);");
     }
 
     /// <summary>The set an accessor class exposes: its own component plus whatever it includes.</summary>
@@ -125,6 +141,8 @@ internal static class HandleEmitter
         if (!writable)
         {
             writer.Line($"{declaration} => {accessors}.Get{accessor.Name}(_handle);");
+            Prediction(writer, accessor, accessors, name);
+
             return;
         }
 
@@ -133,6 +151,23 @@ internal static class HandleEmitter
             writer.Line($"get => {accessors}.Get{accessor.Name}(_handle);");
             writer.Line($"set => {accessors}.Set{accessor.Name}(_handle, value);");
         }
+
+        Prediction(writer, accessor, accessors, name);
+    }
+
+    /// <summary>
+    /// The guess at a predictable value. A method rather than a setter, because a guess is not a write and
+    /// nothing reading the code could otherwise tell which of the two a line meant.
+    /// </summary>
+    private static void Prediction(SourceWriter writer, AccessorModel accessor, string accessors, string? name)
+    {
+        if (!accessor.IsPredictable)
+            return;
+
+        writer.Line();
+        writer.Line("/// <summary>Guesses at the value, inside the callback handed to <c>.Predicting()</c>.</summary>");
+        writer.Line($"public void Predict{name ?? accessor.Name}({accessor.Type} value)");
+        writer.Line($"    => {accessors}.Predict{accessor.Name}(_handle, value);");
     }
 
     public static void Accessors(

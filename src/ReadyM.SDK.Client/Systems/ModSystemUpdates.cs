@@ -1,5 +1,6 @@
 ﻿using Friflo.Engine.ECS.Systems;
 using ReadyM.Api.DI;
+using ReadyM.SDK.Events;
 using ReadyM.SDK.Services;
 
 namespace ReadyM.SDK.Client.Systems;
@@ -12,6 +13,10 @@ internal sealed class ModSystemUpdates : BaseSystem
     private IReadOnlyList<IUpdatingService>? _updating;
 
     private ulong _count;
+
+    private List<Events.ClientNetworkedEvents>? _events;
+
+    private List<PredictedRaiseRegistry>? _predictedRaises;
 
     public ModSystemUpdates(IDependencyContainer services)
     {
@@ -36,6 +41,17 @@ internal sealed class ModSystemUpdates : BaseSystem
         _updating ??= ServiceRegistry.Resolve(_services);
 
         var moment = new UpdateTime(Tick.deltaTime, Tick.time, _count++);
+
+        // Before the mods, so a prediction that timed out is rolled back before any of them reads anything.
+        // Asked for as a set, because a host that wired no event raising has none.
+        _predictedRaises ??= _services.ResolveAll<PredictedRaiseRegistry>().ToList();
+        _events ??= _services.ResolveAll<INetworkedEvents>().OfType<Events.ClientNetworkedEvents>().ToList();
+
+        foreach (var events in _events)
+            events.Now = Tick.time;
+
+        foreach (var predictedRaises in _predictedRaises)
+            predictedRaises.RollBackExpired(Tick.time);
 
         foreach (var service in _updating)
             service.Update(in moment);

@@ -18,4 +18,10 @@ public interface IPlayers
     /// restarts. <see cref="PlayerId"/> does none of that, so key anything you persist on this instead.
     /// </summary>
     Guid? GetReadyMId(PlayerId player);
+
+    /// <summary>The players in an area.</summary>
+    List<PlayerId> InArea(AreaId area);
+
+    /// <summary>The players who have a cell active.</summary>
+    List<PlayerId> InCell(FullCellId cell);
 }

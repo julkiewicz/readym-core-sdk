@@ -1,4 +1,5 @@
 using ReadyM.SDK.Entities;
+using ReadyM.SDK.Exceptions;
 using ReadyM.SDK.Tests.Client.Fixtures;
 
 namespace ReadyM.SDK.Tests.Client;
@@ -75,7 +76,7 @@ public class ArchetypeTests : ClientSdkTest
 
         Assert.False(chest.Is<LootedChest>());
         Assert.False(chest.TryAs<LootedChest>(out _));
-        Assert.False(EntityHandle.Of(chest).TryAs<Loot>(out _));
+        Assert.False(chest.TryAs<Loot>(out _));
     }
 
     [Fact]
@@ -86,10 +87,34 @@ public class ArchetypeTests : ClientSdkTest
         looted.Rarity = 4;
 
         Assert.Equal(4, looted.Rarity);
-        Assert.True(EntityHandle.Of(looted).TryAs<Loot>(out var loot));
+        Assert.True(looted.TryAs<Loot>(out var loot));
 
         loot.Rarity = 9;
         Assert.Equal(9, looted.Rarity);
+    }
+
+    /// <summary>A mixin asks what else its entity is the way an archetype does, with no handle in sight.</summary>
+    [Fact]
+    public void A_mixin_reaches_the_other_shapes_of_its_entity()
+    {
+        var looted = Entities.Create<LootedChest>();
+        looted.Rarity = 4;
+
+        var loot = looted.As<Loot>();
+
+        Assert.True(loot.Is<Chest>());
+        Assert.True(loot.TryAs<Health>(out _));
+        Assert.Equal(4, loot.As<LootedChest>().Rarity);
+    }
+
+    [Fact]
+    public void A_mixin_does_not_reach_a_shape_its_entity_is_not()
+    {
+        var health = SpawnChest().As<Health>();
+
+        Assert.False(health.Is<Loot>());
+        Assert.False(health.TryAs<Loot>(out _));
+        Assert.Throws<InvalidEntityException>(() => health.As<Loot>());
     }
 
     /// <summary>The wider shape still reaches the narrower one, which is what the optional include was for.</summary>

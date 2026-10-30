@@ -237,6 +237,33 @@ internal static class AttributeUtils
         return false;
     }
     
+    /// <summary>
+    /// Reads an enum-valued attribute argument into a generator-side mirror of that enum, matching BY NAME. A
+    /// generator cannot reference the SDK assembly, so it keeps its own copy of enums like
+    /// <c>ReadyM.SDK.Attributes.Policy</c>; matching on the ordinal would silently change what every existing
+    /// declaration means the moment a member is inserted into the real enum. Names do not move, so this does not
+    /// either. A value the mirror has never heard of falls back, which keeps the two drifting apart loud.
+    /// </summary>
+    public static TMirror EnumArgument<TMirror>(TypedConstant argument, TMirror fallback)
+        where TMirror : struct
+    {
+        var name = EnumMemberName(argument);
+
+        return name is not null && Enum.TryParse<TMirror>(name, out var mirrored) ? mirrored : fallback;
+    }
+
+    /// <summary>The declared name of an enum-valued constant, or null when it names no single member.</summary>
+    public static string? EnumMemberName(TypedConstant argument)
+    {
+        if (argument.Kind != TypedConstantKind.Enum || argument.Type is not INamedTypeSymbol type)
+            return null;
+
+        return type.GetMembers()
+            .OfType<IFieldSymbol>()
+            .FirstOrDefault(field => field.HasConstantValue && Equals(field.ConstantValue, argument.Value))
+            ?.Name;
+    }
+
     private static T ConvertValue<T>(object? value, T defaultValue)
     {
         if (value is null)

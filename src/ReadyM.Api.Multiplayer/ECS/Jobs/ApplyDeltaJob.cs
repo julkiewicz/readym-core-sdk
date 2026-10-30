@@ -14,6 +14,7 @@ namespace ReadyM.Api.Multiplayer.ECS.Jobs;
 internal class ApplyDeltaJob<T>(
     INetworkedEntityManager netEntity,
     IPlayerIdProvider playerIdProvider,
+    PredictionDeltaHooks<T> predictionHooks,
     ILogger logger
 ) : IJob<NetDataReader> where T : struct, INetworkedComponent
 {
@@ -74,6 +75,8 @@ internal class ApplyDeltaJob<T>(
             {
                 if (entity.Value.HasComponent<T>())
                 {
+                    predictionHooks.BeforeDeltaRead?.Invoke(entity.Value.Id, ref entity.Value.GetComponent<T>());
+
                     var comp = entity.Value.GetComponent<T>();
                     comp.ReadDeltaTracking(reader, entity.Value.Id);
 
@@ -90,6 +93,7 @@ internal class ApplyDeltaJob<T>(
                     }
 
                     entity.Value.Set(comp);
+                    predictionHooks.AfterDeltaRead?.Invoke(entity.Value.Id, ref entity.Value.GetComponent<T>());
                 }
                 else
                 {
@@ -103,6 +107,7 @@ internal class ApplyDeltaJob<T>(
                         comp.ClearDirty();
                     }
 
+                    // Nothing can be predicted in a component the entity did not have
                     entity.Value.Add(comp);
                 }
             }
@@ -117,6 +122,7 @@ internal class ApplyDeltaJob<T>(
                 }
 
                 ref var component = ref entity.Value.GetComponent<T>();
+                predictionHooks.BeforeDeltaRead?.Invoke(entity.Value.Id, ref component);
                 component.ReadDeltaTracking(reader, entity.Value.Id);
 
                 if (playerId == owner)
@@ -125,6 +131,8 @@ internal class ApplyDeltaJob<T>(
                     component.MarkChangedFromApi();
                     component.ClearDirty();
                 }
+
+                predictionHooks.AfterDeltaRead?.Invoke(entity.Value.Id, ref component);
             }
         }
     }

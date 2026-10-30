@@ -1,4 +1,5 @@
-﻿using ReadyM.Api.DI;
+﻿using ReadyM.Api.Multiplayer.ECS;
+using ReadyM.Api.DI;
 using Microsoft.Extensions.Logging;
 using ReadyM.Api.ECS.Worlds;
 using ReadyM.Api.Multiplayer.ECS.Archetypes;
@@ -9,6 +10,7 @@ using ReadyM.SDK.Client.Mapping;
 using ReadyM.SDK.Client.Entities;
 using ReadyM.SDK.Entities;
 using ReadyM.Api.Multiplayer.RPC;
+using ReadyM.SDK.Events;
 #if NET
 using ReadyM.SDK.Chunks;
 using ReadyM.SDK.Client.Chunks;
@@ -62,6 +64,10 @@ internal static class DependencyInjectionExtensions
     {
         ServiceRegistry.RegisterAll(container);
         RpcHandlerRegistry.RegisterAll(container, RpcSide.Client);
+
+        var networkedEvents = container.Resolve<NetworkedEventRegistry>();
+        networkedEvents.DeclareGenerated(AppDomain.CurrentDomain.GetAssemblies());
+        networkedEvents.RegisterAll(container, RpcSide.Client, new Events.ClientNetworkedEventCoordinatorRegistration());
     }
 
     public static void RegisterReadyMSdk(this IDependencyContainer container)
@@ -71,6 +77,12 @@ internal static class DependencyInjectionExtensions
         container.RegisterSingleton<IEntities, ClientEntities>();
         container.RegisterSingleton<IEntityApi, ClientEntityApi>();
         container.RegisterSingleton<RpcEntities>();
+        container.RegisterSingleton<NetworkedEventRegistry>();
+        container.RegisterSingleton<INetworkedEventEntityReader, NetworkedEventEntityReader>();
+        container.RegisterSingleton<PredictionDeltaHooks>();
+        container.RegisterSingleton<GuessedValueRegistry>();
+        container.RegisterSingleton<PredictedRaiseRegistry>();
+        container.RegisterSingleton<INetworkedEvents, Events.ClientNetworkedEvents>();
 #if NET
         container.RegisterSingleton<IChunkSource, ClientChunkSource>();
 #endif

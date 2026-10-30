@@ -541,7 +541,7 @@ public partial struct FloatComponent : INetworkedComponent
         var isDirtyProperty = componentType.GetProperty("IsDirty");
         Assert.NotNull(isDirtyProperty);
 
-        var clearDirtyMethod = componentType.GetMethod("ClearDirty");
+        var clearDirtyMethod = componentType.GetMethod("ClearDirty", Type.EmptyTypes);
         Assert.NotNull(clearDirtyMethod);
 
         clearDirtyMethod.Invoke(instance, Array.Empty<object>());
@@ -613,7 +613,7 @@ public partial struct ZeroBoundaryComponent : INetworkedComponent
         var instance = Activator.CreateInstance(componentType)!;
         var valueProperty = componentType.GetProperty("Value")!;
         var isDirtyProperty = componentType.GetProperty("IsDirty")!;
-        var clearDirtyMethod = componentType.GetMethod("ClearDirty")!;
+        var clearDirtyMethod = componentType.GetMethod("ClearDirty", Type.EmptyTypes)!;
 
         object Typed(double value) => typeName == "float" ? (object)(float)value : value;
 
@@ -667,7 +667,7 @@ public partial struct VectorZeroBoundaryComponent : INetworkedComponent
         var instance = Activator.CreateInstance(componentType)!;
         var valueProperty = componentType.GetProperty("Value")!;
         var isDirtyProperty = componentType.GetProperty("IsDirty")!;
-        var clearDirtyMethod = componentType.GetMethod("ClearDirty")!;
+        var clearDirtyMethod = componentType.GetMethod("ClearDirty", Type.EmptyTypes)!;
 
         var vectorType = valueProperty.PropertyType;
         var axisCount = typeName switch { "Vector2" => 2, "Vector3" => 3, _ => 4 };

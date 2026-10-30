@@ -43,7 +43,7 @@ internal static class AccessorEmitter
             writer.Line($"public static bool Has(in {ArchetypeNames.EntityHandle} handle) => handle.HasComponent<{component}>();");
 
             foreach (var accessor in model.Accessors)
-                Members(writer, accessor, component, model.IndexedBy, model.IsReplicated);
+                Members(writer, accessor, component, model.IndexedBy, model.IsReplicated, model.Name);
 
             foreach (var forward in model.Forwards)
                 Forward(writer, forward, component);
@@ -113,6 +113,7 @@ internal static class AccessorEmitter
             : $"{access} = value";
 
         writer.Line();
+
         writer.Line($"public static {accessor.Type} Get{accessor.Name}(in {chunks.ComponentChunk} chunk, int index)");
         writer.Line($"    => {read};");
 
@@ -185,7 +186,8 @@ internal static class AccessorEmitter
         AccessorModel accessor,
         string component,
         string? indexedBy,
-        bool replicated)
+        bool replicated,
+        string declaring)
     {
         var access = $"handle.GetComponent<{component}>().{accessor.Field}";
         var read = accessor.Read(access);
@@ -237,6 +239,17 @@ internal static class AccessorEmitter
                     writer.Line($"handle.ReplaceIndexed<{component}, {indexedBy}>(updated);");
                 }
             }
+        }
+
+        if (accessor.IsPredictable)
+        {
+            // Its own call rather than a second meaning for the setter. Whether a write is a guess is a
+            // question about where control came from, which neither the compiler nor an analyzer can answer:
+            // a helper called from inside the callback looks the same as one called from anywhere else.
+            writer.Line();
+            writer.Line($"public static void Predict{accessor.Name}("
+                        + $"in {ArchetypeNames.EntityHandle} handle, {accessor.Type} value)");
+            writer.Line($"    => handle.Predict({Entry(accessor, component)}, value, \"{declaring}.{accessor.Name}\");");
         }
 
         writer.Line();

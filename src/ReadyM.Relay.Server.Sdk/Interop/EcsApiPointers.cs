@@ -49,4 +49,7 @@ public struct EcsApiPointers
     /// register an archetype or run a query, both of which are phase two or later.
     /// </summary>
     public required IntPtr GetComponentIdByName;
+
+    /// <summary>Whether the caller is on the world's thread, which raising an event requires.</summary>
+    public required IntPtr IsOnWorldThread;
 }

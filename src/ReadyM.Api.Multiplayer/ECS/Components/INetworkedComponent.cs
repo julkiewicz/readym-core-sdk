@@ -9,12 +9,11 @@ namespace ReadyM.Api.Multiplayer.ECS.Components;
 public interface INetworkedComponent : IReadyComponent, INetSerializable
 {
     void ClearDirty();
+    void ClearDirty(int field);
     bool IsDirty { get; }
     void WriteDelta(NetDataWriter writer);
     void ReadDelta(NetDataReader reader);
     void ReadDeltaTracking(NetDataReader reader, int id);
-
     void DeserializeTracking(NetDataReader reader, int id);
-
     Type GetChangeComponent();
 }

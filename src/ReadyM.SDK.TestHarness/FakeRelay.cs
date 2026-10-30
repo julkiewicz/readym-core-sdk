@@ -46,6 +46,9 @@ internal sealed class FakeRelay
     private readonly CreateLocalEntityDelegate _createLocalEntity;
     private readonly DeleteNetworkedEntityDelegate _deleteEntity;
 
+    /// <summary>The thread that built the relay stands in for the world's, the way a test drives everything from one.</summary>
+    private readonly IsOnWorldThreadDelegate _isOnWorldThread;
+
     // The v0 api binds every pointer in the bundle at construction, so none may be zero. These
     // stand in for the parts of the relay this harness does not model; calling one says so.
     private readonly CreateNetworkedEntityDelegate _createNetworked;
@@ -88,6 +91,9 @@ internal sealed class FakeRelay
         _createNetworked = CreateNetworkedEntityImpl;
         _createNetworkedInScope = CreateNetworkedEntityInScopeImpl;
         _deleteEntity = DeleteEntityImpl;
+
+        var world = Thread.CurrentThread;
+        _isOnWorldThread = () => Thread.CurrentThread == world ? (byte)1 : (byte)0;
     }
 
     internal int QueryCalls { get; private set; }
@@ -130,7 +136,8 @@ internal sealed class FakeRelay
         CreateAreaScopeEntity = Marshal.GetFunctionPointerForDelegate(_createAreaScope),
         TryGetCellScopeEntity = Marshal.GetFunctionPointerForDelegate(_tryGetCellScope),
         CreateCellScopeEntity = Marshal.GetFunctionPointerForDelegate(_createCellScope),
-        TryGetEntityCell = Marshal.GetFunctionPointerForDelegate(_tryGetEntityCell)
+        TryGetEntityCell = Marshal.GetFunctionPointerForDelegate(_tryGetEntityCell),
+        IsOnWorldThread = Marshal.GetFunctionPointerForDelegate(_isOnWorldThread)
     };
 
     internal ArchetypePointers Archetypes => new()

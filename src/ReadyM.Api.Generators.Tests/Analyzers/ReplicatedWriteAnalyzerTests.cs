@@ -42,21 +42,32 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
             public partial int Cheer { get; set; }
         }
 
+        [ArchetypeMixin(Replication.ServerAuthoritative)]
+        public readonly partial struct Curse
+        {
+            [Predictable] public partial bool Active { get; set; }
+
+            public partial int Turns { get; set; }
+        }
+
         [Archetype(Networked = false)]
         [Include(typeof(Vitals))]
         [Include(typeof(Mood))]
+        [Include(typeof(Curse), "Curse")]
         public readonly partial struct Npc;
         """;
 
-    /// <param name="body">Statements in a method holding a 'vitals' and a 'mood'.</param>
+    /// <param name="body">Statements in a method holding a 'vitals', a 'mood', a 'curse' and an 'npc'.</param>
     private Diagnostic[] Report(string body, string runtime = "Client")
         => ReportSource(
             $$"""
+              using ReadyM.SDK.Events;
+
               namespace Mod;
 
               public static class Use
               {
-                  public static void Run(Vitals vitals, Mood mood)
+                  public static void Run(Vitals vitals, Mood mood, Curse curse, Npc npc, INetworkedEventRaise raise)
                   {
               {{body}}
                   }
@@ -121,6 +132,53 @@ public class ReplicatedWriteAnalyzerTests(ITestOutputHelper output)
     [Fact]
     public void A_server_writes_what_it_likes()
         => Assert.Empty(Report("        vitals.Hp = 5;", runtime: "Server"));
+
+    // -- a value a client may guess at ---------------------------------------------------------------
+
+    /// <summary>
+    /// A guess is its own call, so writing one is the ordinary refusal. What changes is where it sends the
+    /// reader: a mapping is not what they want, and the guess is.
+    /// </summary>
+    [Fact]
+    public void Writing_a_guessable_value_sends_the_reader_to_the_guess()
+    {
+        var reported = Assert.Single(Report("        curse.Active = true;"));
+
+        Assert.Equal("READYM017", reported.Id);
+        Assert.Contains("PredictActive", reported.GetMessage());
+        Assert.DoesNotContain("Pull", reported.GetMessage());
+    }
+
+    /// <summary>Its unmarked neighbour has nowhere else to go, so it is sent where it always was.</summary>
+    [Fact]
+    public void Writing_the_value_beside_it_sends_the_reader_to_a_mapping()
+    {
+        var reported = Assert.Single(Report("        curse.Turns = 3;"));
+
+        Assert.Contains("Pull", reported.GetMessage());
+        Assert.DoesNotContain("Predict", reported.GetMessage());
+    }
+
+    /// <summary>
+    /// Guessing is a call of its own, so there is nothing to decide about where it was called from. Whether
+    /// a write is a guess is a question about control flow, which is why the setter does not answer it.
+    /// </summary>
+    [Fact]
+    public void Guessing_at_it_is_left_alone_wherever_it_is_done()
+    {
+        Assert.Empty(Report("        curse.PredictActive(true);"));
+        Assert.Empty(Report("        raise.Predicting(() => curse.PredictActive(true));"));
+        Assert.Empty(Report("        npc.PredictCurseActive(true);"));
+    }
+
+    /// <summary>The server writes the value itself, so nothing there is a guess.</summary>
+    [Fact]
+    public void A_server_writes_a_guessable_value_like_any_other()
+        => Assert.Empty(Report("        curse.Active = true;", runtime: "Server"));
+
+    [Fact]
+    public void Reading_a_guessable_value_is_left_alone()
+        => Assert.Empty(Report("        var read = curse.Active;"));
 
     /// <summary>
     /// Inside a mapping the write is the pull, which is how the game's answer reaches the ECS. The

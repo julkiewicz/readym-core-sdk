@@ -82,6 +82,12 @@ internal delegate int GetChildrenDelegate(int parentId, IntPtr buffer, int capac
 internal delegate byte IsEntityAliveDelegate(RawEntity entity, byte matchRevision);
 
 /// <summary>
+/// Whether the caller is on the thread the world runs on. Only the host knows which that is, and raising an
+/// event anywhere else races the entities it names.
+/// </summary>
+internal delegate byte IsOnWorldThreadDelegate();
+
+/// <summary>
 /// Locates one component of one entity, the same way a chunk slot is located: by address when the
 /// AOT side owns it, by heap handle and index when a mod does.
 /// </summary>

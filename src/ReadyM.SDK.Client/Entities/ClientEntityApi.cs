@@ -12,6 +12,7 @@ using ReadyM.Api.Multiplayer.ECS.Managers;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Client.Archetypes;
 using ReadyM.SDK.Entities;
+using ReadyM.SDK.Events;
 using ReadyM.SDK.Exceptions;
 
 namespace ReadyM.SDK.Client.Entities;
@@ -30,6 +31,9 @@ internal sealed class ClientEntityApi : IEntityApi
     /// <summary>Null in a game with no networking, which is every local-only session and most tests.</summary>
     private readonly INetworkedEntityManager? _networked;
 
+    /// <summary>Null in a world that does not predict networked events.</summary>
+    private readonly GuessedValueRegistry? _guessedValues;
+
     /// <summary>One archetype per set, worked out on first use the way the server's half does it.</summary>
     private readonly ConcurrentDictionary<ComponentSet, ArchetypeId> _archetypes = new();
 
@@ -44,13 +48,15 @@ internal sealed class ClientEntityApi : IEntityApi
         ILogger<ClientEntityApi> logger,
         Lazy<IMappingPolicyDirectory>? policies = null,
         Store? world = null,
-        INetworkedEntityManager? networked = null)
+        INetworkedEntityManager? networked = null,
+        GuessedValueRegistry? guessedValues = null)
     {
         _store = store;
         _logger = logger;
         _policies = policies;
         _world = world;
         _networked = networked;
+        _guessedValues = guessedValues;
 
         store.OnEntityDelete += OnEntityDelete;
     }
@@ -61,6 +67,16 @@ internal sealed class ClientEntityApi : IEntityApi
             return;
 
         DeleteHandlerRegistry.RunAll(new EntityHandle(going.Entity.RawEntity, this));
+    }
+
+    public void Predict<TComponent, TValue>(
+        RawEntity rawEntity, Field<TComponent, TValue> field, TValue value, string member)
+        where TComponent : struct, INetworkedComponent
+    {
+        if (_guessedValues is not { } guessedValues)
+            throw new InvalidOperationException($"'{member}' was predicted in a world that does not predict.");
+
+        guessedValues.Guess(new EntityHandle(rawEntity, this), field, value, member);
     }
 
     public bool Write<TComponent, TValue>(

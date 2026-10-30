@@ -140,6 +140,13 @@ partial struct {{info.Name}} : INetworkedComponent{{(policy is null ? string.Emp
     public bool IsDirty => _dirtyMask != 0;
 """);
 
+        sb.AppendLine($"""
+    /// <exclude />
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ClearDirty(int field) => _dirtyMask = ({model.MaskInfo!.Type.Name})(_dirtyMask & ~(({model.MaskInfo!.Type.Name})1 << field));
+""");
+
         EmitAssign(sb, model, classState);
 
         if (hasDispose)

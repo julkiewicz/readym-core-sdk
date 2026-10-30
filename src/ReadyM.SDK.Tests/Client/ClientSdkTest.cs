@@ -2,9 +2,11 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ReadyM.Api.DI;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Client.Entities;
 using ReadyM.SDK.Entities;
+using ReadyM.SDK.Events;
 using ReadyM.SDK.Services;
 using ReadyM.SDK.Tests.Client.Fixtures;
 
@@ -40,12 +42,17 @@ public abstract class ClientSdkTest : IDisposable
         ServiceRegistry.RegisterAll(_container);
 
         _container.RegisterSingleton(new EntityStore());
+        _container.RegisterSingleton<PredictionDeltaHooks>();
+        _container.RegisterSingleton<GuessedValueRegistry>();
+        _container.RegisterSingleton<PredictedRaiseRegistry>();
         _container.RegisterSingleton<IEntityApi, ClientEntityApi>();
         _container.RegisterSingleton<IEntities, ClientEntities>();
 
         Store = _container.Resolve<EntityStore>();
         Api = _container.Resolve<IEntityApi>();
         Entities = _container.Resolve<IEntities>();
+        DeltaHooks = _container.Resolve<PredictionDeltaHooks>();
+        PredictedRaises = _container.Resolve<PredictedRaiseRegistry>();
     }
 
     protected IDependencyContainer Container => _container;
@@ -55,6 +62,10 @@ public abstract class ClientSdkTest : IDisposable
     internal IEntityApi Api { get; }
 
     protected IEntities Entities { get; }
+
+    internal PredictionDeltaHooks DeltaHooks { get; }
+
+    internal PredictedRaiseRegistry PredictedRaises { get; }
 
     /// <summary>
     /// Creates an entity carrying exactly what the archetype needs, without naming its components.
@@ -94,7 +105,7 @@ public abstract class ClientSdkTest : IDisposable
         chest.X = x;
         chest.Y = y;
 
-        if (rarity.HasValue && EntityHandle.Of(chest).TryAs<Loot>(out var loot))
+        if (rarity.HasValue && chest.TryAs<Loot>(out var loot))
             loot.Rarity = rarity.Value;
 
         return chest;

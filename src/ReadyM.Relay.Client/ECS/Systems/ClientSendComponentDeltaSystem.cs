@@ -4,6 +4,7 @@ using LiteNetLib.Utils;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.Client;
 using ReadyM.Api.Multiplayer.ConflictResolution;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Multiplayer.ECS.Registry;
 using ReadyM.Api.Multiplayer.ECS.Systems;
@@ -13,8 +14,9 @@ namespace ReadyM.Relay.Client.ECS.Systems;
 internal class ClientSendComponentDeltaSystem<T>(
     NetworkedComponentId componentId,
     INetworkTime networkTime,
-    DeliveryMethod deliveryMethod, IRelayClient relay)
-	: SendComponentDeltaSystemBase<T>(networkTime, componentId, false)
+    DeliveryMethod deliveryMethod, IRelayClient relay,
+    PredictionDeltaHooks<T> predictionHooks)
+	: SendComponentDeltaSystemBase<T>(networkTime, componentId, false, predictionHooks)
     where T : struct, INetworkedComponent
 {
     protected override QueryFilter SetupFilter(QueryFilter filter, SendContext context)

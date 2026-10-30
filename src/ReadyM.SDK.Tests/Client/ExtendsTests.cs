@@ -1,5 +1,4 @@
 ﻿using ReadyM.SDK.Archetypes;
-using ReadyM.SDK.Entities;
 using ReadyM.SDK.Tests.Client.Fixtures;
 
 namespace ReadyM.SDK.Tests.Client;
@@ -18,10 +17,9 @@ public class ExtendsTests : ClientSdkTest
     public void Creating_the_archetype_carries_every_extension()
     {
         var area = Entities.Create<CoreArea>();
-        var handle = EntityHandle.Of(area);
 
-        Assert.True(handle.Is<Weather>());
-        Assert.True(handle.Is<Music>());
+        Assert.True(area.Is<Weather>());
+        Assert.True(area.Is<Music>());
     }
 
     [Fact]
@@ -29,7 +27,7 @@ public class ExtendsTests : ClientSdkTest
     {
         var area = Entities.Create<CoreArea>();
 
-        Assert.True(EntityHandle.Of(area).TryAs<Weather>(out var weather));
+        Assert.True(area.TryAs<Weather>(out var weather));
 
         weather.Storm = 3;
 
@@ -42,8 +40,8 @@ public class ExtendsTests : ClientSdkTest
     {
         var area = Entities.Create<CoreArea>();
 
-        Assert.True(EntityHandle.Of(area).TryAs<Weather>(out var weather));
-        Assert.True(EntityHandle.Of(area).TryAs<Music>(out var music));
+        Assert.True(area.TryAs<Weather>(out var weather));
+        Assert.True(area.TryAs<Music>(out var music));
 
         weather.Storm = 1;
         music.Track = 2;

@@ -23,10 +23,12 @@ internal static class ArchetypeNames
     public const string ExplicitCollectionAttribute = Namespace + ".ExplicitCollectionAttribute";
     public const string ExtendsAttribute = Namespace + ".ExtendsAttribute";
     public const string IndexAttribute = Namespace + ".IndexAttribute";
+    public const string PredictableAttribute = Namespace + ".PredictableAttribute";
     public const string TagAttribute = Namespace + ".TagAttribute";
 
     public const string EntityHandle = "global::ReadyM.SDK.Entities.EntityHandle";
     public const string ComponentSet = "global::ReadyM.SDK.Archetypes.ComponentSet";
+
 
     /// <summary>Keeps a generated type or member out of IntelliSense and the docs.</summary>
     /// <summary>

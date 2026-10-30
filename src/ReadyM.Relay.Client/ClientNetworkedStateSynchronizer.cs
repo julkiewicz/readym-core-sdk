@@ -22,6 +22,7 @@ using ReadyM.Api.Multiplayer.Protocol;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
 using ReadyM.Relay.Client.ConflictResolution;
 using ReadyM.Relay.Client.ECS.Systems;
+using ReadyM.Api.Multiplayer.ECS;
 using ReadyM.Relay.Client.State;
 
 namespace ReadyM.Relay.Client;
@@ -44,7 +45,8 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
             if (!typeof(IServerAuthoritative).IsAssignableFrom(typeof(T)))
             {
                 owner.Logger.LogTrace("Registering client send for: {ComponentType} with ID {Id}", typeof(T).Name, id);
-                owner.SendSystemGroup.Add(new ClientSendComponentDeltaSystem<T>(id, owner._netTime, deliveryMethod, owner.RelayClient));
+                owner.SendSystemGroup.Add(new ClientSendComponentDeltaSystem<T>(
+                    id, owner._netTime, deliveryMethod, owner.RelayClient, owner._predictionHooks.For<T>()));
             }
 
             owner._clearDirtySystemGroup.Add(new ClearDirtySystem<T>());
@@ -57,6 +59,7 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
     protected readonly ILogger Logger;
 
     private readonly IClientNetworkTime _netTime;
+    private readonly PredictionDeltaHooks _predictionHooks;
     protected readonly NetworkedComponentJobRegistry NetworkedComponentJobRegistry;
     private readonly ClientEcsUpdateLoop _ecsLoop;
     private readonly ClientOwnershipManager _ownershipManager;
@@ -83,8 +86,10 @@ internal class ClientNetworkedStateSynchronizer : IHostedService
         ReceiveSystem receiveSystem,
         ClientEcsUpdateLoop ecsLoop,
         ClientOwnershipManager ownershipManager,
+        PredictionDeltaHooks predictionHooks,
         ILogger logger)
     {
+        _predictionHooks = predictionHooks;
         State = state;
         _netTime = netTime;
         _receiveSystem = receiveSystem;

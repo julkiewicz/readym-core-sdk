@@ -1,4 +1,5 @@
 ﻿using Friflo.Engine.ECS;
+using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Mapping.Data;
 using ReadyM.SDK.Archetypes;
@@ -388,6 +389,11 @@ public class ShapeMappingTests : ClientSdkTest
             WriteKind kind)
             where TComponent : struct, IComponent
             => inner.Write(rawEntity, ref component, field, value, kind);
+
+        public void Predict<TComponent, TValue>(
+            RawEntity rawEntity, Field<TComponent, TValue> field, TValue value, string member)
+            where TComponent : struct, INetworkedComponent
+            => inner.Predict(rawEntity, field, value, member);
 
         public bool Mirrors<TComponent, TValue>(
             RawEntity rawEntity,

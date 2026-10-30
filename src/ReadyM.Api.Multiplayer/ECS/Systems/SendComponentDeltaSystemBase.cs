@@ -5,6 +5,7 @@ using LiteNetLib.Utils;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Multiplayer.ConflictResolution;
 using ReadyM.Api.Multiplayer.ECS.Components;
+using ReadyM.Api.Multiplayer.ECS.Jobs;
 using ReadyM.Api.Multiplayer.ECS.Registry;
 using ReadyM.Api.Multiplayer.ECS.Values;
 using ReadyM.Api.Multiplayer.Protocol.Enums;
@@ -19,8 +20,16 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
     private readonly bool _clearFlags;
     private readonly QueryCacheHelper<SendContext, Entity?, ArchetypeQuery<MetadataComponent, T>> _queryCache;
 
-    protected SendComponentDeltaSystemBase(INetworkTime networkTime, NetworkedComponentId componentId, bool clearFlags)
+    private readonly PredictionDeltaHooks<T>? _predictionHooks;
+
+    /// <param name="predictionHooks">Null where nothing is ever predicted, which is the server.</param>
+    protected SendComponentDeltaSystemBase(
+        INetworkTime networkTime,
+        NetworkedComponentId componentId,
+        bool clearFlags,
+        PredictionDeltaHooks<T>? predictionHooks)
     {
+        _predictionHooks = predictionHooks;
         ComponentId = componentId;
         _clearFlags = clearFlags;
         _networkTime = networkTime;
@@ -83,6 +92,8 @@ internal abstract class SendComponentDeltaSystemBase<T> : QuerySystem<MetadataCo
 
     protected void OnUpdate(SendContext context)
     {
+        _predictionHooks?.BeforeDeltaSend?.Invoke();
+
         var maxPacketSize = GetMaxPacketSize();
         var owners = SentOwners();
         var query = _queryCache.GetQuery(context);

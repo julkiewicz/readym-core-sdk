@@ -17,7 +17,7 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         "READYM017",
         "Replicated value is written directly",
-        "'{0}.{1}' is replicated - declare a mapping and use \"Pull\", or override the value",
+        "'{0}.{1}' is replicated - {2}",
         "ReadyM",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -104,13 +104,25 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
             || Authoring(context.ContainingSymbol))
             return;
 
-        if (target.Syntax is { } syntax
-            && InsideMapping(syntax, context.Operation.SemanticModel, context.CancellationToken))
+        if (Inside(target.Syntax, "Map", "IShapeMappingScope", context))
             return;
 
+        // A guessable value has somewhere else to go, so say so rather than sending the reader to a
+        // mapping they do not want.
+        var instead = Guessable(property)
+            ? $"guess at it with Predict{property.Name} inside .Predicting()"
+            : "declare a mapping and use \"Pull\", or override the value";
+
         context.ReportDiagnostic(Diagnostic.Create(
-            Rule, target.Syntax.GetLocation(), shape.Name, property.Name));
+            Rule, target.Syntax.GetLocation(), shape.Name, property.Name, instead));
     }
+
+    /// <summary>
+    /// Whether a client may guess at this value, which only changes what the refusal tells them to do
+    /// instead. Read off the declaration a mod wrote, which is the only place the setter survives.
+    /// </summary>
+    private static bool Guessable(IPropertySymbol property)
+        => property.GetAttributes().Any(attribute => attribute.AttributeClass?.Name == "PredictableAttribute");
 
     private static bool Replicates(INamedTypeSymbol shape)
         => shape.IsValueType && DeclarationModel.For(shape).IsReplicated;
@@ -126,10 +138,10 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    /// <summary>Whether the write sits in a handler handed to a mapping.</summary>
-    private static bool InsideMapping(SyntaxNode node, SemanticModel? model, CancellationToken ct)
+    /// <summary>Whether the write sits in a callback handed to a particular method, such as a mapping's.</summary>
+    private static bool Inside(SyntaxNode node, string method, string declaring, OperationAnalysisContext context)
     {
-        if (model is null)
+        if (context.Operation.SemanticModel is not { } model)
             return false;
 
         for (var current = node.Parent; current is not null; current = current.Parent)
@@ -141,8 +153,9 @@ public sealed class ReplicatedWriteAnalyzer : DiagnosticAnalyzer
                 continue;
 
             if (current.Parent is ArgumentSyntax { Parent.Parent: InvocationExpressionSyntax invocation }
-                && model.GetSymbolInfo(invocation, ct).Symbol is IMethodSymbol { Name: "Map" } map
-                && map.ContainingType?.Name == "IShapeMappingScope")
+                && model.GetSymbolInfo(invocation, context.CancellationToken).Symbol is IMethodSymbol called
+                && called.Name == method
+                && called.ContainingType?.Name == declaring)
                 return true;
         }
 

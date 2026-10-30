@@ -1,9 +1,11 @@
 ﻿using System.Runtime.CompilerServices;
 
+[assembly: InternalsVisibleTo("ReadyM.Modloader")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Client")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Server")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Tests")]
 [assembly: InternalsVisibleTo("ReadyM.SDK.Tests.Benchmarks")]
+[assembly: InternalsVisibleTo("ReadyM.Relay.Tests")]
 [assembly: InternalsVisibleTo("WukongMp.Sdk")]
 [assembly: InternalsVisibleTo("WukongMp.Sdk.Common")]
 [assembly: InternalsVisibleTo("OblivionMp.Sdk")]

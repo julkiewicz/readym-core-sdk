@@ -106,6 +106,7 @@ internal static class ExtendedMemberEmitter
         var name = $"{prefix}{accessor.Name}";
         var get = $"{model.QualifiedAccessors}.Get{accessor.Name}({handle})";
         var set = $"{model.QualifiedAccessors}.Set{accessor.Name}({handle}, value)";
+        var guess = $"{model.QualifiedAccessors}.Predict{accessor.Name}({handle}, value)";
 
         writer.Line();
 
@@ -115,6 +116,8 @@ internal static class ExtendedMemberEmitter
             Remarks(writer, remarks);
             writer.Line($"public {accessor.Type} {name}");
             writer.Line($"    => {get};");
+            Prediction(writer, accessor, guess, name);
+
             return;
         }
 
@@ -136,6 +139,23 @@ internal static class ExtendedMemberEmitter
         ]);
         writer.Line($"public void Set{name}({accessor.Type} value)");
         writer.Line($"    => {set};");
+
+        Prediction(writer, accessor, guess, name);
+    }
+
+    /// <summary>
+    /// The guess at a predictable value. A method rather than a setter, because a guess is not a write and
+    /// nothing reading the code could otherwise tell which of the two a line meant.
+    /// </summary>
+    private static void Prediction(SourceWriter writer, AccessorModel accessor, string guess, string name)
+    {
+        if (!accessor.IsPredictable)
+            return;
+
+        writer.Line();
+        writer.Line("/// <summary>Guesses at the value, inside the callback handed to <c>.Predicting()</c>.</summary>");
+        writer.Line($"public void Predict{name}({accessor.Type} value)");
+        writer.Line($"    => {guess};");
     }
 
     /// <summary>

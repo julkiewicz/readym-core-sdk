@@ -1,6 +1,7 @@
 ﻿using Friflo.Engine.ECS;
 using ReadyM.Api.Idents;
 using ReadyM.Api.Mapping.Data;
+using ReadyM.Api.Multiplayer.ECS.Components;
 using ReadyM.SDK.Archetypes;
 using ReadyM.SDK.Exceptions;
 using IComponent = Friflo.Engine.ECS.IComponent;
@@ -60,6 +61,11 @@ internal interface IEntityApi
 
     /// <summary>Does this component's data sync direction is from ECS to game?</summary>
     bool ShouldApplyToGame(RawEntity rawEntity, Type component);
+
+    /// <summary>Writes a guess at a predictable value, inside a <c>.Predicting()</c> callback.</summary>
+    /// <param name="member">The predictable member, as an exception names it.</param>
+    void Predict<TComponent, TValue>(RawEntity rawEntity, Field<TComponent, TValue> field, TValue value, string member)
+        where TComponent : struct, INetworkedComponent;
 
     bool IsAlive(RawEntity rawEntity);
 
