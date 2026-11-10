@@ -31,9 +31,10 @@ git clone --recursive https://github.com/readycodeio/readym-core-sdk.git
 dotnet build src/ReadyM.Core.sln
 ```
 
-`--recursive` matters. One submodule under `src/`:
+`--recursive` matters. Two submodules under `src/`:
 
 - `Friflo.Engine.ECS`, our fork of [Friflo.Engine.ECS](https://github.com/friflo/Friflo.Engine.ECS)
+- `readym-interop-collections-csharp`, the C# native collections (`ReadyM.Native.Collections`), which builds and tests on its own
 
 [LiteNetLib](https://github.com/RevenantX/LiteNetLib) is a plain NuGet reference, since we carry
 no changes to it.
