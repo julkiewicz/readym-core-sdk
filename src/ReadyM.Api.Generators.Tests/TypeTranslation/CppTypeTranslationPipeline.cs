@@ -36,4 +36,34 @@ public class CppTypeTranslationPipelineTests
 
         Assert.Equal("ReadyM::Native::Container::NativeString256<Interop::String, int32_t, Interop::String>", rendered);
     }
+
+    [Theory]
+    [InlineData("ByteHash", "Native/Container/ByteHash.h")]
+    [InlineData("IntHash", "Native/Container/IntHash.h")]
+    [InlineData("UIntHash", "Native/Container/UIntHash.h")]
+    public void PathTranslation_PutsEachHashInTheHeaderOfTheSameName(string csharpName, string expectedHeader)
+    {
+        var pipeline = CppTypeTranslationPipeline.PathTranslation;
+
+        var input = TypeNameFactory.Qualified("ReadyM", "Native", "Container", csharpName);
+
+        var rendered = pipeline.Render(pipeline.Translate(input));
+
+        Assert.Equal(expectedHeader, rendered);
+    }
+
+    [Theory]
+    [InlineData("ByteHash", "ReadyM::Native::Container::ByteHash")]
+    [InlineData("IntHash", "ReadyM::Native::Container::IntHash")]
+    [InlineData("UIntHash", "ReadyM::Native::Container::UIntHash")]
+    public void TypeTranslation_KeepsEachHashUnderItsOwnName(string csharpName, string expectedType)
+    {
+        var pipeline = CppTypeTranslationPipeline.TypeTranslation;
+
+        var input = TypeNameFactory.Qualified("ReadyM", "Native", "Container", csharpName);
+
+        var rendered = pipeline.Render(pipeline.Translate(input));
+
+        Assert.Equal(expectedType, rendered);
+    }
 }

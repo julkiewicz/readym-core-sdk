@@ -92,9 +92,6 @@ internal static class CppTypeTranslationPipeline
             new NamespaceReplacementRule(TypeNameFactory.Name("System"),
                 TypeNameFactory.Name("Interop")),
             new ExactTypeReplacementRule(
-                TypeNameFactory.Qualified("ReadyM", "Native", "Container", "ByteHash"),
-                TypeNameFactory.Qualified("Native", "Container", "IntHash")),
-            new ExactTypeReplacementRule(
                 TypeNameFactory.Qualified("ReadyM", "Native", "Container", "NativeString256"),
                 TypeNameFactory.Qualified("Native", "Container", "NativeString")),
             new ExactTypeReplacementRule(
