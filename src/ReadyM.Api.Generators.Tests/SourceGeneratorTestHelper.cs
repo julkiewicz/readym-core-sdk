@@ -347,7 +347,7 @@ internal static class SourceGeneratorTestHelper
             typeof(LiteNetLib.Utils.NetDataWriter).Assembly,
             typeof(ReadyM.Native.Container.ByteHash).Assembly,
             typeof(ReadyM.Native.LowLevel.Allocator).Assembly,
-            typeof(ReadyM.Native.Serialization.NetSerializationExtensions).Assembly,
+            typeof(ReadyM.Api.Serialization.NetSerializationExtensions).Assembly,
 
             typeof(TestAssemblyMarker).Assembly
         };

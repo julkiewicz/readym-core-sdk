@@ -10,7 +10,7 @@ using ReadyM.Api.Serialization;
 using Xunit;
 using ReadyM.Native.Container;
 using ReadyM.Native.LowLevel;
-using ReadyM.Native.Serialization;
+using ReadyM.Api.Serialization;
 using static ReadyM.Api.Generators.Tests.DeriveTestAssert;
 
 namespace ReadyM.Api.Generators.Tests;

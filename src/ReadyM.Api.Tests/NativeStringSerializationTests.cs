@@ -2,7 +2,7 @@ using System.Text;
 using LiteNetLib.Utils;
 using Xunit;
 using ReadyM.Native.Container;
-using ReadyM.Native.Serialization;
+using ReadyM.Api.Serialization;
 
 namespace ReadyM.Api.Tests;
 

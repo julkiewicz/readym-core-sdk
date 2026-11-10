@@ -2,7 +2,7 @@ using System;
 using LiteNetLib.Utils;
 using ReadyM.Native.Container;
 
-namespace ReadyM.Native.Serialization;
+namespace ReadyM.Api.Serialization;
 
 /// <summary>How a native string's bytes are written after its length.</summary>
 internal enum NativeStringWireForm : byte

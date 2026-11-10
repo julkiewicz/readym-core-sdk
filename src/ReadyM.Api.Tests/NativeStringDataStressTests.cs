@@ -2,13 +2,11 @@
 using System.Collections.Generic;
 using System.Text;
 using LiteNetLib.Utils;
-using NUnit.Framework;
-using NUnit.Framework.Legacy;
+using Xunit;
 using ReadyM.Native.Container;
 
-namespace ReadyM.Native.Tests.Serialization;
+namespace ReadyM.Api.Tests;
 
-[TestFixture]
 public unsafe class NativeStringNetDataStressTests
 {
     private enum NativeStringKind : byte
@@ -23,7 +21,10 @@ public unsafe class NativeStringNetDataStressTests
         string ManagedValue,
         byte[] RawBytes);
 
-    [Test, Category("String"), Category("ECS"), Category("Stress")]
+    [Fact]
+    [Trait("Category", "String")]
+    [Trait("Category", "ECS")]
+    [Trait("Category", "Stress")]
     public void StressTest_NetDataWriter_RoundTrips_MostlyNativeString64And256()
     {
         var rng = new Random(123456);
@@ -51,21 +52,21 @@ public unsafe class NativeStringNetDataStressTests
             var managed = CreateRandomStringFittingCapacity(rng, capacity, isWide);
             var rawBytes = Encode(managed, isWide);
 
-            Assert.That(rawBytes.Length, Is.LessThanOrEqualTo(capacity), "Generated string exceeded capacity");
+            Assert.True(rawBytes.Length <= capacity, "Generated string exceeded capacity");
 
             // Construct the actual native string instance first, so we stress the real constructors.
             if (kind == NativeStringKind.String64)
             {
                 var native = new NativeString64(managed, isWide);
-                Assert.That(native.ToManaged(), Is.EqualTo(managed));
-                Assert.That(native.Length, Is.EqualTo(rawBytes.Length));
+                Assert.True(native.ToManaged() == managed);
+                Assert.True(native.Length == rawBytes.Length);
                 WriteNativeString64(writer, native);
             }
             else
             {
                 var native = new NativeString256(managed, isWide);
-                Assert.That(native.ToManaged(), Is.EqualTo(managed));
-                Assert.That(native.Length, Is.EqualTo(rawBytes.Length));
+                Assert.True(native.ToManaged() == managed);
+                Assert.True(native.Length == rawBytes.Length);
                 WriteNativeString256(writer, native);
             }
 
@@ -81,22 +82,22 @@ public unsafe class NativeStringNetDataStressTests
             var isWide = reader.GetBool();
             var length = reader.GetUShort();
 
-            Assert.That(kind, Is.EqualTo(entry.Kind), $"Kind mismatch at index {i}");
-            Assert.That(isWide, Is.EqualTo(entry.IsWide), $"IsWide mismatch at index {i}");
-            Assert.That(length, Is.EqualTo(entry.RawBytes.Length), $"Length mismatch at index {i}");
+            Assert.True(kind == entry.Kind, $"Kind mismatch at index {i}");
+            Assert.True(isWide == entry.IsWide, $"IsWide mismatch at index {i}");
+            Assert.True(length == entry.RawBytes.Length, $"Length mismatch at index {i}");
 
             var rawBytes = new byte[length];
             reader.GetBytes(rawBytes, length);
 
-            CollectionAssert.AreEqual(entry.RawBytes, rawBytes, $"Serialized bytes mismatch at index {i}");
+            Assert.True(entry.RawBytes.AsSpan().SequenceEqual(rawBytes), $"Serialized bytes mismatch at index {i}");
 
             if (kind == NativeStringKind.String64)
             {
                 var native = new NativeString64(rawBytes, rawBytes.Length, isWide);
 
-                Assert.That(native.IsWide, Is.EqualTo(entry.IsWide), $"NativeString64 IsWide mismatch at index {i}");
-                Assert.That(native.Length, Is.EqualTo(entry.RawBytes.Length), $"NativeString64 Length mismatch at index {i}");
-                Assert.That(native.ToManaged(), Is.EqualTo(entry.ManagedValue), $"NativeString64 managed value mismatch at index {i}");
+                Assert.True(native.IsWide == entry.IsWide, $"NativeString64 IsWide mismatch at index {i}");
+                Assert.True(native.Length == entry.RawBytes.Length, $"NativeString64 Length mismatch at index {i}");
+                Assert.True(native.ToManaged() == entry.ManagedValue, $"NativeString64 managed value mismatch at index {i}");
 
                 var copied = new byte[native.Length];
                 fixed (byte* dest = copied)
@@ -104,15 +105,15 @@ public unsafe class NativeStringNetDataStressTests
                     native.CopyTo(dest);
                 }
 
-                CollectionAssert.AreEqual(entry.RawBytes, copied, $"NativeString64 CopyTo mismatch at index {i}");
+                Assert.True(entry.RawBytes.AsSpan().SequenceEqual(copied), $"NativeString64 CopyTo mismatch at index {i}");
             }
             else
             {
                 var native = new NativeString256(rawBytes, rawBytes.Length, isWide);
 
-                Assert.That(native.IsWide, Is.EqualTo(entry.IsWide), $"NativeString256 IsWide mismatch at index {i}");
-                Assert.That(native.Length, Is.EqualTo(entry.RawBytes.Length), $"NativeString256 Length mismatch at index {i}");
-                Assert.That(native.ToManaged(), Is.EqualTo(entry.ManagedValue), $"NativeString256 managed value mismatch at index {i}");
+                Assert.True(native.IsWide == entry.IsWide, $"NativeString256 IsWide mismatch at index {i}");
+                Assert.True(native.Length == entry.RawBytes.Length, $"NativeString256 Length mismatch at index {i}");
+                Assert.True(native.ToManaged() == entry.ManagedValue, $"NativeString256 managed value mismatch at index {i}");
 
                 var copied = new byte[native.Length];
                 fixed (byte* dest = copied)
@@ -120,11 +121,11 @@ public unsafe class NativeStringNetDataStressTests
                     native.CopyTo(dest);
                 }
 
-                CollectionAssert.AreEqual(entry.RawBytes, copied, $"NativeString256 CopyTo mismatch at index {i}");
+                Assert.True(entry.RawBytes.AsSpan().SequenceEqual(copied), $"NativeString256 CopyTo mismatch at index {i}");
             }
         }
 
-        Assert.That(reader.AvailableBytes, Is.EqualTo(0), "Reader should be fully consumed");
+        Assert.True(reader.AvailableBytes == 0, "Reader should be fully consumed");
     }
 
     private static void WriteNativeString64(NetDataWriter writer, NativeString64 value)
@@ -203,7 +204,7 @@ public unsafe class NativeStringNetDataStressTests
         var result = new string(chars);
         var encoded = Encode(result, isWide);
 
-        Assert.That(encoded.Length, Is.LessThanOrEqualTo(capacity));
+        Assert.True(encoded.Length <= capacity);
         return result;
     }
 }

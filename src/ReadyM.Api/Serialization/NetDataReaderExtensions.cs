@@ -1,7 +1,7 @@
 ﻿using System;
 using LiteNetLib.Utils;
 
-namespace ReadyM.Native.Serialization;
+namespace ReadyM.Api.Serialization;
 
 public static class NetDataReaderExtensions
 {

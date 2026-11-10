@@ -1,7 +1,7 @@
 using LiteNetLib.Utils;
 using ReadyM.Api.Serialization;
 using ReadyM.Native.Container;
-using ReadyM.Native.Serialization;
+using ReadyM.Api.Serialization;
 
 namespace ReadyM.Api.Multiplayer.Interning;
 
